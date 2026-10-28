@@ -6436,6 +6436,19 @@ async def design_tool(**args) -> str:
     return json.dumps(await asyncio.to_thread(design.tool, args, WORKSPACE), default=str)
 
 
+async def playbook_tool(**args) -> str:
+    """The owner's playbooks + toolboxes (engine/agentsys/playbooks.py): his workflow for each job."""
+    from agentsys import playbooks as _pbs  # pylint: disable=import-outside-toplevel
+    return json.dumps(_pbs.tool(args), default=str)
+
+
+LOCAL_TOOLS["playbook"] = playbook_tool
+_PLAYBOOK_SCHEMA = schema("playbook", __import__("agentsys.playbooks", fromlist=["x"]).TOOL_SCHEMA["description"],
+                          __import__("agentsys.playbooks", fromlist=["x"]).TOOL_SCHEMA["inputSchema"]["properties"], [])
+TOOL_SCHEMAS.append(_PLAYBOOK_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_PLAYBOOK_SCHEMA)
+MODEL_TOOL_NAMES.add("playbook")
+
 LOCAL_TOOLS["design"] = design_tool
 _DESIGN_SCHEMA = schema("design", __import__("design").TOOL_SCHEMA["description"],
                         __import__("design").TOOL_SCHEMA["inputSchema"]["properties"], ["action"])

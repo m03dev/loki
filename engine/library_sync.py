@@ -11,6 +11,8 @@ The same signed peer link as memory (engine/peers.py, HMAC-signed, replay-guarde
 Rules - additive only, nothing is ever deleted or overwritten:
   - a file this machine already has under that name is left alone (the two copies may differ; both are kept)
   - a file this machine put in its trash (`<workspace>/trash/<kind>/`) is never pulled back
+  - the owner's playbooks (`playbooks/<job>.md`, engine/agentsys/playbooks.py) are replaced by a NEWER copy, so an
+    edit or an approval on one machine reaches the other
   - a sidecar (`<kind>/.meta/<file>.json`: prompt, style, likes, ratings) is copied when missing, and replaced only
     by a NEWER one from the other machine (a thumbs-up on the PC shows on the Mac); its time is kept, so the two
     machines never ping-pong
@@ -34,7 +36,8 @@ import threading
 import time
 from pathlib import Path
 
-KINDS = ("images", "sketches", "sprites", "turnarounds", "renders", "models", "videos")
+KINDS = ("images", "sketches", "sprites", "turnarounds", "renders", "models", "videos", "playbooks")
+NEWER_WINS = ("playbooks",)        # the owner's playbooks: an edit on one machine replaces the older copy
 META_DIR = ".meta"
 TRASH = "trash"
 CHUNK = 4 * 1024 * 1024            # raw bytes per request: its base64 stays under peers.MAX_BODY (8 MB)
@@ -158,7 +161,7 @@ def _want(workspace: Path, f: dict) -> str:
     if int(f.get("size") or 0) > _max_bytes():
         return "too big"
     if p.exists():
-        if p.parent.name == META_DIR and p.is_file():
+        if (p.parent.name == META_DIR or p.parent.name in NEWER_WINS) and p.is_file():
             try:
                 if float(f.get("t") or 0) > p.stat().st_mtime + 1:
                     return ""                       # a newer sidecar (a like, a rating) from the other machine
@@ -185,7 +188,7 @@ def _fetch(peer: dict, workspace: Path, f: dict, call) -> int:
                 got += len(raw)
                 if got > _max_bytes():
                     raise RuntimeError("too big")
-        if p.exists() and p.parent.name != META_DIR:     # made here while we downloaded: keep ours
+        if p.exists() and p.parent.name != META_DIR and p.parent.name not in NEWER_WINS:   # made here meanwhile: keep ours
             part.unlink()
             return 0
         os.replace(part, p)

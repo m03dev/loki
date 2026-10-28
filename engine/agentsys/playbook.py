@@ -86,18 +86,12 @@ def folder() -> Path:
 
 
 def kind_of(task: str) -> str:
-    """The kind of work: the foundation's domain playbooks decide first (their triggers), the specialist library's
-    word lists after."""
+    """The kind of work (for the learned notes), from the specialist library's word lists."""
     try:
         import specialist_library  # pylint: disable=import-outside-toplevel
         k = specialist_library.kind(task)
     except Exception:  # noqa: BLE001
         k = "general"
-    try:
-        from . import foundation  # pylint: disable=import-outside-toplevel
-        k = foundation.kind_for(task, k if k in PREFIX and k != "general" else "") or k
-    except Exception:  # noqa: BLE001
-        pass
     return k if k in PREFIX else "general"
 
 

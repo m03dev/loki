@@ -260,8 +260,8 @@ async def window_checks():
         await E("document.querySelector('[data-tip-name=\"Ask an Agent\"]').click()")
         await page.wait_for_function("document.querySelector('.fds-status').textContent.includes('agent')", timeout=8000)
         job = [b for (u, b) in posts if u == "/jobs"]
-        check("Ask an Agent hands the brief and the design playbook to a background agent",
-              job and "dark login screen" in job[0]["prompt"] and "design/PLAYBOOK.md" in job[0]["prompt"], job)
+        check("Ask an Agent hands the brief (and the owner's design playbook) to a background agent",
+              job and "dark login screen" in job[0]["prompt"] and "playbook" in job[0]["prompt"], job)
         mob = await E("document.querySelector('.fds-mobile').textContent")
         check("Phone testing shows the device", "iPhone 16" in mob, mob)
         tips = await E("[...document.querySelectorAll('#forge-designpanel .forge-btn')].every((b) => b.dataset.tipName && b.dataset.tipWhat && b.dataset.icon)")

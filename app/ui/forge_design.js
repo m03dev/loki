@@ -87,7 +87,7 @@ const ForgeDesign = (() => {
     ask.append(brief, btn("dsAgent", "Ask an Agent", "A LOKI agent designs it with OpenPencil (the design playbook), in the background - the result shows up here.", () => {
       if (!brief.value.trim()) return say("Say what to design first.", true);
       const n = name.value.trim() || "";
-      const text = "Design this with the design tool (OpenPencil), following skills/playbooks/design/PLAYBOOK.md: " + brief.value.trim()
+      const text = "Design this with the design tool (OpenPencil), following my design playbook if I have one (playbook tool): " + brief.value.trim()
         + (n ? "\nSave it as designs/" + n + ".fig." : "") + "\nLook at the PNG preview, run lint, and export PNG + tailwind-jsx when done.";
       if (typeof sendToBackground === "function") { sendToBackground(text); say("An agent is on it (Home shows its progress)."); brief.value = ""; }
     }, "fmg-small"));
@@ -133,7 +133,7 @@ const ForgeDesign = (() => {
       mob.append(el("div", "fmg-sub", devs.length ? devs.length + " device(s) ready - agents test with mobile-mcp:" : "No simulator, emulator or phone found. Mac: boot an iOS simulator (Xcode). PC: adb + an emulator or a phone with USB debugging."));
       for (const dv of devs) mob.append(el("span", "fmg-chip", dv.platform + " " + dv.kind + ": " + dv.name));
       mob.append(btn("dsPhone", "Test the Phone App", "An agent installs and checks LOKI's phone app (" + (S.mobile.app_id || "dev.m03.loki") + ") on a device with mobile-mcp, following the mobile-test playbook.", () => {
-        if (typeof sendToBackground === "function") sendToBackground("Test LOKI's phone app (" + (S.mobile.app_id || "dev.m03.loki") + ") with the mobile tools (mobile-mcp), following skills/playbooks/mobile-test/PLAYBOOK.md: list devices, launch it, go through its main screens, save screenshots of the phone and report what works and what is broken.");
+        if (typeof sendToBackground === "function") sendToBackground("Test LOKI's phone app (" + (S.mobile.app_id || "dev.m03.loki") + ") with the mobile tools (mobile-mcp), following my phone-test playbook if I have one (playbook tool): list devices, launch it, go through its main screens, save screenshots of the phone and report what works and what is broken.");
         say("An agent is testing the phone app (Home shows its progress).");
       }, "fmg-small"));
     }

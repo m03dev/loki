@@ -2,11 +2,13 @@
 //
 //   Interview      before work starts, 1-4 questions with options under the owner's message ("is this what you
 //                  want?"): pick, add a note, Go - or "As written" / "Not now". Templates answer in milliseconds; a
-//                  model may sharpen them inside 4 s, never longer (POST /agentsys/interview). Big work asks "team or
-//                  one agent": Specialist team runs the delegation loop (POST /agentsys/orchestrate).
+//                  model may sharpen them inside 4 s, never longer (POST /agentsys/interview). Big work asks "Plan and
+//                  check" (the core agent does each step, a fresh reviewer checks it - POST /agentsys/orchestrate) or
+//                  "Straight through".
 //   Send back      on LOKI's latest answer: a note box - the note becomes the revision request (POST /agentsys/sendback);
 //   Not now        parks the request (it waits in For you > Parked, one click to resume).
-//   Lab > System   every layer at a glance: runs (traces), delegation runs, playbooks (add your own line, retire one),
+//   Lab > System   every layer at a glance: runs (traces), planned runs, YOUR PLAYBOOKS (LOKI interviews you to write
+//                  each one; approve / edit / interview again), learned notes (add your own line, retire one),
 //                  upstream sources (Check now), parked work.
 //
 // Its own module; app.js calls LokiAgentSys.offer(text, opts) from send() and LokiAgentSys.label(text) from addUser().
@@ -28,6 +30,7 @@ const LokiAgentSys = (() => {
     drop: '<path d="M6 6l12 12M18 6L6 18"/>',
     check: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/>',
     add: '<path d="M12 5v14M5 12h14"/>',
+    edit: '<path d="M4 20l1.2-4.4L15.6 5.2l3.2 3.2L8.4 18.8z"/><path d="M13.6 7.2l3.2 3.2"/>',
   };
   const ANSWERS_MARK = "Owner's choices (from the interview):";
   const cid = () => (typeof state !== "undefined" && state && state.active) || "";   // app.js's chat on screen
@@ -153,7 +156,7 @@ const LokiAgentSys = (() => {
     const r = await call("/agentsys/orchestrate", { goal, conversation_id: cid() })
       .catch((e) => ({ ok: false, error: String(e) }));
     if (r && r.ok) {
-      if (typeof addLoki === "function") addLoki("**Specialist team on it.** I plan the steps, hand each to the specialist for it, check every result and send back what fails. You see each hand-off in **For you**; the report lands here. Follow it in **Lab > System**.");
+      if (typeof addLoki === "function") addLoki("**On it - planned and checked.** I plan the steps (your playbook's, when one fits), do each one myself, and a fresh reviewer checks every result; what fails goes back with the fixes. Hand-offs wait in **For you**; the report lands here. Follow it in **Lab > System**.");
     } else say((r && r.error) || "Could not start the specialist team.", true);
   }
 
@@ -206,13 +209,141 @@ const LokiAgentSys = (() => {
     const s = mk("section", "as-box"); const h = mk("div", "as-box-h"); const t = mk("h3", "", title);
     t.dataset.tipName = title; t.dataset.tipWhat = tip; h.append(t); s.append(h); return s;
   }
+  // ---------------------------------------------------------------- your playbooks + toolboxes (LOKI interviews you)
+  const PB = { iv: null, open: "", text: "", confirm: "", msg: "", bad: false };
+  const pbSay = (text, bad) => {
+    PB.msg = text || ""; PB.bad = !!bad;
+    const n = document.querySelector(".as-pb-msg"); if (n) { n.textContent = PB.msg; n.classList.toggle("as-bad-msg", PB.bad); }
+  };
+  function playbooksBox(fd, container) {
+    const b = box("Playbooks", "Your way of doing each job (goal, done means, steps, rules) and its toolbox (tools, your files, scripts, apps). LOKI writes one by interviewing you; only the ones you approve are used. One core agent follows the one that fits each request.");
+    const redraw = () => panel(container);
+    const msg = mk("p", "as-pb-msg" + (PB.bad ? " as-bad-msg" : ""), PB.msg); msg.setAttribute("role", "status");
+    b.append(msg);
+    if (PB.iv) { b.append(interviewCard(PB.iv, redraw)); return b; }
+    const list = mk("div", "as-list as-pbs");
+    for (const p of (fd && fd.playbooks) || []) {
+      const row = mk("div", "as-item as-" + (p.status === "approved" ? "ok" : "mid"));
+      row.dataset.pb = p.id;
+      row.append(mk("span", "as-item-t", p.title), mk("span", "as-muted", [p.status === "approved" ? "in use" : "draft - not used until you approve it",
+        p.steps + " steps", p.tools + " tools", p.files + " files"].join(" · ")));
+      if (p.description) row.append(mk("span", "as-muted", p.description));
+      const acts = mk("div", "as-acts");
+      acts.append(iconBtn("as-mini", ICON.edit, "Open", "Read or edit this playbook; approve it to use it.", async () => {
+        const r = await call("/agentsys/playbooks/owner?id=" + encodeURIComponent(p.id)).catch(() => null);
+        PB.open = PB.open === p.id ? "" : p.id; PB.text = (r && r.text) || ""; redraw();
+      }), iconBtn("as-mini", ICON.ask, "Interview Again", "LOKI asks you about this job again and drafts a new version (the one in use stays until you approve the new one).", () => startIv(p.title, redraw)),
+      iconBtn("as-mini", ICON.drop, PB.confirm === p.id ? "Really Remove" : "Remove", "Move this playbook to the trash (click twice).", async () => {
+        if (PB.confirm !== p.id) { PB.confirm = p.id; redraw(); return; }
+        PB.confirm = ""; await call("/agentsys/playbooks/remove", { id: p.id }).catch(() => null); redraw();
+      }));
+      row.append(acts);
+      if (PB.open === p.id) {
+        const ta = mk("textarea", "as-pb-text"); ta.value = PB.text; ta.rows = 18; ta.spellcheck = false;
+        ta.setAttribute("autocorrect", "off"); ta.setAttribute("autocapitalize", "off");
+        ta.addEventListener("keydown", (e) => e.stopPropagation());
+        row.append(ta, iconBtn("as-go", ICON.asis, "Approve", "Save it as written and use it from now on.", async () => {
+          const r = await call("/agentsys/playbooks/approve", { id: p.id, text: ta.value }).catch((e) => ({ ok: false, error: String(e) }));
+          pbSay(r && r.ok ? "Playbook approved - LOKI uses it for this job now." : (r && r.error) || "Could not save it.", !(r && r.ok));
+          PB.open = ""; redraw();
+        }, "Approve"));
+      }
+      list.append(row);
+    }
+    if (!list.children.length) list.append(mk("p", "as-muted", "No playbooks yet. Pick a job below - LOKI asks you how you do it, one question at a time."));
+    b.append(list);
+    const open = ((fd && fd.interviews) || []).filter((x) => !x.done);
+    if (open.length) {
+      const o = mk("div", "as-steps");
+      for (const x of open) { const c = iconBtn("as-chip-btn", ICON.resume, "Continue: " + x.title, "Carry on with this interview where you stopped.", async () => {
+        const r = await call("/agentsys/playbooks/interview?id=" + x.id).catch(() => null); if (r && r.interview) { PB.iv = r.interview; redraw(); }
+      }, x.title); o.append(c); }
+      b.append(mk("p", "as-muted", "Unfinished interviews:"), o);
+    }
+    const start = mk("div", "as-pb-new");
+    const inp = mk("input", "as-pb-add"); inp.type = "text"; inp.placeholder = "Which job? e.g. concept art for a game character";
+    inp.setAttribute("aria-label", "The job to write a playbook for");
+    inp.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter" && inp.value.trim()) startIv(inp.value.trim(), redraw); });
+    start.append(inp, iconBtn("as-go", ICON.ask, "Interview Me", "LOKI asks you how you do this job and writes the playbook from your answers.", () => {
+      if (inp.value.trim()) startIv(inp.value.trim(), redraw); else pbSay("Write which job first.", true);
+    }, "Interview me"));
+    b.append(start);
+    const sug = (fd && fd.suggested) || [];
+    if (sug.length) {
+      const chips = mk("div", "as-steps");
+      for (const g of sug) chips.append(iconBtn("as-chip-btn", ICON.add, g.title, "Start the interview for " + g.title + (g.seen ? " (you asked for this " + g.seen + " times lately)" : ""), () => startIv(g.title, redraw), g.title));
+      b.append(mk("p", "as-muted", "Jobs you do that have no playbook yet:"), chips);
+    }
+    return b;
+  }
+
+  async function startIv(title, redraw) {
+    pbSay("LOKI is getting the first question ready ...");
+    const r = await call("/agentsys/playbooks/interview/start", { title }).catch((e) => ({ ok: false, error: String(e) }));
+    if (!r || !r.ok) return pbSay((r && r.error) || "Could not start the interview.", true);
+    PB.iv = r.interview; pbSay(""); redraw();
+  }
+
+  function interviewCard(iv, redraw) {
+    const card = mk("div", "as-iv as-pbiv");
+    const head = mk("div", "as-iv-h"); head.append(mk("b", "", "Playbook interview: " + iv.title));
+    card.append(head);
+    if (iv.draft) {
+      card.append(mk("p", "as-muted", "Here is your playbook, written from your answers. Change anything, then approve it - only approved playbooks are used." + (iv.draft.replaces ? " Approving it replaces the one in use." : "")));
+      const ta = mk("textarea", "as-pb-text"); ta.value = iv.draft.text; ta.rows = 20; ta.spellcheck = false;
+      ta.setAttribute("autocorrect", "off"); ta.setAttribute("autocapitalize", "off");
+      ta.addEventListener("keydown", (e) => e.stopPropagation());
+      const acts = mk("div", "as-acts");
+      acts.append(iconBtn("as-go", ICON.asis, "Approve", "Save it and use it for this job from now on.", async () => {
+        const r = await call("/agentsys/playbooks/approve", { id: iv.draft.id, text: ta.value, replaces: iv.draft.replaces || "" }).catch((e) => ({ ok: false, error: String(e) }));
+        pbSay(r && r.ok ? "Playbook approved - LOKI uses it for this job now." : (r && r.error) || "Could not save it.", !(r && r.ok));
+        if (r && r.ok) { PB.iv = null; redraw(); }
+      }, "Approve"), iconBtn("as-later", ICON.later, "Keep as Draft", "Keep it as a draft (not used) - open it later from Playbooks.", () => { PB.iv = null; redraw(); }, "Later"));
+      card.append(ta, acts);
+      return card;
+    }
+    const q = iv.question || {};
+    card.append(mk("span", "as-q-tag", q.header + " · " + q.n + " of " + q.of), mk("p", "as-iv-q", q.question));
+    const picked = new Set();
+    const opts = mk("div", "as-opts");
+    for (const o of q.options || []) {
+      const btn = mk("button", "as-opt", o.label); btn.type = "button"; btn.dataset.label = o.label; btn.setAttribute("aria-pressed", "false");
+      btn.dataset.tipName = o.label; btn.dataset.tipWhat = o.description || "Pick this";
+      btn.addEventListener("click", () => {
+        if (!q.multi) { picked.clear(); for (const x of opts.children) x.setAttribute("aria-pressed", "false"); }
+        if (picked.has(o.label)) picked.delete(o.label); else picked.add(o.label);
+        btn.setAttribute("aria-pressed", String(picked.has(o.label)));
+      });
+      opts.append(btn);
+    }
+    if (opts.children.length) card.append(opts);
+    const own = mk("textarea", "as-iv-own"); own.rows = 4; own.placeholder = q.hint || "Your own words";
+    own.setAttribute("autocorrect", "off"); own.setAttribute("autocapitalize", "off"); own.setAttribute("spellcheck", "false");
+    own.setAttribute("aria-label", "Your answer in your own words");
+    own.addEventListener("keydown", (e) => e.stopPropagation());
+    card.append(own);
+    const acts = mk("div", "as-acts");
+    const send = async (back) => {
+      if (!back && !picked.size && !own.value.trim() && q.key === "goal") return pbSay("Say in a few words what the job is.", true);
+      pbSay(back ? "" : (q.n === q.of ? "Writing your playbook from your answers ..." : "Next question ..."));
+      const r = await call("/agentsys/playbooks/interview/answer", { id: iv.id, picked: [...picked], text: own.value, back: !!back }).catch((e) => ({ ok: false, error: String(e) }));
+      if (!r || !r.ok) return pbSay((r && r.error) || "That did not go through.", true);
+      PB.iv = r.interview; pbSay(""); redraw();
+    };
+    if (q.n > 1) acts.append(iconBtn("as-later", ICON.back, "Back", "The previous question again.", () => send(true), "Back"));
+    acts.append(iconBtn("as-go", ICON.go, q.n === q.of ? "Write the Playbook" : "Next", "Save this answer (nothing picked and nothing written = skip it).", () => send(false), q.n === q.of ? "Write it" : "Next"),
+      iconBtn("as-later", ICON.drop, "Stop", "Stop the interview - it waits under Unfinished interviews.", () => { PB.iv = null; redraw(); }, "Stop"));
+    card.append(acts);
+    return card;
+  }
+
   async function panel(container) {
     if (!P.root || P.root.parentNode !== container) {
       P.root = mk("div", "as-panel"); P.root.setAttribute("aria-label", "LOKI's agent system");
       container.replaceChildren(P.root);
     }
     const [st, runs, pb, up, pk, orch, fd] = await Promise.all(["/agentsys/status", "/agentsys/traces?days=2", "/agentsys/playbooks",
-      "/agentsys/upstream", "/agentsys/parked", "/agentsys/orchestrations", "/agentsys/foundation"].map((p) => call(p).catch(() => null)));
+      "/agentsys/upstream", "/agentsys/parked", "/agentsys/orchestrations", "/agentsys/playbooks/owner"].map((p) => call(p).catch(() => null)));
     const kids = [];
     const t = (st && st.traces) || {};
     const head = box("This week", "Every request LOKI ran, from the traces (engine/agentsys/trace.py).");
@@ -241,7 +372,7 @@ const LokiAgentSys = (() => {
     if (!rl.children.length) rl.append(mk("p", "as-muted", "No runs yet."));
     rb.append(rl); kids.push(rb);
 
-    const ob = box("Specialist teams", "Delegation runs: the plan, each specialist's step, what was checked.");
+    const ob = box("Planned runs", "Plan-and-check runs: the plan, each step (done by the core agent), what the reviewer checked.");
     const ol = mk("div", "as-list");
     for (const r of ((orch && orch.runs) || []).slice(0, 8)) {
       const row = mk("div", "as-item as-" + (r.outcome === "verified" ? "ok" : r.outcome === "failed" ? "bad" : "mid"));
@@ -250,22 +381,12 @@ const LokiAgentSys = (() => {
       for (const s of r.steps || []) { const chip = mk("span", "as-chip as-" + s.status, s.specialist); chip.title = s.id + ": " + s.status; steps.append(chip); }
       row.append(steps); ol.append(row);
     }
-    if (!ol.children.length) ol.append(mk("p", "as-muted", "None yet - pick \"Specialist team\" when LOKI asks who should do big work."));
+    if (!ol.children.length) ol.append(mk("p", "as-muted", "None yet - pick \"Plan and check\" when LOKI asks how to work on something big."));
     ob.append(ol); kids.push(ob);
 
-    const fb = box("Foundation", "The rulebook every agent works from, strongest first: your rules (AGENTS.md), how LOKI's agents work (skills/playbooks/CONSTITUTION.md), then one playbook per kind of work (skills/playbooks/<kind>/PLAYBOOK.md) - its stages are the plan, its questions are the interview, its checklist is what every result is checked against.");
-    fb.append(mk("p", "as-muted", ((fd && fd.rules) || []).length + " owner rules · " + ((fd && fd.principles) || []).length + " working principles · " + ((fd && fd.books) || []).length + " playbooks"));
-    const fgrid = mk("div", "as-pb as-found");
-    for (const b of (fd && fd.books) || []) {
-      const card = mk("div", "as-pb-card");
-      card.append(mk("b", "", b.title || b.name), mk("span", "as-muted", b.questions + " questions · " + (b.specialists || []).join(", ")));
-      const steps = mk("div", "as-steps");
-      for (const s of b.stages || []) { const chip = mk("span", "as-chip" + (s.gate === "owner" ? " as-gate" : ""), s.id); chip.title = s.specialist + ": " + s.objective + (s.gate === "owner" ? " (waits for your OK)" : ""); steps.append(chip); }
-      card.append(steps); fgrid.append(card);
-    }
-    fb.append(fgrid); kids.push(fb);
+    kids.push(playbooksBox(fd, container));
 
-    const pbb = box("Learned lines", "What LOKI learned works, per kind of work. Your own lines (from send-backs and here) always come first.");
+    const pbb = box("Learned notes", "What LOKI noticed worked or failed, per kind of work (not rules - your playbooks and your rules come first). Your own lines (from send-backs and here) always come first.");
     const pgrid = mk("div", "as-pb");
     const books = (pb && pb.playbooks) || {};
     for (const [kind, v] of Object.entries(books)) {

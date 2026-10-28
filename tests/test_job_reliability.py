@@ -58,13 +58,13 @@ check("a shortened output says only the VIEW is shortened, the file is complete"
 # ------------------------------------------------------------------ the right team size
 check("a small concrete job gets one agent", team.choose_roles(
     "Pixel art check: pixelize three pictures from images/ with `loki-make pixel <file> --size 64` and write qa/pixel.md") == ["builder"])
-check("a real build still gets the full team", team.choose_roles(
-    "Build a small platformer game in Godot with a menu and three levels")[:4] == ["architect", "builder", "tester", "reviewer"])
+check("a real build gets the core agent and a fresh-eyes reviewer", team.choose_roles(
+    "Build a small platformer game in Godot with a menu and three levels")[:2] == ["builder", "reviewer"])
 for _g in ("Make now: one picture of a red baby dragon, game concept art, 16:9 (make_image) into images/",
            "Turn the newest picture in images/ into a 64-pixel game sprite in sprites/",
            "make one new piece of promo art for the owner's game into images/"):
-    check("one picture 'for the game' is one agent's job: %s" % _g[:40], team.choose_roles(_g) == ["builder"], team.choose_roles(_g))
-check("making a game is still a team's job", len(team.choose_roles("make a game where you jump on clouds")) >= 4)
+    check("one picture 'for the game' is one agent's job: %s" % _g[:40], len(team.choose_roles(_g)) == 1, team.choose_roles(_g))
+check("making a game is still checked by a reviewer", team.choose_roles("make a game where you jump on clouds")[-1] == "reviewer")
 import workers  # noqa: E402
 _env = {"LOKI_MODEL": "local-reasoning", "LOKI_PREFER": "local"}
 check("a team job with no model of its own does not wait for the one local-model slot (it runs on Smart)",
@@ -99,7 +99,7 @@ provider_speed.record(_d2, "gemini", 5)
 check("... and one that answers again is back", "gemini" in provider_speed.order(_d2, ["groq", "gemini"]) and
       not provider_speed.is_out(_d2, "gemini"))
 os.environ["LOKI_TEAM_SOLO"] = "off"
-check("LOKI_TEAM_SOLO=off keeps teams for everything", len(team.choose_roles("check the pictures")) >= 4)
+check("LOKI_TEAM_SOLO=off keeps the reviewer for everything", team.choose_roles("check the pictures")[-1] == "reviewer")
 os.environ.pop("LOKI_TEAM_SOLO")
 pb = team.clean_playbook("# Planner\nPlan well.\n## MCP Tool Integration\n```javascript\nmcp__claude-flow__task_orchestrate {}\n```\n"
                          "Use mcp__claude-flow__memory_usage.\n## Best Practices\nKeep it short.\n" + "x\n" * 2000)

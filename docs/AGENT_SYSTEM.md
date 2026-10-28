@@ -27,8 +27,8 @@ in the engine and in every job process (installed at the end of `engine/loki.py`
 | Chassis | `runtime.py`, `hooks.py` | Wraps every harness: context in, trace around, guardrails out, learning after. Hook points `before_request`, `after_request`, `before_tool`, `after_tool`; strictest decision wins; a crashed tool check fails closed | Claude Agent SDK hooks, Google ADK callbacks/plugins |
 | Interview | `interview.py` | 1-4 questions with 2-4 options each before work starts; drops what the request already says; big work asks "Specialist team or one agent"; unwatched work waits in For you as a question card | Claude AskUserQuestion, ChatGPT deep research's clarify step, A2A `input-required` |
 | Orchestration | `orchestrator.py` | The delegation loop: task ledger (facts given / to look up / to derive / guesses, acceptance, plan) -> each step to a specialist with objective, output, tools, boundaries -> evaluator checks it, sends it back with fixes -> progress ledger; stall counter re-plans; a step waiting for the owner parks the run, resume carries on | Magentic-One ledgers + stall counter, Anthropic orchestrator-workers + effort scaling, evaluator-optimizer, Cognition single-threaded writes |
-| Foundation | `foundation.py`, `skills/playbooks/` | The rulebook, strongest first: the owner's rules (AGENTS.md, word for word) > `CONSTITUTION.md` (how every LOKI agent works, the hand-off block) > one `<kind>/PLAYBOOK.md` per kind of work (front matter + Stages / Questions as JSON + checklist, quality bar, failure modes, tools). A playbook's stages are the orchestrator's plan skeleton (gated stages wait for the owner), its questions come first in the interview, its checklist is what the evaluator checks; picked by trigger words (`match`) | Anthropic skills (SKILL.md), Claude Code's CLAUDE.md layers, Magentic-One plans |
-| Context | `context.py` | One preamble for every harness: the owner's rules -> the constitution -> extra -> the domain playbook -> memory pack -> learned bullets -> tools -> the ledger last; budget 10000 chars (4000 for a model on this computer); cut from the tools end, the owner's rules never | Manus (stable prefix, recitation), Anthropic context engineering |
+| Playbooks + toolboxes | `playbooks.py`, `playbook_interview.py` | The owner's workflow per job (goal, done means, steps, rules, examples) and its toolbox (tools, his files and templates, scripts, apps), one file per job in `<Home>/playbooks/`, written by LOKI interviewing him and used only once he approves it. Every preamble gets the index (names + one line) and the matching playbook in full; the `playbook` tool reads any | Anthropic Agent Skills (progressive disclosure), the owner's screenshot (2026-10-28) |
+| Context | `context.py` | One preamble for every harness: the owner's rules -> extra -> the matching playbook + toolbox -> the playbook index -> memory pack -> learned bullets -> tools -> the ledger last; budget 10000 chars (4000 for a model on this computer); cut from the tools end, the owner's rules never | Manus (stable prefix, recitation), Anthropic context engineering |
 | Memory | `memory.py` (existing) | Now on every harness: `memory.pack` goes into the preamble, `memory.after_request` learns after it | Mem0 / Letta (bounded pack) |
 | Playbooks | `playbook.py` | Learned strategies per kind of work as counted bullets `[img-00042] owner helpful=3 harmful=0 :: ...`; a model only proposes ops (ADD / UPDATE / RETIRE), code applies them; hurting bullets retire; only the top few go into a prompt; the owner's notes are owner bullets a model can never rewrite | ACE (generator / reflector / curator), Dynamic Cheatsheet, ReasoningBank, Voyager |
 | Toolbox | `toolbox.py` | Every tool's facts (read-only, destructive, asks the owner, GPU, online), MCP annotations on loki-make, `for_task` = core set + BM25 matches | MCP tool annotations, Anthropic tool search, langgraph-bigtool |
@@ -36,6 +36,23 @@ in the engine and in every job process (installed at the end of `engine/loki.py`
 | Instruments | `trace.py` | A trace per run: spans for the request, each model call (tokens), tool, guardrail, hand-off, interview and feedback; OpenTelemetry GenAI names; keys masked; 14 days kept; `runs()` / `summary()` for Lab > System | OpenAI Agents SDK tracing, OTel GenAI semantic conventions, Langfuse / Phoenix |
 | Send back / park | `sendback.py` | Any result back with a note -> a revision request (note, original request, files, previous answer) + an owner bullet in the playbook; "Not now" parks the request (a running job is cancelled), resume with an optional note | Evaluator-optimizer with the owner as evaluator, Claude Code's denial message |
 | Upstream | `upstream.py` | Registry of every open-source source LOKI uses (THIRD_PARTY.md, ecc_sync, PROVENANCE, docstrings, toolshelf) with its pin; a daily check (autopilot duty `upstream`) asks GitHub what changed; each new change is a For you card: Adopt (an agent ports what matters, moves the pin, tests, ships), Skip, Not now | - |
+
+## One core agent
+
+Owner 2026-10-28: "i want the one with the best results that doesnt break and is superior in all contexts do research".
+
+| Source | Finding |
+| --- | --- |
+| Google Research, "Towards a science of scaling agent systems" (2025, 180 configurations) | Parallel, decomposable work: a centralized multi-agent set-up +81%. Sequential work: every multi-agent variant 39-70% WORSE. Independent agents amplify errors 17.2x, an orchestrator 4.4x; coordination costs grow with the number of tools |
+| Anthropic, multi-agent research system | +90% on broad research (many independent directions) at ~15x the tokens of chat; poor fit for shared-context work, many dependencies, most coding |
+| Cognition, "Don't build multi-agents" / "Multi-agents: what's actually working" | Parallel writers make conflicting choices; what works is ONE writer, read-only helpers (search), a reviewer with a clean context, map-reduce for research |
+| Anthropic, Agent Skills | One general agent + skills (name/description always loaded, the full skill when it fits, bundled files/scripts on demand) instead of a separate agent per use case |
+
+So: one core agent writes, with the owner's playbook + toolbox for the job; helpers only read (a researcher for look-ups,
+a fresh-eyes reviewer that checks against the playbook's done-means and runs checks without changing anything). Teams
+(engine/team.py) are builder + reviewer (+ researcher / browser checker); the orchestrator's worker is the core agent.
+The art pipeline's gated stages (engine/asset_pipeline.py) stay: each stage is the same core flow with the owner's
+check-off between stages.
 
 ## How a request flows now
 

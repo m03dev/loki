@@ -165,9 +165,12 @@ def _clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[:n - 1].rstrip() + "…"
 
 
-WHO = ("Who", "Who should do it?", False,
-       [("Specialist team", "LOKI plans it, hands each step to a specialist and checks every result"),
-        ("One agent", "One agent does it start to finish")], r"\b(one agent|alone|team of)\b")
+# One core agent does the work either way (docs/AGENT_SYSTEM.md "One core agent"); big work may be planned and every
+# step checked by a fresh reviewer
+WHO = ("How", "How should LOKI work on it?", False,
+       [("Plan and check", "LOKI plans the steps, does each itself, a fresh reviewer checks every result"),
+        ("Straight through", "LOKI does it in one go and checks it at the end")],
+       r"\b(straight through|in one go|plan and check)\b")
 
 
 def is_big(text: str) -> bool:
@@ -180,14 +183,7 @@ def template_questions(text: str, kind: str = "") -> list:
     if is_big(text) and not re.search(WHO[4], text or "", re.I):     # big work: team or one agent?
         out.append({"id": "q1", "header": WHO[0], "question": WHO[1], "multi": False,
                     "options": [{"label": a, "description": b} for a, b in WHO[3]]})
-    try:   # the domain playbook's own questions come first (skills/playbooks/<kind>/PLAYBOOK.md)
-        from . import foundation  # pylint: disable=import-outside-toplevel
-        book_qs = [(q.get("header") or "Choice", q["question"], bool(q.get("multi")),
-                    [(o.get("label", ""), o.get("description", "")) for o in q.get("options") or [] if o.get("label")],
-                    q.get("skip_if") or "") for q in foundation.questions(text, kind)]
-    except Exception:  # noqa: BLE001
-        book_qs = []
-    for header, q, multi, options, skip in book_qs + TEMPLATES.get(kind, []) + (TEMPLATES["general"] if kind != "general" else []):
+    for header, q, multi, options, skip in TEMPLATES.get(kind, []) + (TEMPLATES["general"] if kind != "general" else []):
         if len(options) < 2:
             continue
         try:

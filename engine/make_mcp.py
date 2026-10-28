@@ -364,6 +364,12 @@ try:   # Manga Studio (engine/manga.py): idea -> outline -> cast -> script -> dr
 except Exception:  # noqa: BLE001
     _manga = None
 
+try:   # the owner's playbooks + toolboxes (engine/agentsys/playbooks.py): every harness can read his workflow
+    from agentsys import playbooks as _playbooks  # noqa: E402
+    TOOLS.append(_playbooks.TOOL_SCHEMA)
+except Exception:  # noqa: BLE001
+    _playbooks = None
+
 try:   # Design (engine/design.py): OpenPencil design files, headless
     import design as _design  # noqa: E402
     TOOLS.append(_design.TOOL_SCHEMA)
@@ -411,6 +417,7 @@ def call(name: str, args: dict, cwd: Path) -> dict:
           "render_scene": lambda a, cwd: __import__("render_agent").render(a or {}, cwd),
           "manga": lambda a, cwd: __import__("manga").tool(a or {}, cwd, make=lambda x: make_image(x, cwd)),
           "design": lambda a, cwd: __import__("design").tool(a or {}, cwd),
+          "playbook": lambda a, cwd: __import__("agentsys.playbooks", fromlist=["x"]).tool(a or {}),
           "library": lambda a, cwd: __import__("creations").library(cwd, str((a or {}).get("kind") or ""),
                                                                    str((a or {}).get("search") or ""),
                                                                    int((a or {}).get("limit") or 40)),

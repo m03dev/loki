@@ -3,7 +3,9 @@ what i want with options ... a way for me to not want something made right now i
 Stubbed engine:
   - a message: the owner's words show at once, then the interview card with its questions and options; a pick + Go
     sends the brief (with his choices) to /chat; "As written" sends his words; "Not now" parks it (nothing sent)
-  - big work picked as "Specialist team" starts the delegation loop (/agentsys/orchestrate), not /chat
+  - big work picked as "Plan and check" starts the delegation loop (/agentsys/orchestrate), not /chat
+  - Lab > System > Playbooks: LOKI interviews the owner (the REAL engine side, agentsys/playbook_interview.py): a
+    question at a time with options + his own words, Back, the draft from his answers, Approve -> in use
   - LOKI's newest answer has Send back / Not now; a note + Enter sends the revision; the bubble shows his note
   - For you: a question card and an upstream card with their buttons; Parked under the cards
   - Lab > System draws every layer; icons with tooltips, no script errors. Under a minute.
@@ -41,8 +43,14 @@ QS = [{"id": "q1", "header": "Style", "question": "Which look should it have?", 
        "options": [{"label": "Painterly concept art", "description": "painted"}, {"label": "Pixel art", "description": "pixels"}]},
       {"id": "q2", "header": "Shape", "question": "Which picture shape?", "multi": False,
        "options": [{"label": "16:9", "description": "wide"}, {"label": "1:1", "description": "square"}]}]
-WHO = {"id": "q0", "header": "Who", "question": "Who should do it?", "multi": False,
-       "options": [{"label": "Specialist team", "description": "plans and checks"}, {"label": "One agent", "description": "alone"}]}
+WHO = {"id": "q0", "header": "How", "question": "How should LOKI work on it?", "multi": False,
+       "options": [{"label": "Plan and check", "description": "plans and checks"}, {"label": "Straight through", "description": "in one go"}]}
+sys.path.insert(0, str(REPO / "engine"))
+PB_HOME = Path(__import__("tempfile").mkdtemp(prefix="loki-pbui-"))
+os.environ["LOKI_PLAYBOOKS_DIR"] = str(PB_HOME / "playbooks")
+os.environ["LOKI_DATA"] = str(PB_HOME / "data")
+from agentsys import api as PB_API  # noqa: E402
+PB_STATE = type("S", (), {"agent": None, "loop": None})()
 NOW = time.time()
 QUESTION = {"id": "cccccc333333", "kind": "question", "status": "waiting", "t": NOW - 30, "tool": "interview",
             "args": {"text": "make a fox sprite", "questions": QS, "plan": "The Concept Artist drafts it."}, "cwd": "/ws",
@@ -80,7 +88,7 @@ async def main():
                 return await r.fulfill(json={"ok": True, "ask": True, "questions": st["questions"], "plan": "The Concept Artist writes it.",
                                              "by": "templates", "kind": "image"})
             if bare == "/agentsys/brief":
-                team = any(str(v) == "Specialist team" for v in (body.get("answers") or {}).values())
+                team = any(str(v) == "Plan and check" for v in (body.get("answers") or {}).values())
                 ch = "\n".join("- %s: %s" % (k, v) for k, v in (body.get("answers") or {}).items())
                 return await r.fulfill(json={"ok": True, "team": team,
                                              "request": body["text"] + "\n\nOwner's choices (from the interview):\n" + ch})
@@ -118,12 +126,9 @@ async def main():
                 return await r.fulfill(json={"ok": True, "last_run": NOW - 3600, "sources": [
                     {"repo": "stephomi/sculptgl", "pin": "8e45daf", "version": "", "follows": "", "used_in": ["app/ui/forge.js"],
                      "seen": {"status": "behind", "behind": 3}}]})
-            if bare == "/agentsys/foundation":
-                return await r.fulfill(json={"ok": True, "rules": ["1. Ship to master."], "principles": ["1. Know the goal."],
-                                             "books": [{"name": "manga", "title": "Manga and comics", "questions": 3,
-                                                        "specialists": ["Manga Writer"], "stages": [
-                                                            {"id": "outline", "specialist": "Manga Writer", "gate": "", "objective": "x"},
-                                                            {"id": "pages", "specialist": "Manga Artist", "gate": "owner", "objective": "y"}]}]})
+            if bare.startswith("/agentsys/playbooks/"):   # the real engine side, in a temp Home library
+                code, out = PB_API.route(PB_STATE, r.request.method, r.request.url.split("8893", 1)[1].split("#")[0], body)
+                return await r.fulfill(status=code, json=out)
             if bare == "/agentsys/orchestrations":
                 return await r.fulfill(json={"ok": True, "runs": [{"id": "o1", "goal": "make a golem asset", "status": "done",
                                                                    "outcome": "verified", "updated": NOW, "steps": [
@@ -219,7 +224,7 @@ async def main():
         await page.click(".as-iv:not(.as-done) .as-go")
         await page.wait_for_timeout(500)
         orch = [d for b, d in posts if b == "/agentsys/orchestrate"]
-        check("Specialist team starts the delegation loop, not a chat turn", orch and "Owner's choices" in orch[-1]["goal"]
+        check("Plan and check starts the delegation loop, not a chat turn", orch and "Owner's choices" in orch[-1]["goal"]
               and len([1 for b, _ in posts if b == "/chat"]) == n_chat, orch)
 
         # ---------------------------------------------------------------- For you: question, upstream, parked
@@ -250,9 +255,46 @@ async def main():
           const btns = [...d.querySelectorAll('.as-btn')];
           return { boxes, stats: d.querySelectorAll('.as-stat').length, tipless: btns.filter((b) => !b.dataset.tipName || !b.dataset.tipWhat).length,
                    owner: !!d.querySelector('.as-pb-line.as-owner'), up: (d.querySelector('.as-up .as-item') || {}).textContent || '' }; })()""")
-        check("Lab > System: every layer", lab["boxes"] == ["This week", "Runs", "Specialist teams", "Foundation", "Learned lines", "Upstream", "Parked"], lab["boxes"])
+        check("Lab > System: every layer", lab["boxes"] == ["This week", "Runs", "Planned runs", "Playbooks", "Learned notes", "Upstream", "Parked"], lab["boxes"])
         check("Lab > System: the numbers, his playbook lines, upstream behind", lab["stats"] == 8 and lab["owner"] and "behind by 3" in lab["up"], lab)
         check("every button has a name and what it does", lab["tipless"] == 0, lab["tipless"])
+
+        # ---------------------------------------------------------------- Playbooks: LOKI interviews the owner
+        sug = await E("[...document.querySelectorAll('#as-test .as-chip-btn')].map((b) => b.dataset.tipName)")
+        check("Playbooks: no playbook yet, the jobs he does are offered for an interview", "Concept art" in sug, sug)
+        await page.fill("#as-test .as-pb-new .as-pb-add", "concept art for a game character")
+        await page.click("#as-test .as-pb-new .as-go")
+        await page.wait_for_selector("#as-test .as-pbiv .as-iv-q", timeout=5000)
+        q1 = await E("document.querySelector('#as-test .as-pbiv .as-q-tag').textContent")
+        check("the interview asks one question at a time (1 of 8)", "1 of 8" in q1, q1)
+        answers = ["Paint a game character so it can become a 3D model", "front view, plain grey background",
+                   "three thumbnails\nI pick one\nthe final painting", "never text in the picture", "", "", "", ""]
+        for n, text in enumerate(answers):
+            await page.wait_for_selector("#as-test .as-pbiv .as-q-tag", timeout=5000)
+            tag = await E("document.querySelector('#as-test .as-pbiv .as-q-tag').textContent")
+            if "Tools" in tag:   # pick one of LOKI's offered tools
+                opts = await E("[...document.querySelectorAll('#as-test .as-pbiv .as-opt')].map((b) => b.dataset.label)")
+                check("the Tools question offers LOKI's tools to pick", "make_image" in opts, opts)
+                await E("[...document.querySelectorAll('#as-test .as-pbiv .as-opt')].find((b) => b.dataset.label === 'make_image').click()")
+            if text:
+                await page.fill("#as-test .as-pbiv .as-iv-own", text)
+            if n == 2:           # Back works and keeps going
+                await page.click("#as-test .as-pbiv .as-later")
+                await page.wait_for_function("document.querySelector('#as-test .as-pbiv .as-q-tag').textContent.includes('2 of 8')", timeout=5000)
+                await page.click("#as-test .as-pbiv .as-go")
+                await page.wait_for_function("document.querySelector('#as-test .as-pbiv .as-q-tag').textContent.includes('3 of 8')", timeout=5000)
+                await page.fill("#as-test .as-pbiv .as-iv-own", text)
+            await page.click("#as-test .as-pbiv .as-go")
+            await page.wait_for_function("!document.querySelector('#as-test .as-pbiv .as-q-tag') || !document.querySelector('#as-test .as-pbiv .as-q-tag').textContent.includes('%d of 8')" % (n + 1), timeout=5000)
+        draft = await E("(document.querySelector('#as-test .as-pbiv .as-pb-text') || {}).value || ''")
+        check("the draft is written from his answers only", "I pick one" in draft and "never text in the picture" in draft
+              and "make_image" in draft and "status: draft" in draft, draft[:600])
+        await page.click("#as-test .as-pbiv .as-go")
+        await page.wait_for_selector("#as-test .as-pbs .as-item", timeout=5000)
+        row = await E("document.querySelector('#as-test .as-pbs .as-item').textContent")
+        check("Approve puts it in use", "in use" in row and "Concept art" in row, row)
+        on_disk = list((PB_HOME / "playbooks").glob("*.md"))
+        check("the playbook is a file in his Home library", len(on_disk) == 1 and "status: approved" in on_disk[0].read_text(), on_disk)
         await E("LokiAgentSys.leave()")
         check("no script errors", not errors, errors)
         check("this suite stays under 60 s", time.time() - T0 < 60, time.time() - T0)

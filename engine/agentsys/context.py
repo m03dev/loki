@@ -9,7 +9,9 @@ Order and rules (docs/AGENT_SYSTEM.md "Context"):
   - Manus recitation: the plan (task ledger) goes LAST, nearest the request, where attention is strongest.
   - Mem0 / Letta: memory comes as a small bounded pack (memory.pack, token-budgeted), never the whole store.
   - ACE: only the top playbook bullets for this task, with their ids so the run can cite what it used.
-  - Budgets: LOKI_PREAMBLE_CHARS (6000 chars; 2500 for a model on this computer - a 9B model's 16k window).
+  - The owner's rules first (AGENTS.md, never cut), then the index of his playbooks and the matching one in full
+    with its toolbox (agentsys/playbooks.py) - nothing LOKI made up.
+  - Budgets: LOKI_PREAMBLE_CHARS (10000 chars; 4000 for a model on this computer).
 """
 from __future__ import annotations
 
@@ -17,7 +19,33 @@ import os
 from pathlib import Path
 from typing import Any
 
-from . import foundation, playbook, toolbox
+from . import playbook, playbooks, toolbox
+
+
+def owner_rules(repo: Path | None = None) -> list:
+    """AGENTS.md's numbered rules, word for word - the only rules (no agent adds its own)."""
+    import re  # pylint: disable=import-outside-toplevel
+    try:
+        text = ((repo or Path(__file__).resolve().parents[2]) / "AGENTS.md").read_text(encoding="utf-8")
+    except OSError:
+        return []
+    m = re.search(r"^## The rules\s*$(.*?)^## ", text, re.M | re.S)
+    rules, cur = [], ""
+    for line in (m.group(1) if m else "").splitlines():
+        if re.match(r"^\d+\.\s", line):
+            if cur:
+                rules.append(cur.strip())
+            cur = line
+        elif cur and line.startswith("   "):
+            cur += " " + line.strip()
+    if cur:
+        rules.append(cur.strip())
+    return rules
+
+
+def owner_rules_text() -> str:
+    rules = owner_rules()
+    return ("The owner's rules (his words - they win over everything else):\n" + "\n".join(rules)) if rules else ""
 
 
 def budget(local: bool = False) -> int:
@@ -43,24 +71,27 @@ def build(task: str, agent: Any = None, local: bool = False, ledger_text: str = 
     """{"text": the preamble, "bullets": playbook bullets used, "memory": memory ids used, "chars": n}."""
     limit = budget(local)
     bullets = playbook.select(task, k=4 if local else playbook.TOP_K) if bullets is None else bullets
-    pb = playbook.render(bullets)
+    pb_text = playbook.render(bullets)
     mem_text, mem = _memory(task, agent)
     tools_text = ""
     if with_tools and agent is not None:
         names = toolbox.for_task(task, list(getattr(agent, "TOOL_SCHEMAS", []) or []), limit=6)
         tools_text = "Tools that fit this task:\n" + toolbox.describe(names, agent) if names else ""
-    # the foundation (skills/playbooks): the owner's rules, the constitution, this kind of work's playbook
+    # the owner's rules (AGENTS.md, word for word), the index of his playbooks, and the one for this job in full
+    # with its toolbox (Anthropic's Agent Skills: names first, the full playbook only when it fits)
     try:
-        rules = foundation.owner_rules_text()
-        consti = foundation.constitution_brief(900 if local else 1800)
-        domain = foundation.brief(task, playbook.kind_of(task), limit=1200 if local else 3500)
+        rules = owner_rules_text()
+        index = playbooks.index_text(600 if local else 1200)
+        pb = playbooks.match(task)
+        known = {((x or {}).get("function") or {}).get("name") for x in getattr(agent, "TOOL_SCHEMAS", []) or []} or None
+        domain = playbooks.brief(pb, known, getattr(agent, "WORKSPACE", None), 1800 if local else 4000) if pb else ""
     except Exception:  # noqa: BLE001
-        rules = consti = domain = ""
-    sections = [("rules", rules), ("constitution", consti), ("extra", extra), ("domain", domain), ("memory", mem_text),
-                ("playbook", pb), ("tools", tools_text), ("ledger", ledger_text)]
-    # trim from the least important end until it fits: tools, memory, the learned lines' tail, the domain playbook's
-    # tail, the constitution - the owner's rules are never cut
-    order_to_cut = ["tools", "memory", "playbook", "domain", "constitution", "extra"]
+        rules = index = domain = ""
+    sections = [("rules", rules), ("extra", extra), ("domain", domain), ("index", index), ("memory", mem_text),
+                ("playbook", pb_text), ("tools", tools_text), ("ledger", ledger_text)]
+    # trim from the least important end until it fits: tools, memory, the learned notes, the playbook index, the
+    # playbook's tail - the owner's rules are never cut
+    order_to_cut = ["tools", "memory", "playbook", "index", "domain", "extra"]
     parts = {k: (v or "").strip() for k, v in sections}
 
     def size() -> int:

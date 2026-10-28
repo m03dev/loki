@@ -46,6 +46,7 @@ os.environ["LOKI_LAYA_LOCAL"] = "0"
 os.environ["LOKI_EXPERIENCE"] = "1"
 os.environ["LOKI_LEARN_ROUTING"] = "0"
 os.environ["LOKI_VERIFY"] = "0"
+os.environ["LOKI_OWNER_REVIEW"] = "off"   # this suite checks the plumbing; the owner's sign-off has its own suites
 for key in list(os.environ):
     if key.endswith(("_API_KEY", "_API_TOKEN", "_MODEL", "_BASE_URL")) or key in (
             "HF_TOKEN", "LOKI_TEAM_ID", "LOKI_DISABLED_PROVIDERS", "LOKI_PHONE_LINK", "LOKI_PEERS",
@@ -289,7 +290,7 @@ check("only the built-in agent can be a check job",
       _idle.create({"backend": "local", "agent": "codex", "prompt": "x", "workspace": str(WS), "selfcheck": True})["selfcheck"] is False)
 
 # ================================================================== 3. a team
-section("3. a team: plan -> build -> check -> fix -> verified, on the board, the events and the world")
+section("3. a team: build -> check -> fix -> verified, on the board, the events and the world")
 
 
 class StageAgents(workers.Backend):
@@ -311,9 +312,8 @@ class StageAgents(workers.Backend):
         if self.rounds[role] < 2:
             return {}
         n = sum(1 for j in TEAM_JOBS.store.all() if (j.get("profile") or {}).get("name") == role)
-        out = {"Architect": "DONE: wrote TEAM_PLAN.md", "Builder": "DONE: built notes.py and test_notes.py",
-               "Tester": "FAIL: adding an empty note crashes" if n == 1 else "PASS: 4 checks, 0 FAIL",
-               "Reviewer": "PASS"}.get(role, "DONE")
+        out = {"Builder": "DONE: built notes.py and test_notes.py",
+               "Reviewer": "FAIL: adding an empty note crashes" if n == 1 else "PASS: 4 checks, 0 FAIL"}.get(role, "DONE")
         self.rounds[role] = 0
         return {"status": "done", "exit_code": 0, "output": out}
 
@@ -334,26 +334,27 @@ for _ in range(60):
     if cur["status"] != "working":
         break
 cur = RUNNER.get(t["id"])
-check("the team went plan -> build -> check -> fix -> re-check", stages == ["plan", "build", "check", "fix", "fix-check"], stages)
+check("the team went build -> check -> fix -> re-check (one core agent, a fresh-eyes reviewer)",
+      stages == ["build", "check", "fix", "fix-check"], stages)
 check("one fix round, then verified", cur["status"] == "done" and cur["verdict"].startswith("verified") and cur["fix_rounds"] == 1, cur)
 board = [m["text"] for m in team.board(t["id"])]
 check("the board tells the story (stages, each report, the failure, the verdict)",
-      any("Stage plan" in b for b in board) and any("adding an empty note crashes" in b for b in board)
+      any("Stage build" in b for b in board) and any("adding an empty note crashes" in b for b in board)
       and board[-1].startswith("Team finished: verified"), board)
 ev = events.read(mark, limit=5000)
 mine = [e for e in ev if e.get("team") == t["id"]]
 assigned = [e["recipient"] for e in mine if e["type"] == "task.assigned"]
-check("LOKI assigned each role through the event stream", assigned[:2] == ["Architect", "Builder"] and assigned.count("Builder") == 2,
+check("LOKI assigned each role through the event stream", assigned[:2] == ["Builder", "Reviewer"] and assigned.count("Builder") == 2,
       assigned)
 check("every stage agent's job reported itself by role",
-      {e["sender"] for e in mine if e["type"] == "task.completed"} >= {"Architect", "Builder", "Tester", "Reviewer"},
+      {e["sender"] for e in mine if e["type"] == "task.completed"} >= {"Builder", "Reviewer"},
       {e["sender"] for e in mine if e["type"] == "task.completed"})
 check("the verdict was announced", any(e["type"] == "verification.completed" and e["payload"].get("verified") for e in mine))
-check("the live view showed the architect working first", world_states and world_states[0].get("Architect") == "working",
+check("the live view showed the builder working first", world_states and world_states[0].get("Builder") == "working",
       world_states[:2])
 final = events.world(TEAM_JOBS.store.all(), RUNNER.all(), False)
 check("and the whole team done at the end, with the team listed",
-      all(world_states[-1].get(r) == "done" for r in ("Architect", "Builder", "Tester", "Reviewer"))
+      all(world_states[-1].get(r) == "done" for r in ("Builder", "Reviewer"))
       and any(x["id"] == t["id"] and x["status"] == "done" for x in final["teams"]), (world_states[-1], final["teams"]))
 refusing = types.SimpleNamespace(job=lambda backend, agent: policy.Verdict(policy.DENY, "background agents are off"))
 try:

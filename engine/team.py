@@ -1,12 +1,13 @@
-"""Agent teams: one sentence in, a team that plans, builds, tests and reviews it.
+"""Agent teams: one sentence in, ONE core agent that builds it and a fresh-eyes reviewer that checks it.
 
 You never build agents. For a goal, LOKI picks the roles it needs (Laya decides when it is
 set up, rules otherwise), creates each agent with a fitting spec, and runs them in stages
 on one shared project folder:
 
-    plan     researcher (if the goal needs facts) + architect (writes TEAM_PLAN.md)
-    build    builder (the only writer while it works)
-    check    tester (runs it) + reviewer (reads it); a browser tester for web work
+    plan     researcher, read-only, only when the goal needs facts looked up
+    build    builder - the one core agent, with the owner's playbook + toolbox for the job; the only writer
+    check    reviewer (fresh context: reads it, runs its checks, changes nothing); a browser tester for web work
+    (architect / tester exist only for the "sparc:" method the owner can ask for by name)
     fix      if a checker reports FAIL, the builder gets one round with their findings
 
 Agents talk on a shared board (team_post / team_read tools; harness_data/teams/<id>/
@@ -39,9 +40,11 @@ ROLES = {
     "tester": {"name": "Tester", "stage": "check", "writes": False, "commands": True,
                "brief": "Run what the builder made and its tests. Report each check as PASS or FAIL "
                         "with the exact output. Do not fix anything yourself."},
-    "reviewer": {"name": "Reviewer", "stage": "check", "writes": False, "commands": False,
-                 "brief": "Read the code against TEAM_PLAN.md. Report concrete problems as FAIL "
-                          "(file, line, why) or say PASS. Do not change files."},
+    "reviewer": {"name": "Reviewer", "stage": "check", "writes": False, "commands": True,
+                 "brief": "Fresh eyes: you did not build this. Check what was made against the goal and the owner's "
+                          "playbook for this job (its done-means and rules): open the files, run its tests or checks "
+                          "(read-only - change nothing). Report each problem as FAIL (file, line or step, why, the "
+                          "exact output) or say PASS."},
     "browser": {"name": "Browser tester", "stage": "check", "writes": False, "commands": True,
                 "brief": "Open the built site or app in a browser (the conductor's browse role) and "
                          "check it works like a user would. Report PASS or FAIL with what you saw."},
@@ -247,12 +250,14 @@ def choose_roles(goal: str, triage: dict | None = None, decide=None) -> list:
     triage = triage or {}
     kind = triage.get("kind", "")
     text = goal.lower()
-    roles = ["architect", "builder", "tester", "reviewer"]
+    # One core agent writes; helpers only read (docs/AGENT_SYSTEM.md "One core agent"): Google Research's study of 180
+    # set-ups (2025) found every multi-agent split 39-70% worse on sequential work, and Cognition ships one writer +
+    # a reviewer with a clean context. So: the builder (with the owner's playbook) does it all, a fresh-eyes reviewer
+    # checks it; a researcher looks things up first when the goal needs facts; a browser checker for web work.
+    roles = ["builder", "reviewer"]
     art = _art.for_goal(goal) if _art is not None else []
     if len(art) == 1:                       # one specialist does it (a concept, a render, a video)
         return ["art_" + art[0]]
-    if art and art[0].startswith("manga_"):  # a manga: writer -> artist -> editor (engine/manga.py)
-        return ["art_" + k for k in art]
     # a small, concrete job (a check, a conversion, one file) needs one agent, not four in turn (2026-10-25: a
     # "pixelize three pictures" request became an Architect writing a plan for 25 minutes on a 9B model)
     if solo_goal(goal, triage):
@@ -353,6 +358,13 @@ def agent_prompt(team: dict, role: str, extra: str = "") -> str:
         "Work only on THIS team's goal. TEAM_PLAN.md, team_board.md and other files in team_plans/ are from earlier "
         "teams - ignore them unless the goal names them.",
     ]
+    try:   # the owner's playbook + toolbox for this job (engine/agentsys/playbooks.py) - his workflow, it wins
+        from agentsys import playbooks as _pbs  # pylint: disable=import-outside-toplevel
+        _pb = _pbs.match(team["goal"])
+        if _pb:
+            parts.append(_pbs.brief(_pb, limit=5000))
+    except Exception:  # noqa: BLE001
+        pass
     if role.startswith("art_") and _art is not None:
         parts.append("Your skill:\n" + _art.skills_text(role[4:]))
     if team.get("method") == "sparc" and role in SPARC_PHASES:

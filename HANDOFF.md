@@ -12,7 +12,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-28 21:00 (the foundation, Manga Studio, Design + phone testing); before that 2026-10-28 12:00 (the agent system, engine/agentsys/); before that 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
+Last updated: 2026-10-28 22:30 (one core agent + the owner's playbooks and toolboxes); before that 2026-10-28 21:00 (Manga Studio, Design + phone testing); before that 2026-10-28 12:00 (the agent system, engine/agentsys/); before that 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
 
 ## The machines
 
@@ -27,19 +27,32 @@ mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it on
 
 ## Now (2026-10-25)
 
-**2026-10-28 21:00 (Claude) - the foundation (playbooks are the rules), Manga Studio, Design (OpenPencil), phone testing.**
-- Foundation (engine/agentsys/foundation.py): owner's rules (AGENTS.md, word for word) > skills/playbooks/CONSTITUTION.md
-  (how LOKI's agents work, 15 principles + the hand-off block) > 14 domain playbooks skills/playbooks/<kind>/PLAYBOOK.md
-  (general, code, image, turnaround, 3d, video, render, research, writing, marketing, design, mobile-test, music,
-  manga): stages = the orchestrator's plan, questions = the interview, checklist = what every result is checked
-  against, plus quality bar, failure modes, tools. Fed into every harness's preamble (context.py), the interview and
-  the orchestrator. Lab > System shows it ("Foundation"); the learned lines are "Learned lines".
+**2026-10-28 22:30 (Claude) - one core agent; playbooks + toolboxes written by interviewing the owner.**
+- The owner's meaning (his screenshot): a playbook is HIS workflow for a job (goal, done means, steps, rules), written by
+  interviewing him; a toolbox is that job's resources (tools, his files and templates, scripts, apps); ONE core agent
+  uses them instead of a separate agent per task. The made-up "foundation" (CONSTITUTION.md + 14 playbooks Claude wrote,
+  put in every prompt) broke rule "nothing else is a rule" and is GONE, with the manga writer/artist/editor chain.
+- engine/agentsys/playbooks.py: one file per job, <Home library>/playbooks/<id>.md (Goal, Done means, Steps, Rules,
+  Examples, Toolbox: Tools/Files/Scripts/Apps, Owner notes); only `status: approved` ones are used; library_sync copies
+  the newer one to the other machine. Every preamble: the owner's rules, the index of his playbooks, the matching one in
+  full with its toolbox (files checked on this machine). `playbook` tool (loki + loki-make) reads any of them.
+- engine/agentsys/playbook_interview.py + Lab > System > Playbooks: LOKI interviews him one question at a time (8:
+  goal, done, steps, rules, tools, files, apps, examples), options from LOKI (its tools, his Home folders, MCP apps,
+  model suggestions) + his own words; LOKI only tidies his answers into the file; he approves / edits; Interview Again
+  drafts a new version, the approved one stays until he approves it.
+- One core agent (research: Google 180-config study - sequential work split across agents 39-70% worse; Anthropic
+  multi-agent wins only for broad parallel research at ~15x tokens; Cognition - one writer, read-only helpers, a
+  fresh-context reviewer): teams are builder + fresh-eyes reviewer (+ read-only researcher / browser checker);
+  architect / tester only for "sparc:"; the orchestrator's worker is the core agent with the playbook, helpers only
+  Researcher and Reviewer; big work asks "Plan and check" or "Straight through".
+- Open: the owner's first interviews (Lab > System > Playbooks); proof request in LOKI_TASKS.md.
+
+**2026-10-28 21:00 (Claude) - Manga Studio, Design (OpenPencil), phone testing.**
 - Manga Studio (engine/manga.py, manga_api.py, Forge > Workspace > Manga, the `manga` tool): Oniichan's features and
   FURU's 4-koma method rebuilt (no code copied - FURU's terms forbid it in AGPL): project -> outline -> cast with locked
   looks + reference sheets (library across projects) -> per-page panel script -> each panel drawn alone at its shape
   with no text -> real lettering (speech, thought, shout, whisper, narration, sfx; OFL fonts in engine/data/fonts) ->
-  review -> PDF/CBZ; 4-koma strip, 5-8 panel pages, webtoon, rtl. Agents: writer/artist/editor specialists
-  (art_specialists, skills/art-pipeline/manga-*); every drawing step = one For you card per page / sheet.
+  review -> PDF/CBZ; 4-koma strip, 5-8 panel pages, webtoon, rtl. Every drawing step = one For you card per page / sheet.
 - Gemini "Nano Banana" image backend (runners/imagegen.py "gemini", GEMINI_API_KEY, paid): takes up to 14 reference
   pictures - first for jobs WITH references (manga panels with character sheets). Panels pass reference_optional:
   backends that cannot use references draw without them (local img2img never redraws the sheet).
@@ -53,7 +66,7 @@ mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it on
   servers (a client hanging up) - every local server is now engine/quiet_server.py; /open/link (a link clicked in
   chat) crashed on a missing `import re`. The Mac's upstream-adopt failures (slow NVIDIA -> 404 routes) predate
   46eef6d, which fixes them.
-- tests: test_manga (40), test_design (30, one real OpenPencil run), test_agentsys (+foundation), test_agentsys_ui.
+- tests: test_manga (40), test_design (30, one real OpenPencil run), test_agentsys, test_agentsys_ui.
 - Open: the proofs in LOKI_TASKS.md (manga page on the PC, design on the Mac, phone test on the PC).
 
 **2026-10-28 14:30 (Claude) - why every agent job came back failed (seen in the Mac's and the PC's real job logs).**

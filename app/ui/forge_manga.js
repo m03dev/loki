@@ -103,7 +103,7 @@ const ForgeManga = (() => {
       btn("mgNew", "Create", "Make the project, then LOKI writes its outline.", () => create(f), "fmg-create"),
       btn("mgTeam", "Let an Agent Make It", "The manga team (writer, artist, editor) makes the whole book in the background with the manga playbook - every drawing step waits for your OK in Home > For you.", () => {
         if (!f.premise.value.trim()) return say("Write the idea first.", true);
-        const text = "Make a manga with the manga tool, following skills/playbooks/manga/PLAYBOOK.md: " + f.premise.value.trim()
+        const text = "Make a manga with the manga tool, following my Manga playbook if I have one (playbook tool): " + f.premise.value.trim()
           + "\nFormat: " + f.format.value + ", " + (+f.pages.value || 4) + " pages, " + (f.colour.value === "color" ? "colour" : "black and white")
           + ", style " + f.style.value + ", dialogue in " + (f.language.value || "English") + ", reading " + f.reading.value
           + (f.title.value.trim() ? ", title \"" + f.title.value.trim() + "\"" : "") + ".";

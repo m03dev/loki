@@ -192,7 +192,7 @@ iv2 = interview.make("make painterly full body concept art of a moss golem, 16:9
 h2 = [q["header"] for q in iv2["questions"]]
 check("interview: never asks what was said", "Style" not in h2 and "Framing" not in h2 and "Shape" not in h2)
 big = interview.make("rework the whole asset pipeline from scratch so the models are game ready")
-check("interview: big work asks team or one agent", big["questions"][0]["header"] == "Who")
+check("interview: big work asks plan-and-check or straight through", big["questions"][0]["header"] == "How")
 t0 = time.time()
 slow = interview.make("make concept art of a moss golem", ask=lambda p: (time.sleep(3), "{}")[1], timeout_s=0.5)
 check("interview: a slow model never holds it up", time.time() - t0 < 2.0 and slow["by"] == "templates" and slow["ask"])
@@ -479,42 +479,63 @@ try:
 except ValueError:
     check("hooks: unknown event raises", True)
 
-# ----------------------------------------------------------------------------- the foundation (the real rulebook)
-import re as _re  # noqa: E402
-from agentsys import foundation  # noqa: E402
+# ----------------------------------------------------------------------------- the owner's playbooks + toolboxes
+import tempfile as _tf  # noqa: E402
+from agentsys import playbooks, playbook_interview  # noqa: E402
+_home = Path(_tf.mkdtemp(prefix="loki-pb-"))
+os.environ["LOKI_PLAYBOOKS_DIR"] = str(_home / "playbooks")
+(_home / "refs").mkdir()
+(_home / "refs" / "style.png").write_bytes(b"\x89PNG")
+check("playbooks: the owner's rules are read word for word from AGENTS.md",
+      len(context.owner_rules()) >= 10 and context.owner_rules()[0].startswith("1. **Ship to `master`.**"))
+check("playbooks: nothing made up - no playbook and no rules of LOKI's own before the owner writes one",
+      playbooks.everything() == [] and "How LOKI's agents work" not in context.build("draw a fox")["text"])
+# the interview: options from LOKI, the owner's words, LOKI only tidies them
+iv = playbook_interview.start("concept art for a game character")
+check("interview: the first question asks what the job is", iv["question"]["key"] == "goal" and iv["question"]["of"] == 8)
+answers = {"goal": ([], "Paint a game character so it can become a 3D model"),
+           "done": (["full body, plain background"], "front view, T-pose ready\nmatches the brief's colours"),
+           "steps": ([], "1. three thumbnails\n2. I pick one\n3. final painting"),
+           "rules": ([], "always a plain grey background\nnever text in the picture"),
+           "tools": (["make_image"], ""), "files": (["refs/style.png - my style guide"], ""),
+           "apps": ([], "loki-make upscale"), "examples": ([], "good: images/fox.png; avoid: busy backgrounds")}
+for k in [q[0] for q in playbook_interview.QUESTIONS]:
+    picked, text = answers[k]
+    iv = playbook_interview.answer(iv["id"], picked, text)
+d = iv.get("draft") or {}
+pb = playbooks.load(d.get("id", ""))
+check("interview: 8 answers -> a draft playbook from his words only",
+      pb and pb["status"] == "draft" and "i pick one" in " ".join(pb["steps"]).lower()
+      and "never text in the picture" in pb["rules"] and "make_image" in pb["toolbox"]["tools"]
+      and pb["toolbox"]["scripts"] == ["loki-make upscale"] or print(pb))
+check("playbooks: a draft is never used", playbooks.match("concept art for a game character please") is None)
+playbooks.approve(pb["id"])
+m = playbooks.match("make concept art of a moss golem character")
+check("playbooks: once approved, a request for that job gets it", m and m["id"] == pb["id"])
+pre = context.build("make concept art of a moss golem character", local=True)["text"]
+check("playbooks: the preamble has his rules, his playbook (steps, rules) and its toolbox, within a local model's budget",
+      "owner's rules" in pre and "i pick one" in pre.lower() and "refs/style.png" in pre and len(pre) <= context.budget(True) or print(pre))
+check("playbooks: a toolbox file missing on this machine is said so",
+      "not on this machine" in playbooks.brief(dict(pb, toolbox=dict(pb["toolbox"], files=["refs/nope.png"]))))
+check("playbooks: unrelated work gets no playbook", playbooks.match("fix the failing python test") is None)
+iv2 = playbook_interview.start("concept art for a game character")
+for k in [q[0] for q in playbook_interview.QUESTIONS]:
+    iv2 = playbook_interview.answer(iv2["id"], [], "x" if k == "goal" else "")
+check("interview again: a new draft never replaces the approved one until approved",
+      iv2["draft"]["replaces"] == pb["id"] and playbooks.load(pb["id"])["status"] == "approved")
+playbooks.approve(iv2["draft"]["id"], as_id=pb["id"])
+check("approving the new version replaces the old one (one file)", len(playbooks.everything()) == 1)
+playbooks.add_note(pb["id"], "make the eyes glow")
+check("a send-back note becomes part of that job's playbook, verbatim", "make the eyes glow" in playbooks.load(pb["id"])["notes"])
+check("the playbook tool lists and reads them", playbooks.tool({"action": "list"})["playbooks"][0]["name"] == pb["id"]
+      and "Goal" in playbooks.tool({"name": pb["id"]})["playbook"])
+check("remove goes to the trash, never deleted", playbooks.remove(pb["id"]) and (_home / "trash" / "playbooks").is_dir()
+      and playbooks.everything() == [])
 os.environ.pop("LOKI_PLAYBOOKS_DIR", None)
-foundation._CACHE.update(stamp=None)  # pylint: disable=protected-access
-BOOKS = foundation.books()
-check("foundation: the owner's rules are read word for word from AGENTS.md",
-      len(foundation.owner_rules()) >= 10 and foundation.owner_rules()[0].startswith("1. **Ship to `master`.**"))
-check("foundation: the constitution's principles go into every preamble",
-      foundation.constitution_brief().count("\n") >= 10)
-for need in ("general", "code", "image", "turnaround", "3d", "video", "render", "research", "writing", "marketing",
-             "design", "mobile-test", "music", "manga"):
-    check("foundation: a %s playbook with stages and questions" % need,
-          need in BOOKS and len(BOOKS[need]["stages"]) >= 3 and BOOKS[need]["questions"])
-bad = []
-for b in BOOKS.values():
-    ids = {s["id"] for s in b["stages"]}
-    for s in b["stages"]:
-        bad += ["%s.%s depends on %s" % (b["name"], s["id"], d) for d in s.get("depends_on") or [] if d not in ids]
-    for qq in b["questions"]:
-        if len(qq.get("header", "")) > 12 or not 2 <= len(qq["options"]) <= 4:
-            bad.append("%s question %r" % (b["name"], qq.get("header")))
-        try:
-            _re.compile(qq.get("skip_if") or "")
-        except _re.error:
-            bad.append("%s skip_if %r" % (b["name"], qq.get("skip_if")))
-check("foundation: every stage depends on real stages; every question is AskUserQuestion-shaped", not bad or print(bad))
-gates = [s["id"] for s in BOOKS["manga"]["stages"] if s.get("gate") == "owner"]
-check("foundation: the manga playbook's drawing stages wait for the owner", {"sheets", "pages"} <= set(gates))
-for text, kind in (("draw a manga page about a robot", "manga"), ("make a 4-koma about a cat", "manga"),
-                   ("draw a cat", "image"), ("make a 3d model of a chair", "3d"), ("fix the failing python test", "code"),
-                   ("test the phone app on the emulator", "mobile-test"), ("design a login screen for the app", "design")):
-    check("foundation: %r is %s work" % (text, kind), playbook.kind_of(text) == kind or print(playbook.kind_of(text)))
-pre = context.build("draw a manga page about a robot", local=True)["text"]
-check("foundation: a local model's preamble has the rules, the method and the manga stages, within its budget",
-      "owner's rules" in pre and "Manga Writer" in pre and len(pre) <= context.budget(True))
+# one core agent: the orchestrator hands work to the core agent; helpers only read
+sp = runtime.specialists()
+check("one core agent: the only writer is the worker; the helpers are read-only",
+      set(sp) == {"worker", "Researcher", "Reviewer"} and "read-only" in sp["Researcher"] and "read-only" in sp["Reviewer"])
 
 print("\n%d failed" % len(FAILED) if FAILED else "\nall passed")
 sys.exit(1 if FAILED else 0)

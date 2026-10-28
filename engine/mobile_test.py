@@ -5,7 +5,7 @@ engine/mcp_servers.json "mobile" starts `npx -y @mobilenext/mobile-mcp@1.0.14` (
 can reach a device (devices_ready below) - so its 33 tool schemas are never paid for on a machine with nothing to
 test. The tools: mobile_list_available_devices, mobile_install_app, mobile_launch_app, mobile_list_elements_on_screen,
 mobile_click_on_screen_at_coordinates, mobile_type_keys, mobile_swipe_on_screen, mobile_press_button, mobile_open_url,
-mobile_save_screenshot, mobile_get_device_logs ... The playbook is skills/playbooks/mobile-test/PLAYBOOK.md.
+mobile_save_screenshot, mobile_get_device_logs ... The owner's phone-test playbook (agentsys/playbooks.py), when he has one, says how.
 
 Screenshots are of the PHONE or the emulator only - never of the owner's computer (owner's rule 9).
 LOKI's own phone app: id dev.m03.loki on iOS and Android, links loki://.

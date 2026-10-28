@@ -47,6 +47,31 @@ def _ask_sync(state: Any, budget_s: float = 4.5):
     return ask
 
 
+# jobs LOKI has seen the owner ask for, to interview him about (playbook.kind_of on recent work) - names, not rules
+JOB_NAMES = {"image": "Concept art", "turnaround": "Turnaround sheets", "3d": "3D models", "video": "Video clips",
+             "code": "Coding in LOKI", "marketing": "Marketing posts", "research": "Research", "writing": "Writing",
+             "manga": "Manga", "design": "UI and app design", "render": "Renders", "music": "Music",
+             "mobile-test": "Testing the phone app"}
+
+
+def suggested_jobs(state: Any) -> list:
+    """The kinds of work in the owner's recent requests that have no playbook yet (most asked first)."""
+    from . import playbooks as _pbs  # pylint: disable=import-outside-toplevel
+    have = {p["id"] for p in _pbs.everything()} | {_pbs.slug(p["title"]) for p in _pbs.everything()}
+    counts: dict = {}
+    try:
+        for r in trace.runs(14, limit=300):
+            k = playbook.kind_of(str(r.get("name") or "") + " " + str(r.get("input") or ""))
+            counts[k] = counts.get(k, 0) + 1
+    except Exception:  # noqa: BLE001
+        pass
+    for k in ("image", "turnaround", "3d", "manga", "code", "render"):
+        counts.setdefault(k, 0)
+    out = [{"kind": k, "title": JOB_NAMES[k], "seen": n} for k, n in sorted(counts.items(), key=lambda x: -x[1])
+           if k in JOB_NAMES and _pbs.slug(JOB_NAMES[k]) not in have]
+    return out[:8]
+
+
 def status(state: Any) -> dict:
     st = upstream.load_state()
     counts: dict = {}
@@ -139,16 +164,21 @@ def route(state: Any, method: str, path: str, data: dict | None = None) -> tuple
                 if q.get("kind"):
                     return 200, {"ok": True, "playbook": playbook.load(q["kind"])}
                 return 200, {"ok": True, "playbooks": playbook.overview()}
-            if r == "/agentsys/foundation":   # the rulebook: owner's rules > constitution > domain playbooks
-                from . import foundation  # pylint: disable=import-outside-toplevel
-                books = []
-                for b in foundation.books().values():
-                    books.append({"name": b["name"], "title": b["title"], "specialists": b["specialists"],
-                                  "questions": len(b["questions"]), "triggers": b["triggers"][:12],
-                                  "stages": [{"id": s["id"], "specialist": s.get("specialist", ""), "gate": s.get("gate", ""),
-                                              "objective": s["objective"][:200]} for s in b["stages"]]})
-                principles = [l.strip() for l in foundation.constitution().splitlines() if l[:3].strip().rstrip(".").isdigit()]
-                return 200, {"ok": True, "rules": foundation.owner_rules(), "principles": principles, "books": books}
+            if r == "/agentsys/playbooks/owner":   # the owner's playbooks + toolboxes (agentsys/playbooks.py)
+                from . import context as _ctx, playbook_interview, playbooks as _pbs  # pylint: disable=import-outside-toplevel
+                if q.get("id"):
+                    pb = _pbs.load(q["id"])
+                    if not pb:
+                        return 404, {"ok": False, "error": "no such playbook"}
+                    return 200, {"ok": True, "playbook": pb, "text": _pbs.render(pb)}
+                return 200, {"ok": True, "folder": str(_pbs.folder()), "rules": _ctx.owner_rules(),
+                             "playbooks": [{k: p[k] for k in ("id", "title", "description", "status", "updated", "triggers")}
+                                           | {"steps": len(p["steps"]), "tools": len(p["toolbox"].get("tools") or []),
+                                              "files": len(p["toolbox"].get("files") or [])} for p in _pbs.everything()],
+                             "interviews": playbook_interview.recent(6), "suggested": suggested_jobs(state)}
+            if r == "/agentsys/playbooks/interview":
+                from . import playbook_interview  # pylint: disable=import-outside-toplevel
+                return 200, {"ok": True, "interview": playbook_interview.session(q.get("id", ""))}
             if r == "/agentsys/upstream":
                 st = upstream.load_state()
                 reg = upstream.registry()
@@ -194,6 +224,23 @@ def route(state: Any, method: str, path: str, data: dict | None = None) -> tuple
                 cards = upstream.queue_cards(res["new"], ws)
                 return 200, {"ok": True, "checked": res["checked"], "total": res["total"], "new": len(res["new"]),
                              "cards": [c["id"] for c in cards], "token": res["token"]}
+            if r.startswith("/agentsys/playbooks/"):   # the owner's playbooks: interview, approve, remove
+                from . import playbook_interview, playbooks as _pbs  # pylint: disable=import-outside-toplevel
+                agent = getattr(state, "agent", None)
+                if r == "/agentsys/playbooks/interview/start":
+                    return 200, {"ok": True, "interview": playbook_interview.start(
+                        str(data.get("title") or ""), ask=_ask_sync(state, 20), agent=agent)}
+                if r == "/agentsys/playbooks/interview/answer":
+                    sid = str(data.get("id") or "")
+                    final = playbook_interview.session(sid)["step"] >= len(playbook_interview.QUESTIONS) - 1
+                    return 200, {"ok": True, "interview": playbook_interview.answer(
+                        sid, data.get("picked") or [], str(data.get("text") or ""),
+                        ask=_ask_sync(state, 60 if final else 20), agent=agent, back=bool(data.get("back")))}
+                if r == "/agentsys/playbooks/approve":
+                    pb = _pbs.approve(str(data.get("id") or ""), str(data.get("text") or ""), str(data.get("replaces") or ""))
+                    return 200, {"ok": True, "playbook": {"id": pb["id"], "status": pb["status"]}}
+                if r == "/agentsys/playbooks/remove":
+                    return 200, {"ok": _pbs.remove(str(data.get("id") or ""))}
             if r == "/agentsys/playbook":
                 kind = str(data.get("kind") or "general")
                 op = str(data.get("op") or "add").upper()

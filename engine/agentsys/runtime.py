@@ -385,48 +385,39 @@ def _team_choice(answers: Any) -> str:
         return ""
     for k, v in answers.items():
         val = " ".join(v) if isinstance(v, (list, tuple)) else str(v)
-        if str(k).lower() in ("who", "q_who") and "team" in val.lower():
+        if str(k).lower() in ("who", "q_who", "how") and ("team" in val.lower() or "plan and check" in val.lower()):
             return "team"
     return ""
 
 
 # ----------------------------------------------------------------------------- the orchestrator, wired to LOKI
 def specialists() -> dict:
-    out = {"worker": "a general LOKI agent with the full tool set - anything that is not a specialist's job"}
-    try:
-        import art_specialists  # pylint: disable=import-outside-toplevel
-        for k, sp in art_specialists.SPECIALISTS.items():
-            out[sp["name"]] = "%s (tool: %s)" % (sp["does"], sp["tool"])
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        import team  # pylint: disable=import-outside-toplevel
-        for k in ("researcher", "architect", "builder", "tester", "reviewer"):
-            r = team.ROLES[k]
-            out[r["name"]] = r["brief"][:160] + ("" if r["writes"] else " (read-only)")
-    except Exception:  # noqa: BLE001
-        pass
-    return out
+    """Who the orchestrator may hand a step to. One core agent does every step that makes or changes something
+    (Google Research 2025: sequential work split across agents was 39-70% worse; Cognition: one writer); helpers only
+    read - a researcher for broad look-ups (parallel research is where several agents win) and a fresh-eyes reviewer."""
+    return {"worker": "LOKI's core agent with the full tool set and the owner's playbook for this job - does every "
+                      "step that makes or changes something",
+            "Researcher": "looks things up (web, docs, files) and reports what it found - read-only",
+            "Reviewer": "fresh eyes: checks a result against the goal and the playbook's done-means - read-only"}
 
 
 _READ_ONLY_SPECIALISTS = {"Researcher", "Reviewer"}
 
 
-def _skill_for(name: str) -> str:
+def _skill_for(goal: str) -> str:
+    """The owner's playbook + toolbox for this job (the core agent's 'skill')."""
     try:
-        import art_specialists  # pylint: disable=import-outside-toplevel
-        for k, sp in art_specialists.SPECIALISTS.items():
-            if sp["name"] == name:
-                return art_specialists.skills_text(k)
+        from . import playbooks  # pylint: disable=import-outside-toplevel
+        pb = playbooks.match(goal)
+        return playbooks.brief(pb, limit=6000) if pb else ""
     except Exception:  # noqa: BLE001
-        pass
-    return ""
+        return ""
 
 
 async def _worker(step: dict, text: str) -> dict:
     agent = _agent()
-    skill = _skill_for(step["specialist"])
-    task = text + ("\n\nYour skill (follow it):\n" + skill[:6000] if skill else "")
+    skill = _skill_for(step["objective"] + " " + text[:600])
+    task = text + ("\n\n" + skill[:6000] if skill else "")
     bullets = playbook.select(step["objective"], k=4)
     pb = playbook.render(bullets)
     if pb:

@@ -204,24 +204,36 @@ class Orchestrator:
 
     # ------------------------------------------------------------------ the outer loop
     def skeleton(self, goal: str) -> list:
-        """The domain playbook's stages for this goal (skills/playbooks/<kind>/PLAYBOOK.md), or []."""
+        """The owner's playbook steps for this goal (agentsys/playbooks.py), as plan steps for the core agent, or []."""
         try:
-            from . import foundation  # pylint: disable=import-outside-toplevel
-            return foundation.stages(goal)
+            from . import playbooks  # pylint: disable=import-outside-toplevel
+            pb = playbooks.match(goal)
         except Exception:  # noqa: BLE001
+            pb = None
+        if not pb or not pb.get("steps"):
             return []
+        done = "; ".join(pb.get("done") or [])
+        tools = [re.split(r"[\s:(]", t.strip(), 1)[0].strip("`") for t in (pb.get("toolbox") or {}).get("tools") or []]
+        return [{"id": "s%d" % (i + 1), "specialist": "worker", "objective": st, "output": "what this step makes",
+                 "tools": [t for t in tools if t][:8], "check": done if i == len(pb["steps"]) - 1 else "",
+                 "writes": True, "depends_on": ["s%d" % i] if i else []} for i, st in enumerate(pb["steps"])]
+
+    def done_means(self, goal: str) -> str:
+        try:
+            from . import playbooks  # pylint: disable=import-outside-toplevel
+            pb = playbooks.match(goal)
+        except Exception:  # noqa: BLE001
+            pb = None
+        return "\n".join("- " + x for x in (pb or {}).get("done") or [])
 
     async def ledger(self, goal: str, previous: str = "") -> dict:
         skel = self.skeleton(goal)
-        for st in skel:                       # a playbook's specialists are always available to the plan
-            self.specialists.setdefault(st.get("specialist") or "worker", "the playbook's %s" % (st.get("specialist") or "worker"))
         specs = "\n".join("- %s: %s" % (k, _clip(v, 160)) for k, v in self.specialists.items())
         effort = EFFORT
         if skel:
-            effort += ("\n\nTHE PLAYBOOK for this kind of work gives the stages - use them as the plan's skeleton, in this "
-                       "order, keep their ids, specialists, tools, checks and owner gates; fill each objective and output "
-                       "in for THIS goal; drop a stage only if the goal clearly does not need it:\n"
-                       + json.dumps(skel, ensure_ascii=False)[:5000])
+            effort += ("\n\nTHE OWNER'S PLAYBOOK for this job gives the steps - they are the plan, in this order, every "
+                       "step done by the worker (the one core agent); fill in each step's output for THIS goal; never "
+                       "drop or reorder his steps:\n" + json.dumps(skel, ensure_ascii=False)[:5000])
         prompt = LEDGER_PROMPT % {"goal": _clip(goal, 4000), "specialists": specs, "effort": effort,
                                   "previous": ("\nThe last plan stalled. What happened:\n" + previous +
                                                "\nRewrite the facts (what we now know) and plan ONLY the remaining work.")
@@ -253,6 +265,7 @@ class Orchestrator:
     async def run(self, goal: str, run_id: str = "") -> dict:
         run = {"id": run_id or uuid.uuid4().hex[:12], "goal": goal, "started": time.time(), "status": "working",
                "ledgers": [], "steps": [], "events": [], "outcome": ""}
+        self.goal_text = goal
         with trace.span("invoke_agent orchestrator", "agent", **{"gen_ai.agent.name": "LOKI orchestrator",
                                                                   "loki.orchestration": run["id"]}) as sp:
             led = await self.ledger(goal)
@@ -268,6 +281,7 @@ class Orchestrator:
     async def resume(self, run_id: str) -> dict:
         p = folder() / ("%s.json" % run_id)
         run = json.loads(p.read_text(encoding="utf-8"))
+        self.goal_text = run.get("goal", "")
         for s in run["steps"]:
             if s["status"] != "waiting":
                 continue
@@ -398,14 +412,10 @@ class Orchestrator:
             return {"pass": False, "fixes": ["it was blocked: %s" % res["summary"][:300]]}
         try:
             with trace.span("evaluate %s" % step["id"], "guardrail"):
-                try:
-                    from . import foundation  # pylint: disable=import-outside-toplevel
-                    book = foundation.checklist_for(step["objective"], step["id"])
-                except Exception:  # noqa: BLE001
-                    book = ""
+                book = self.done_means(self.goal_text) if getattr(self, "goal_text", "") else ""
                 data = _json(await self.ask(REVIEW_PROMPT % {
                     "objective": step["objective"], "output": step["output"],
-                    "check": step["check"] + (("\nThe playbook's checklist for this work:\n" + book[:2500]) if book else ""),
+                    "check": step["check"] + (("\nThe owner's playbook - done means:\n" + book[:2500]) if book else ""),
                     "summary": res["summary"][:3000], "files": ", ".join(res["files"]) or "none",
                     "missing": ", ".join(missing) or "none"}))
             return {"pass": bool(data.get("pass")), "fixes": [_clip(f, 300) for f in (data.get("fixes") or [])][:5]}

@@ -42,26 +42,12 @@ SPECIALISTS = {
     "video": {"name": "Video Director", "skill": "video-director", "tool": "make_video",
               "keys": ("camera-system", "camera-systems"),
               "does": "one shot of text-to-video"},
-    # Manga Studio (engine/manga.py): the writer plans, the artist draws, the editor letters, checks and exports
-    "manga_writer": {"name": "Manga Writer", "skill": "manga-writer", "tool": "manga",
-                     "keys": ("manga", "comic", "storyboard", "story"),
-                     "does": "the outline, the cast with locked looks and every page's panel script (manga actions "
-                             "outline, characters, script - written as JSON in data)"},
-    "manga_artist": {"name": "Manga Artist", "skill": "manga-artist", "tool": "manga",
-                     "keys": ("manga", "comic", "character-design"),
-                     "does": "the character reference sheets and the drawn pages (manga actions sheet, pick, draw_page, "
-                             "edit_panel)"},
-    "manga_editor": {"name": "Manga Editor", "skill": "manga-editor", "tool": "manga",
-                     "keys": ("manga", "comic"),
-                     "does": "the lettering, the review against the script and the export (manga actions letter, "
-                             "layout, review, export)"},
 }
 ORDER = ("concept", "turnaround", "model", "finish", "render")
 TOOL_TO = {v["tool"]: k for k, v in SPECIALISTS.items()}
-TOOL_TO["manga"] = "manga_artist"       # a manga For you card is a drawing step
-MANGA = ("manga_writer", "manga_artist", "manga_editor")
 
-ART_GOAL = re.compile(r"\b(manga|comic|4-koma|4koma|yonkoma|webtoon|concept art|character|creature|prop|vehicle|3d model|model of|turnaround|sprite|sculpt|"
+
+ART_GOAL = re.compile(r"\b(concept art|character|creature|prop|vehicle|3d model|model of|turnaround|sprite|sculpt|"
                       r"render|lighting|turntable|texture|asset|video|animation|shot)\b", re.I)
 
 
@@ -77,8 +63,6 @@ def for_goal(goal: str) -> list:
     if not ART_GOAL.search(text):
         return []
     low = text.lower()
-    if re.search(r"\b(manga|comic|4-?koma|yonkoma|webtoon)\b", low):
-        return list(MANGA)
     if re.search(r"\b(video|shot|clip|animation)\b", low) and not re.search(r"\b3d model|turnaround\b", low):
         return ["video"]
     if re.search(r"\brender|turntable|lighting\b", low) and not re.search(r"\bconcept|turnaround|model\b", low):

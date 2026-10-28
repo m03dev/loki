@@ -197,13 +197,11 @@ def agent_checks(ws: Path, pid: str):
     try:
         import art_specialists  # noqa: E402
         import team  # noqa: E402
-        check("a manga goal gets the writer, the artist and the editor (not the 3D pipeline)",
-              team.choose_roles("make a 4-koma manga about a cat") == ["art_manga_writer", "art_manga_artist", "art_manga_editor"],
-              team.choose_roles("make a 4-koma manga about a cat"))
+        check("a manga goal is one core agent + a fresh-eyes reviewer (not a chain of agents, not the 3D pipeline)",
+              team.choose_roles("make a 4-koma manga about a cat, with a full story outline, cast and pages") in
+              (["builder", "reviewer"], ["builder"]), team.choose_roles("make a 4-koma manga about a cat"))
     except Exception as exc:  # noqa: BLE001
-        check("a manga goal gets the writer, the artist and the editor", False, exc)
-    from agentsys import playbook  # noqa: E402
-    check("a manga request picks the manga playbook", playbook.kind_of("draw a manga page about a robot") == "manga")
+        check("a manga goal is one core agent + a reviewer", False, exc)
 
 
 async def window_checks():
