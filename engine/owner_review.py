@@ -293,6 +293,9 @@ def draw(it: dict, call: Callable[[str, dict, Path], dict] | None = None) -> dic
     files = res.get("files") or ([res["file"]] if res.get("file") else [])
     if isinstance(files, dict):
         files = list(files.get("views", {}).values()) if files.get("views") else list(files.values())
+    # whole paths: the makers answer relative to the job's folder, and a card shown anywhere else could not find them
+    # (2026-10-28, the Mac: For you previews blank for a job in Home/myth_might_mayhem)
+    files = [str(f) if Path(str(f)).is_absolute() else str(Path(it["cwd"]) / str(f)) for f in files]
     if not res.get("ok") or not files:
         it.update(status="failed", error=str(res.get("error") or "nothing was made")[:400], finished=time.time())
         _save(it)

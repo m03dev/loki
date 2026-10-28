@@ -209,7 +209,7 @@ const LokiHome = (() => {
       return box;
     }
     if (it.thumb) {
-      const img = mk("img"); img.alt = ""; img.src = it.thumb; img.loading = "lazy"; img.decoding = "async";
+      const img = mk("img"); img.alt = ""; img.src = it.thumb; img.decoding = "async";
       img.addEventListener("error", () => { img.remove(); box.innerHTML = svg(KIND[it.kind].icon); });
       box.append(img);
     } else box.innerHTML = svg((KIND[it.kind] || KIND.job).icon);

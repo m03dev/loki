@@ -59,7 +59,7 @@ function creationTile(c, open) {
   const frame = el("div", "creation-frame");
   if (c.show === "image") {
     const img = document.createElement("img");
-    img.loading = "lazy"; img.alt = c.title; img.src = src;
+    img.alt = c.title; img.src = src;   // never lazy: WebKit (the Mac) skips lazy pictures in scrolling panels
     frame.append(img);
   } else if (c.show === "video") {
     const vid = document.createElement("video");

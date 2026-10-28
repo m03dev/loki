@@ -45,7 +45,7 @@ const LokiTaskBoard = (() => {
   function thumb(rel) {
     const parts = rel.split("/");
     if (!IMG.test(rel) || parts.length !== 2) return null;
-    const img = mk("img", "tb-pic"); img.alt = rel; img.loading = "lazy";
+    const img = mk("img", "tb-pic"); img.alt = rel;
     img.src = "/creations/" + parts.map(encodeURIComponent).join("/");
     img.addEventListener("error", () => img.remove());
     img.addEventListener("click", (e) => {

@@ -37,7 +37,7 @@ const LokiChatMedia = (() => {
 
   function imageTile(m) {
     const tile = mk("figure", "cm-tile cm-image"); tile.dataset.path = m.path;
-    const img = mk("img", "cm-pic"); img.src = m.data_url; img.alt = m.name; img.loading = "lazy";
+    const img = mk("img", "cm-pic"); img.src = m.data_url; img.alt = m.name;
     img.addEventListener("click", () => bigView(m.data_url, m.name));
     const cap = mk("figcaption", "cm-cap");
     cap.append(mk("span", "cm-name", m.name + (m.width ? "  " + m.width + "×" + m.height : "")));

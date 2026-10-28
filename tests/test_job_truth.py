@@ -151,6 +151,13 @@ check("a job never leaves a slow capable route for the local model only",
       and loki._slow_may_move("nvidia", ["%s/q" % _pid("groq"), "%s/q" % _pid("local")], _prov))
 os.environ.pop("LOKI_JOB_ID")
 check("the chat may still move off a slow route", loki._slow_may_move("nvidia", ["%s/q" % _pid("local")], _prov))
+_ui = REPO / "app" / "ui"
+_lazy = [f.name for f in _ui.glob("*.js") if 'loading = "lazy"' in f.read_text(encoding="utf-8")]
+check("no lazy pictures in the window (WebKit, the Mac's window, never loads them inside a scrolling panel: blank "
+      "For you previews)", not _lazy, _lazy)
+_hr = (_ui / "home_review.js").read_text(encoding="utf-8")
+check("For you resolves a card's relative files against the card's own folder", "media(f, img, it)" in _hr
+      and "it.cwd" in _hr)
 check("this suite stays under 60 s", time.time() - T0 < 60, time.time() - T0)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

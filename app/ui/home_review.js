@@ -66,9 +66,17 @@ const LokiHomeReview = (() => {
     return true;
   }
 
-  async function media(path, img) {
-    const m = await call("/chat/media?path=" + encodeURIComponent(path)).catch(() => null);
-    if (m && m.ok && m.data_url) img.src = m.data_url; else img.replaceWith(mk("div", "rv-file", path.split(/[\\/]/).pop()));
+  /** A card's picture, as data (the window shows only its own pictures). A relative path is the card's own project
+   *  folder's (2026-10-28, the Mac: images/... of a job in Home/myth_might_mayhem was looked for in Home - blank). */
+  const full = (it, f) => (/^([a-zA-Z]:[\\/]|\/)/.test(f) || !it || !it.cwd) ? f : it.cwd.replace(/[\\/]+$/, "") + "/" + f;
+  async function media(path, img, it) {
+    const m = await call("/chat/media?path=" + encodeURIComponent(full(it, path))).catch(() => null);
+    if (m && m.ok && m.data_url) { img.src = m.data_url; return; }
+    const why = (m && m.error) || "could not load";
+    if (/still being written/.test(why) && img.isConnected) { setTimeout(() => media(path, img, it), 3000); return; }
+    const d = mk("div", "rv-file", path.split(/[\\/]/).pop() + " - " + why);
+    d.title = full(it, path);
+    img.replaceWith(d);
   }
 
   async function decide(it, action, extra, card) {
@@ -110,7 +118,7 @@ const LokiHomeReview = (() => {
     if ((p.inputs || []).length) {
       const strip = mk("span", "rv-uses");
       for (const f of p.inputs.slice(0, 4)) {
-        if (isPic(f)) { const img = mk("img"); img.alt = f.split(/[\\/]/).pop(); img.title = f; img.loading = "lazy"; strip.append(img); media(f, img); }
+        if (isPic(f)) { const img = mk("img"); img.alt = f.split(/[\\/]/).pop(); img.title = f; strip.append(img); media(f, img, it); }
         else strip.append(mk("span", "rv-v", f.split(/[\\/]/).pop()));
       }
       row("Uses", strip);
@@ -183,7 +191,7 @@ const LokiHomeReview = (() => {
     const pics = mk("div", "rv-pics");
     const files = (it.files || []).slice(0, 6);
     for (const f of files) {
-      if (isPic(f)) { const img = mk("img"); img.alt = f.split(/[\\/]/).pop(); img.loading = "lazy"; pics.append(img); media(f, img); }
+      if (isPic(f)) { const img = mk("img"); img.alt = f.split(/[\\/]/).pop(); pics.append(img); media(f, img, it); }   // never lazy: WebKit (the Mac's window) does not load lazy pictures inside a scrolling panel
       else pics.append(mk("div", "rv-file", f.split(/[\\/]/).pop()));
     }
     if (!files.length) pics.append(mk("div", "rv-file", "no files"));
