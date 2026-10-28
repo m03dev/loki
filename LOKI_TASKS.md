@@ -118,6 +118,15 @@ nothing is published or posted without the owner. Edit freely.
 - After this update, open the Local models tab on the Mac: the Hugging Face models (harness_data/big/huggingface, ~18 GB) and Ollama models must be listed again. Report the count in the task log.
 - Never write into /Volumes/Xero/loki - it is an old copy of the repo, not a cache folder. Big things go to harness_data/big (LokiSSD, which lives on Xero).
 
+## 2026-10-27 - [loki] DO FIRST, Mac: the PC is not updating - get it fixed yourselves (owner: "loki needs to do it")
+- The Mac's log says "pc runs an older LOKI; asked it to update" - the PC never does. Claude does NOT fix this; LOKI does.
+- Mac LOKI: send the PC a job over the peer link (POST /peer/jobs): "Find out why your updater does not move to GitHub
+  master f143c03 or newer (read harness_data/app/loki_bridge.log [loki-update] lines, `git status`, `git log -1`,
+  engine/updater.py STATE problem/error). Fix the cause on this PC, update, restart, and report the cause and what you
+  changed." If the PC can't pull from GitHub, hand it the update yourself (engine/peer_update.py bundle).
+- Report under this request: the PC's cause, the fix, and the PC's `git log -1` after. If the fix is code, ship it to
+  master so it cannot come back.
+
 ## 2026-10-27 - [loki] DO FIRST: the Mac-PC link, then a real video (owner: "i have still to receive a render")
 - PC and Mac, after this update starts: `python engine/tunnel_link.py <other machine's name>` must print an
   https://...trycloudflare.com address (cloudflared is downloaded once into harness_data/bin). Then the Mac's
