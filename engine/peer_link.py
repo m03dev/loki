@@ -323,6 +323,7 @@ def callbacks(state: Any, agent: Any) -> dict:
             "files": _files_receive,
             "library": lambda origin, data: _library_receive(agent, data),
             "work": _work_receive,
+            "llm": lambda origin, data: __import__("peer_llm").serve(agent, origin, data),
             "automations": _automations_receive,
             "verified": lambda origin, client: link_back(agent.env_file_path(), origin, client)}
 

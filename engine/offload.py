@@ -381,6 +381,16 @@ def _serves(env: dict) -> tuple:
             why["polish"] = "Blender is not installed here"
     except Exception as exc:  # noqa: BLE001
         why["polish"] = str(exc)[:120]
+    try:   # its local language model, for a light machine's chat and jobs (engine/peer_llm.py)
+        import sys  # pylint: disable=import-outside-toplevel
+        import peer_llm  # pylint: disable=import-outside-toplevel
+        ok, no = peer_llm.can_serve(sys.modules.get("loki"))
+        if ok:
+            kinds.append("llm")
+        else:
+            why["llm"] = no
+    except Exception as exc:  # noqa: BLE001
+        why["llm"] = str(exc)[:120]
     return kinds, why
 
 

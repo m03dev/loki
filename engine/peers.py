@@ -15,6 +15,7 @@ same secret can then:
     POST /peer/restart            restart this machine's engine (the app reloads its window)
     POST /peer/files              list/read (and, when allowed here, write) this machine's shared folder
     POST /peer/automations        the caller's automations in, ours out (engine/automations.py)
+    POST /peer/llm                one request on this machine's local language model (peer_llm.py)
     POST /peer/work               heavy work from a light machine: pictures, area edits, 3D, Blender (offload.py)
 
 Security, because this listens on the network:
@@ -581,6 +582,11 @@ class PeerServer:
             if "work" not in cb:
                 return 404, {"ok": False, "error": "unknown peer endpoint"}
             return cb["work"](origin, data)
+        if method == "POST" and path == "/peer/llm":
+            # One chat-completions request on this machine's local model (engine/peer_llm.py): messages in, answer out.
+            if "llm" not in cb:
+                return 404, {"ok": False, "error": "unknown peer endpoint"}
+            return cb["llm"](origin, data)
         if method == "POST" and path == "/peer/experience":
             items = data.get("trajectories")
             if not isinstance(items, list):

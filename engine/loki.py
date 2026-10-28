@@ -848,6 +848,9 @@ def provider_configured(name: str) -> bool:
         return False
     if name in LOCAL_SERVERS:
         return local_server_up(name)
+    if name == "pc-local":   # the linked PC's local model (engine/peer_llm.py): only while the PC offers it
+        import peer_llm  # pylint: disable=import-outside-toplevel
+        return peer_llm.helper_peer() is not None
     if cfg.base_url.startswith(CLI_AGENT_PREFIX):
         # Counts as configured only once the CLI is actually installed.
         return cli_agents.is_available(cfg.base_url[len(CLI_AGENT_PREFIX):])
@@ -9360,7 +9363,7 @@ def _oc_providers(first: str) -> dict:
             # unattended work (2026-10-27, the PC overnight): NVIDIA took ~200 s a step, was benched as slow, and the
             # jobs ran on the 8B local model and a 20B free route that could not call tools - 60% failed. Nobody waits
             # on a job, so a slow capable route beats a quick weak one: the small models go after every cloud route.
-            weak = [n for n in names if n in LOCAL_PROVIDERS or n in WEAK_FOR_JOBS]
+            weak = [n for n in names if n in LOCAL_PROVIDERS or n in WEAK_FOR_JOBS or n == "pc-local"]
             names = [n for n in names if n not in weak] + weak
             # the model the job was given goes first, not the quickest one: speed put Nemotron (the small Fast model)
             # in front of every job, and it looped on one broken command (2026-10-27, the PC)
@@ -10062,6 +10065,11 @@ async def run_job(job_path: str) -> int:
             except OSError:
                 pass
         return 0
+    try:   # the Mac's jobs may use the PC's local model instead of its own (engine/peer_llm.py)
+        import peer_llm  # pylint: disable=import-outside-toplevel
+        peer_llm.register(sys.modules[__name__])
+    except Exception:  # noqa: BLE001
+        pass
     allow_commands = bool(job.get("allow_commands"))
     picked = job_model_choice(job, model_name)
     if picked != model_name:

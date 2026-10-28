@@ -3161,6 +3161,12 @@ async def serve() -> None:
     try:
         import peer_link  # pylint: disable=import-outside-toplevel
         state.peer_server = peer_link.start(state, loki)
+        try:   # the Mac asks the PC's local model before its own (owner's rule 7; engine/peer_llm.py)
+            import peer_llm  # pylint: disable=import-outside-toplevel
+            if peer_llm.register(loki):
+                print("[loki-bridge] the linked PC's local model is a route here: pc-local", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[loki-bridge] pc-local unavailable: {exc}", flush=True)
         threading.Thread(target=peer_link.sync_forever, args=(state, loki), daemon=True, name="loki-peers").start()
         try:   # every machine's logs on every machine, every 5 min (engine/peer_logs.py)
             import peer_logs  # pylint: disable=import-outside-toplevel
