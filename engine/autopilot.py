@@ -880,6 +880,33 @@ class Autopilot:
         self._log("report", "Wrote what LOKI learned this week (%s)." % (name or "not saved"), file=name)
         return text
 
+    def duty_upstream(self) -> str:
+        """Check the open-source projects LOKI is built from (GitHub API, a batch per run) and put each one with
+        something new in Home > For you: Adopt (an agent ports what matters, updates the pin, tests, ships), Skip,
+        or Not now. The full table is harness_data/reports/upstream.md."""
+        from agentsys import upstream  # pylint: disable=import-outside-toplevel
+        res = upstream.check()
+        ws = str(getattr(self.agent, "WORKSPACE", "") or self.repo)
+        cards = upstream.queue_cards(res["new"], ws)
+        text = "Upstream: checked %d of %d sources%s; %d with something new%s" % (
+            res["checked"], res["total"], "" if res["token"] else " (no GitHub token: a batch per day)",
+            len(res["new"]), (" - in For you: " + ", ".join(n["entry"]["repo"] for n in res["new"][:5])) if cards else "")
+        self._log("upstream", text)
+        return text
+
+    def resume_orchestrations(self) -> str:
+        """A delegation run that waited for the owner goes on once his cards are decided."""
+        try:
+            from agentsys import runtime  # pylint: disable=import-outside-toplevel
+        except Exception:  # noqa: BLE001
+            return ""
+        ids = runtime.parked_orchestrations_ready() if runtime.STATE.get("state") is not None else []
+        for rid in ids[:2]:
+            runtime.resume_orchestration(rid)
+        if ids:
+            self._log("orchestrate", "resumed %s after the owner's OK" % ", ".join(ids[:2]))
+        return ", ".join(ids[:2])
+
     @staticmethod
     def _daily_on() -> bool:
         try:
@@ -950,6 +977,10 @@ class Autopilot:
                     self.write_board()
         except Exception as exc:  # noqa: BLE001
             self._log("board", "failed: %s: %s" % (type(exc).__name__, exc))
+        try:   # delegation runs that waited for the owner carry on as soon as he decided
+            self.resume_orchestrations()
+        except Exception as exc:  # noqa: BLE001
+            self._log("orchestrate", "failed: %s: %s" % (type(exc).__name__, exc))
         cleaned: list = []
         try:   # storage runs on its own clock, busy or not - it only touches finished work (never idle on the PC).
             # It does NOT use up the tick (2026-10-27): it used to return here, so every start (and every 6 h) the
@@ -1004,6 +1035,10 @@ class Autopilot:
         except Exception:  # noqa: BLE001
             pass
         duties.append(("report", _env_s("LOKI_AUTOPILOT_REPORT_S", 604800), self.duty_report))
+        if _env_on("LOKI_UPSTREAM"):
+            # where LOKI's open-source code came from and what changed there (engine/agentsys/upstream.py; owner
+            # 2026-10-28: "always check where he got what hes using and seeing if they made updates")
+            duties.append(("upstream", _env_s("LOKI_UPSTREAM_S", 86400), self.duty_upstream))
         if self.evolve is not None and __import__("evolve").enabled():
             # session 28: LOKI reviews itself and its speed every week - where evolve builds the ideas
             duties.append(("review", _env_s("LOKI_AUTOPILOT_REVIEW_S", 604800), self.duty_review))

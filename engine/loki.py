@@ -10031,6 +10031,15 @@ def _write_result(job: dict, text: str) -> None:
             pass
 
 
+# The agent system (engine/agentsys/, docs/AGENT_SYSTEM.md): one chassis around every harness - context preamble,
+# traces, guardrails, playbooks, learning. Installed here so background-job processes get it too.
+try:
+    from agentsys import runtime as _agentsys_runtime  # noqa: E402
+    _agentsys_runtime.install(sys.modules[__name__])
+except Exception as _agentsys_exc:  # noqa: BLE001 - LOKI runs without it, it says so
+    print("[loki] agent system not installed: %s" % _agentsys_exc, file=sys.stderr)
+
+
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "--job":
         raise SystemExit(asyncio.run(run_job(sys.argv[2])))

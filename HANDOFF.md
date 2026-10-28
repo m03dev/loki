@@ -12,7 +12,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
+Last updated: 2026-10-28 12:00 (the agent system, engine/agentsys/); before that 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
 
 ## The machines
 
@@ -26,6 +26,24 @@ The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master`
 mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it only emailed failures); the suites run locally and the Windows build workflow stays.
 
 ## Now (2026-10-25)
+
+**2026-10-28 12:00 (Claude, cloud) - the agent system: one chassis around every harness (docs/AGENT_SYSTEM.md).**
+- Root cause found: memory, lessons, checks and the experience log only ran in LOKI's own loop, so on the default
+  path (OpenCode / DSH / CLI harnesses / local agent) none of them did. engine/agentsys/runtime.py now wraps
+  run_opencode (chat, tasks, jobs) + LOKI's loop + tool and model calls, in the engine and every job process.
+- Layers (engine/agentsys/): interview (1-4 questions with options before work; templates, a model only sharpens them
+  inside 4 s; LOKI_INTERVIEW always|big|off), orchestrator (Magentic-One task/progress ledgers, specialists with
+  objective/output/tools/boundaries, evaluator sends back with fixes, stall re-plan, parks on the owner's gate and
+  resumes), context (memory pack + playbook bullets + ledger last), playbook (ACE bullets with counters; owner notes
+  are owner bullets; the Prompt Expert writes with them), toolbox (tool facts + MCP annotations on loki-make),
+  guardrails (budgets, stall watch, spotlighting, missing files), hooks, trace (OTel GenAI spans in <data>/traces),
+  sendback (send back any result with a note / Not now = parked), upstream (163 sources from THIRD_PARTY.md, ecc_sync,
+  PROVENANCE, docstrings, toolshelf; daily autopilot duty "upstream" -> For you cards Adopt / Skip / Not now;
+  ecc_sync now records the commit it downloaded).
+- Window: app/ui/agentsys.js (interview card, Send back / Not now on LOKI's newest answer), For you: question + upstream
+  cards, Not now on every card, Parked list; Lab > System (runs, specialist teams, playbooks, upstream, parked).
+- Checked in the cloud: tests/test_agentsys.py, tests/test_agentsys_ui.py, test_owner_review, test_home_review_ui,
+  test_autopilot, test_make_mcp, UI suites, self-test. Not yet run on the machines: LOKI_TASKS "agent system proof".
 
 **2026-10-28 01:30 (Claude, cloud) - Prompt Expert per task with real references; ~2,000 premade agents/skills.**
 - New libraries (engine/ecc_sync.py, auto-download on next start): wshobson/agents (MIT, plugins/), VoltAgent

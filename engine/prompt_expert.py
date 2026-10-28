@@ -171,11 +171,30 @@ def system_for(card: dict) -> str:
     return base
 
 
+def _playbook(card: dict) -> tuple:
+    """The learned lines for this kind of picture - the owner's own notes from earlier send-backs first
+    (engine/agentsys/playbook.py) - and their ids, so his approval or retake of the result counts for them."""
+    try:
+        from agentsys import playbook  # pylint: disable=import-outside-toplevel
+        words = str((card.get("args") or {}).get("prompt") or (card.get("args") or {}).get("subject") or "")
+        kind = "turnaround" if card.get("tool") == "make_turnaround" else "image"
+        got = playbook.select(words, kind=kind, k=6)
+        return playbook.render(got), [b["id"] for b in got]
+    except Exception:  # noqa: BLE001 - the expert works without it
+        return "", []
+
+
 def improve(card: dict, ask: Callable[[str, str], tuple], ws=None) -> dict:
     """One rewrite. `ask(system, user)` -> (text, model name)."""
-    text, by = ask(system_for(card), brief(card, ws))
+    learned, ids = _playbook(card)
+    user = brief(card, ws)
+    if learned:
+        user += ("\n\nWhat the owner and past results taught (follow every 'owner' line - those are his own words "
+                 "from pictures he sent back):\n" + learned)
+    text, by = ask(system_for(card), user)
     out = parse(text)
     out["by"] = by
+    out["bullets"] = ids
     out["refs"] = [{"title": r["title"], "image": (r.get("images") or [""])[0], "author": r.get("author", ""),
                     "source": r.get("source", ""), "lib": r.get("lib", "")} for r in references(card)]
     return out

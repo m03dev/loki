@@ -1,0 +1,81 @@
+/* LOKI's agent system in the window (app/ui/agentsys.js): the interview card, send back / not now on LOKI's answer,
+   Lab > System. The app's own tokens; sizes in % / fr / clamp; nothing overlaps, always padding. */
+.as-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 34px; height: 30px;
+  padding: 0 9px; border-radius: 8px; background: transparent; color: var(--muted); border: 1px solid var(--line);
+  font: inherit; font-size: 12.5px; cursor: pointer; }
+.as-btn svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.as-btn:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.as-btn:disabled { opacity: .5; cursor: default; }
+.as-go { color: #11141a; background: var(--accent); border-color: var(--accent); }
+.as-go:hover:not(:disabled) { color: #11141a; filter: brightness(1.08); }
+.as-mini { height: 26px; min-width: 28px; padding: 0 6px; }
+.as-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.as-acts { display: flex; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
+.as-muted { color: var(--muted); font-size: 12px; }
+.as-warn { color: var(--warn); font-size: 12px; }
+
+/* the interview */
+.as-iv { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; padding: 12px clamp(10px, 2%, 16px);
+  border-radius: 12px; background: rgba(143, 179, 217, .07); box-shadow: 0 0 0 1px rgba(143, 179, 217, .3); max-width: 100%; }
+.as-iv-wait { color: var(--muted); font-size: 13px; box-shadow: none; background: transparent; padding: 4px 0; }
+.as-iv-head { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text); }
+.as-iv-head svg { width: 18px; height: 18px; color: var(--accent); }
+.as-iv-plan { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.as-q { display: flex; flex-direction: column; gap: 6px; }
+.as-q-h { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--text); flex-wrap: wrap; }
+.as-q-tag { font-size: 11px; letter-spacing: .02em; text-transform: uppercase; color: var(--accent); }
+.as-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: 6px; }
+.as-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 9px; border-radius: 9px;
+  text-align: start; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); cursor: pointer; min-width: 0; }
+.as-opt[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.as-opt-l { font-size: 13px; font-weight: 600; }
+.as-opt-d { font-size: 11.5px; color: var(--muted); line-height: 1.3; overflow-wrap: anywhere; }
+.as-other, .as-note, .as-sb-note, .as-pb-add { min-width: 0; height: 30px; padding: 0 10px; border-radius: 8px; font: inherit;
+  font-size: 12.5px; color: var(--text); background: rgba(0, 0, 0, .22); border: 1px solid var(--line); box-sizing: border-box; }
+.as-other { align-self: stretch; }
+.as-note { flex: 1 1 12em; }
+.as-sb-note.want { border-color: var(--warn); }
+.as-by { margin: 0; font-size: 11.5px; color: var(--muted); }
+.as-iv.as-done { opacity: .62; }
+.as-iv.as-done .as-opt[aria-pressed="true"] { opacity: 1; }
+
+/* send back / not now on LOKI's latest answer */
+.as-sb { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; opacity: .55; transition: opacity .15s; }
+.turn.loki:hover .as-sb, .as-sb:focus-within { opacity: 1; }
+.as-sb .as-sb-note { flex: 1 1 14em; }
+.as-sb .as-sb-note[hidden] { display: none; }
+.as-sb.busy { opacity: .5; pointer-events: none; }
+
+/* Lab > System */
+.as-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 12px;
+  padding: 12px clamp(8px, 1.5%, 16px); align-items: start; }
+.as-box { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 12px; border-radius: 12px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.as-box-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.as-box-h h3 { margin: 0; font-size: 14px; color: var(--text); }
+.as-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 92px), 1fr)); gap: 6px; }
+.as-stat { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 8px; background: rgba(0, 0, 0, .18); }
+.as-stat b { font-size: 16px; color: var(--text); }
+.as-stat span { font-size: 11.5px; color: var(--muted); }
+.as-list { display: flex; flex-direction: column; gap: 6px; max-height: 26em; overflow: auto; padding-inline-end: 4px; }
+.as-item { display: flex; flex-direction: column; gap: 3px; padding: 7px 9px; border-radius: 8px; background: rgba(0, 0, 0, .16);
+  border-inline-start: 3px solid var(--line); min-width: 0; }
+.as-item.as-ok { border-inline-start-color: var(--ok); }
+.as-item.as-mid { border-inline-start-color: var(--warn); }
+.as-item.as-bad { border-inline-start-color: var(--err); }
+.as-item-t { font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+a.as-item-t { color: var(--accent); text-decoration: none; }
+.as-steps { display: flex; flex-wrap: wrap; gap: 4px; }
+.as-chip { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: rgba(0, 0, 0, .25); color: var(--muted); }
+.as-chip.as-done { color: var(--ok); }
+.as-chip.as-failed { color: var(--err); }
+.as-chip.as-waiting, .as-chip.as-working { color: var(--warn); }
+.as-pb { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 8px; }
+.as-pb-card { display: flex; flex-direction: column; gap: 5px; padding: 8px; border-radius: 9px; background: rgba(0, 0, 0, .16); min-width: 0; }
+.as-pb-card > b { font-size: 12.5px; color: var(--text); text-transform: capitalize; }
+.as-pb-line { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 6px; font-size: 12px; color: var(--text); }
+.as-pb-line > span:first-child { overflow-wrap: anywhere; }
+.as-pb-line.as-owner > span:first-child { color: #e0c48a; }
+.as-pb-add { width: 100%; }
+.as-parked .as-row { margin-top: 4px; }
+.as-parked .as-sb-note { flex: 1 1 10em; }

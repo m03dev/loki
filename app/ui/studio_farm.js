@@ -39,7 +39,8 @@ const LokiStudioFarm = (() => {
       ["agents", "Agents", "Every agent at work on every machine, with Stop and Again - and Make: art, paintings, 3D models, comics, novels, websites, games."],
       ["farm", "Farm", "The render farm: every job and GPU worker, priorities, failures and their fixes, the history."],
       ["render", "Render", "Render Studio: render the passes from a Forge camera, the AI Renderer settings, the preview."],
-      ["storage", "Storage", "How much space LOKI uses, what may go and why, one click to clean, a trash you can restore."]]) {
+      ["storage", "Storage", "How much space LOKI uses, what may go and why, one click to clean, a trash you can restore."],
+      ["system", "System", "LOKI's agent system: every run traced, the specialist teams, the playbooks it learned, the open-source projects it is built from and what changed there, what you parked."]]) {
       const b = mk("button", "sf-view", label); b.type = "button"; b.dataset.view = id; b.setAttribute("role", "tab");
       b.title = tip; b.dataset.tipName = label; b.dataset.tipWhat = tip;
       b.addEventListener("click", () => show(id));
@@ -52,26 +53,35 @@ const LokiStudioFarm = (() => {
     if (strip) { S.work.append(strip); strip.classList.remove("collapsed"); }
     S.tasks = mk("div", "sf-tasks"); S.tasks.hidden = true;
     S.storage = mk("div", "sf-tasks sf-storage"); S.storage.hidden = true;
+    S.system = mk("div", "sf-tasks sf-system"); S.system.hidden = true;
     S.agents = mk("div", "sf-agents"); S.agents.id = "studio-agents"; S.agents.hidden = true;
     S.farm = mk("div", "sf-farm"); S.farm.id = "studio-farm";
     S.render = mk("div", "sf-render"); S.render.hidden = true;
-    p.append(bar, S.tasks, S.storage, S.work, S.agents, S.farm, S.render);
+    p.append(bar, S.tasks, S.storage, S.system, S.work, S.agents, S.farm, S.render);
     S.root = p;
     buildFarm(S.farm);
   }
   function show(v, opts) {
     // Tasks first (owner 2026-10-27: "there should be a clear finished jobs and tasks"), then Agents
-    S.view = ["render", "farm", "agents", "storage"].includes(v) ? v : "tasks";
+    S.view = ["render", "farm", "agents", "storage", "system"].includes(v) ? v : "tasks";
     try { localStorage.setItem(STORE, S.view); } catch (_) { /* private window */ }
     for (const b of S.root.querySelectorAll(".sf-view")) b.setAttribute("aria-selected", String(b.dataset.view === S.view));
     S.agents.hidden = S.view !== "agents"; S.farm.hidden = S.view !== "farm"; S.render.hidden = S.view !== "render";
     S.tasks.hidden = S.view !== "tasks";
     S.storage.hidden = S.view !== "storage";
+    S.system.hidden = S.view !== "system";
+    if (S.view !== "system" && window.LokiAgentSys) window.LokiAgentSys.leave();
     if (S.view !== "tasks" && window.LokiTaskBoard) window.LokiTaskBoard.leave();
     S.work.hidden = S.view !== "agents";
     if (S.view === "agents" && typeof refreshJobs === "function") refreshJobs();
     if (S.view !== "agents" && window.LokiStudioAgents) window.LokiStudioAgents.leave();
-    if (S.view === "storage") {
+    if (S.view === "system") {
+      clearInterval(S.timer); S.timer = 0;
+      if (window.LokiRenderStudio) window.LokiRenderStudio.leave();
+      if (window.LokiStudioAgents) window.LokiStudioAgents.leave();
+      if (window.LokiAgentSys) window.LokiAgentSys.panel(S.system);
+      else S.system.textContent = "The agent system view is not in this window.";
+    } else if (S.view === "storage") {
       clearInterval(S.timer); S.timer = 0;
       if (window.LokiRenderStudio) window.LokiRenderStudio.leave();
       if (window.LokiStudioAgents) window.LokiStudioAgents.leave();
@@ -99,7 +109,7 @@ const LokiStudioFarm = (() => {
       S.timer = setInterval(() => { if (S.root && !S.root.hidden && !S.farm.hidden && !document.hidden) refresh(); }, 2000);
     }
   }
-  function leave() { clearInterval(S.timer); S.timer = 0; if (window.LokiTaskBoard) window.LokiTaskBoard.leave(); if (window.LokiRenderStudio) window.LokiRenderStudio.leave(); if (window.LokiStudioAgents) window.LokiStudioAgents.leave(); }
+  function leave() { clearInterval(S.timer); S.timer = 0; if (window.LokiAgentSys) window.LokiAgentSys.leave(); if (window.LokiTaskBoard) window.LokiTaskBoard.leave(); if (window.LokiRenderStudio) window.LokiRenderStudio.leave(); if (window.LokiStudioAgents) window.LokiStudioAgents.leave(); }
 
   // ------------------------------------------------------------------ the Farm Monitor
   function buildFarm(f) {

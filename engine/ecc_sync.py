@@ -139,10 +139,28 @@ def _extract(repo: str, keep: tuple | None, files: tuple | None, target: Path) -
     return written
 
 
-def sync(force: bool = False, log=print) -> dict:
-    """Download each source unless it is already present (or force is set)."""
+def head_sha(repo: str) -> str:
+    """The commit the branch is at right now (so the upstream check knows what LOKI has); "" when GitHub can't say."""
+    for branch in _BRANCHES:
+        try:
+            request = urllib.request.Request("https://api.github.com/repos/%s/commits/%s" % (repo, branch),
+                                             headers={"User-Agent": "loki-ecc-sync", "Accept": "application/vnd.github.sha"})
+            with urllib.request.urlopen(request, timeout=8) as response:
+                sha = response.read().decode("ascii", "replace").strip()
+                if len(sha) >= 7:
+                    return sha[:40]
+        except Exception:
+            continue
+    return ""
+
+
+def sync(force: bool = False, log=print, only: tuple | list | None = None) -> dict:
+    """Download each source unless it is already present (or force is set). `only` = just these source names (the
+    upstream check's Adopt refreshes one library)."""
     report: dict = {}
     for name, spec in SOURCES.items():
+        if only and name not in only:
+            continue
         target = VENDOR / name
         marker = target / ".loki_sync.json"
         if target.is_dir() and marker.exists() and not force:
@@ -158,7 +176,7 @@ def sync(force: bool = False, log=print) -> dict:
             report[name] = f"error: {exc}"
             continue
         marker.write_text(
-            json.dumps({"repo": spec["repo"], "files": count, "when": time.time()}),
+            json.dumps({"repo": spec["repo"], "files": count, "when": time.time(), "sha": head_sha(spec["repo"])}),
             encoding="utf-8",
         )
         log(f"[sync] {name}: {count} files from {spec['repo']}")

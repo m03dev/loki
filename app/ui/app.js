@@ -110,7 +110,8 @@ function scrollDown(force) {
 
 function addUser(text) {
   const turn = el("div", "turn user");
-  turn.append(el("div", "bubble", text));
+  // the owner's words, not the machinery: a send-back shows his note, an interviewed request his choices (agentsys.js)
+  turn.append(el("div", "bubble", window.LokiAgentSys ? LokiAgentSys.label(text) : text));
   $("#transcript").append(turn);
   scrollDown(true);
 }
@@ -296,7 +297,15 @@ async function send(text, opts) {
     $("#transcript").replaceChildren();
   }
   if (window.LokiVideo && LokiVideo.handles(text)) return LokiVideo.run(text);   // "/video <what it shows>" (video_cmd.js)
-  if (background) { if ($("#in-background")) $("#in-background").checked = false; return sendToBackground(text); }
+  // the interview (agentsys.js, owner 2026-10-28: "always asks me if this is what i want with options"): his message
+  // shows at once, then 1-4 questions with options; his pick (or "As written") sends the request on from the card
+  if (!opts.direct && window.LokiAgentSys) {
+    const bg = background;
+    const shown = await LokiAgentSys.offer(text, {
+      go: (request, o) => send(request, Object.assign({ direct: true, background: bg }, o || {})) }).catch(() => false);
+    if (shown) { if ($("#in-background")) $("#in-background").checked = false; return; }
+  }
+  if (background || opts.background) { if ($("#in-background")) $("#in-background").checked = false; return sendToBackground(text, opts.quiet); }
   if (state.active && state.engineActive && state.active !== state.engineActive) {
     // a chat made or opened while another one answered: the engine takes it now that it is free
     const sw = await api("/conversations/switch", { id: state.active }).catch(() => null);
@@ -937,8 +946,8 @@ function renderTeams(list) {
   return recent.length;
 }
 
-async function sendToBackground(text) {
-  addUser(text);
+async function sendToBackground(text, quiet) {
+  if (!quiet) addUser(text);
   const cid = state.active || "";
   const data = await api("/jobs", { backend: "local", agent: "loki", prompt: text, isolate: true, timeout_s: 3600, conversation_id: cid })
     .catch((e) => ({ ok: false, error: String(e) }));

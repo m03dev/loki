@@ -417,6 +417,35 @@ def call(name: str, args: dict, cwd: Path) -> dict:
         return {"ok": False, "error": "%s: %s" % (type(exc).__name__, str(exc)[:400])}
 
 
+def _annotated(tool: dict) -> dict:
+    """MCP tool annotations (readOnlyHint / destructiveHint / idempotentHint / openWorldHint) from LOKI's toolbox, so
+    the harness knows what a call does to the world (engine/agentsys/toolbox.py)."""
+    if "annotations" in tool:
+        return tool
+    try:
+        from agentsys import toolbox  # pylint: disable=import-outside-toplevel
+        return dict(tool, annotations=toolbox.annotations(str(tool.get("name") or "")))
+    except Exception:  # noqa: BLE001
+        return tool
+
+
+def traced_call(name: str, args: dict, cwd: Path) -> dict:
+    """call() with a trace span (engine/agentsys/trace.py): OpenCode's calls into LOKI's makers are seen like LOKI's own."""
+    try:
+        from agentsys import trace  # pylint: disable=import-outside-toplevel
+    except Exception:  # noqa: BLE001
+        return call(name, args, cwd)
+    with trace.span("execute_tool %s" % name, "tool", **{"gen_ai.tool.name": name, "loki.server": "loki-make",
+                                                         "loki.job": os.environ.get("LOKI_JOB_ID", "")}) as sp:
+        out = call(name, args, cwd)
+        if not (out or {}).get("ok"):
+            if (out or {}).get("waiting_for_owner"):
+                sp.set(**{"loki.waiting_for_owner": True})
+            else:
+                sp.fail(str((out or {}).get("error") or "failed")[:300], "tool_error")
+        return out
+
+
 def handle(msg: dict, cwd: Path) -> dict | None:
     """One JSON-RPC request -> its response (None for a notification)."""
     mid, method = msg.get("id"), msg.get("method", "")
@@ -426,10 +455,10 @@ def handle(msg: dict, cwd: Path) -> dict | None:
         result = {"protocolVersion": (msg.get("params") or {}).get("protocolVersion", "2025-06-18"),
                   "capabilities": {"tools": {}}, "serverInfo": {"name": "loki-make", "version": VERSION}}
     elif method == "tools/list":
-        result = {"tools": TOOLS + ([SHELL_TOOL] if SHELL_ON["on"] else [])}
+        result = {"tools": [_annotated(t) for t in TOOLS + ([SHELL_TOOL] if SHELL_ON["on"] else [])]}
     elif method == "tools/call":
         p = msg.get("params") or {}
-        out = call(str(p.get("name", "")), p.get("arguments") or {}, cwd)
+        out = traced_call(str(p.get("name", "")), p.get("arguments") or {}, cwd)
         result = {"content": [{"type": "text", "text": json.dumps(out)}], "isError": not out.get("ok")}
     elif method == "ping":
         result = {}

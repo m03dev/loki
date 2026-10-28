@@ -21,6 +21,10 @@ const LokiHomeReview = (() => {
     retake: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/>',
     brief: '<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 14h6M9 17h4"/>',
     you: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1.2-3.8 4-5.5 7-5.5s5.8 1.7 7 5.5"/>',
+    later: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+    adopt: '<path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/>',
+    skip: '<path d="M6 5l8 7-8 7z"/><path d="M17 5v14"/>',
+    go: '<path d="M5 12h12"/><path d="M13 6l6 6-6 6"/>',
   };
   const S = { items: [], timer: 0, busy: {}, open: {} };
   let panel = null, list = null, count = null;
@@ -161,7 +165,8 @@ const LokiHomeReview = (() => {
     const acts = mk("div", "rv-acts");
     acts.append(
       iconBtn("rv-ok", ICON.ok, "Approve and draw", "Draw it with the words in the box (your edits included).", () => decide(it, "approve", { prompt: box.value }, c)),
-      iconBtn("rv-no", ICON.no, "No", "Do not draw this. The note box below says why (optional).", () => decide(it, "reject", { note: note.value }, c)));
+      iconBtn("rv-no", ICON.no, "No", "Do not draw this. The note box below says why (optional).", () => decide(it, "reject", { note: note.value }, c)),
+      iconBtn("rv-later", ICON.later, "Not now", "Park it: nothing is drawn now. It waits in Parked below, one click to start it later.", () => decide(it, "park", { note: note.value }, c)));
     const note = mk("input", "rv-note-in"); note.type = "text"; note.placeholder = "Note (optional)";
     note.setAttribute("aria-label", "A note for the agent");
     c.append(box); const fx = facts(it); if (fx) c.append(fx); if (agentWords) c.append(agentWords); if (b) c.append(b);
@@ -190,10 +195,84 @@ const LokiHomeReview = (() => {
     acts.append(
       iconBtn("rv-ok", ICON.ok, "Approve", it.asset ? "Check it off: it is handed on to the next agent." : "Keep it.", () => decide(it, "approve", {}, c)),
       iconBtn("rv-retake", ICON.retake, "Retake", "Send it back with the note - its prompt comes back here first, nothing is redrawn on its own.",
-        () => { if (!note.value.trim()) { note.focus(); note.classList.add("want"); return; } decide(it, "retake", { note: note.value }, c); }));
+        () => { if (!note.value.trim()) { note.focus(); note.classList.add("want"); return; } decide(it, "retake", { note: note.value }, c); }),
+      iconBtn("rv-later", ICON.later, "Not now", "Park it: nothing goes on now. It waits in Parked below.", () => decide(it, "park", { note: note.value }, c)));
     c.append(mk("div", "rv-row", null)); c.lastChild.append(note, acts);
     c.append(mk("div", "rv-err"));
     return c;
+  }
+
+  /** The interview for work nobody watched start (engine/agentsys/interview.py): pick, Go; or As written / Not now. */
+  function questionCard(it) {
+    const a = it.args || {};
+    const c = mk("div", "rv-card rv-question"); c.setAttribute("role", "listitem"); c.dataset.id = it.id;
+    const h = mk("div", "rv-head"); h.append(mk("span", "rv-who", it.who || "LOKI"), mk("span", "rv-what", "asks before it starts"), mk("span", "rv-ago", ago(it.t)));
+    c.append(h, mk("div", "rv-asked", String(a.text || "").slice(0, 400)));
+    if (a.plan) c.append(mk("div", "rv-note", a.plan));
+    const picks = {};
+    for (const q of a.questions || []) {
+      const row = mk("div", "rv-q"); row.append(mk("span", "rv-k", q.header));
+      const opts = mk("div", "rv-qopts");
+      picks[q.header] = q.multi ? [] : ((q.options[0] || {}).label || "");
+      for (const o of q.options || []) {
+        const b = mk("button", "rv-qopt", o.label); b.type = "button"; b.dataset.tipName = o.label; b.dataset.tipWhat = o.description || o.label;
+        const mark = () => { for (const x of opts.children) { const on = q.multi ? picks[q.header].includes(x.textContent) : picks[q.header] === x.textContent; x.setAttribute("aria-pressed", String(on)); } };
+        b.addEventListener("click", () => { if (q.multi) { const l = picks[q.header]; const i = l.indexOf(o.label); if (i >= 0) l.splice(i, 1); else l.push(o.label); } else picks[q.header] = o.label; mark(); });
+        opts.append(b); setTimeout(mark, 0);
+      }
+      row.append(opts); c.append(row);
+    }
+    const note = mk("input", "rv-note-in"); note.type = "text"; note.placeholder = "Anything else? (optional)";
+    const acts = mk("div", "rv-acts");
+    acts.append(
+      iconBtn("rv-ok", ICON.go, "Go", "Start it with these choices.", () => decide(it, "answer", { answers: picks, note: note.value }, c)),
+      iconBtn("rv-retake", ICON.ok, "As written", "Skip the questions - do what it says.", () => decide(it, "go", { note: note.value }, c)),
+      iconBtn("rv-later", ICON.later, "Not now", "Park it - nothing is made now.", () => decide(it, "park", { note: note.value }, c)));
+    c.append(mk("div", "rv-row", null)); c.lastChild.append(note, acts);
+    c.append(mk("div", "rv-err"));
+    return c;
+  }
+
+  /** An open-source project LOKI uses changed (engine/agentsys/upstream.py): Adopt / Skip / Not now. */
+  function upstreamCard(it) {
+    const a = it.args || {};
+    const c = mk("div", "rv-card rv-upstream"); c.setAttribute("role", "listitem"); c.dataset.id = it.id;
+    const h = mk("div", "rv-head"); h.append(mk("span", "rv-who", a.repo || "a project"),
+      mk("span", "rv-what", a.status === "behind" ? a.behind + " new commits upstream" : a.status === "new release" ? "new release " + a.release : a.status),
+      mk("span", "rv-ago", ago(it.t)));
+    c.append(h);
+    const facts = mk("div", "rv-facts");
+    const row = (k, v) => { if (!v) return; const r = mk("div", "rv-fact"); r.append(mk("span", "rv-k", k), mk("span", "rv-v", v)); facts.append(r); };
+    row("LOKI has", a.pin || "not pinned");
+    row("Used in", (a.used_in || []).slice(0, 3).join("; "));
+    row("Changes", (a.changes || []).slice(-4).join(" · "));
+    c.append(facts);
+    if (a.compare_url) { const l = mk("a", "rv-link", "See what changed"); l.href = a.compare_url; l.target = "_blank"; l.rel = "noopener"; c.append(l); }
+    const note = mk("input", "rv-note-in"); note.type = "text"; note.placeholder = "Note for the agent (optional)";
+    const acts = mk("div", "rv-acts");
+    acts.append(
+      iconBtn("rv-ok", ICON.adopt, "Adopt", "A LOKI agent reads the changes, ports what improves LOKI, updates the pin, runs the tests and ships.", () => decide(it, "adopt", { note: note.value }, c)),
+      iconBtn("rv-retake", ICON.skip, "Skip", "Not this version - you hear about the next change.", () => decide(it, "skip", {}, c)),
+      iconBtn("rv-later", ICON.later, "Not now", "Park it for later.", () => decide(it, "park", { note: note.value }, c)));
+    c.append(mk("div", "rv-row", null)); c.lastChild.append(note, acts);
+    c.append(mk("div", "rv-err"));
+    return c;
+  }
+
+  /** What the owner said Not now to (engine/agentsys/sendback.py), under the cards. */
+  async function parked() {
+    if (!panel) return;
+    let box = panel.querySelector(".rv-parked");
+    const r = await call("/agentsys/parked").catch(() => null);
+    const items = (r && r.ok && r.parked) || [];
+    if (!items.length) { if (box) box.remove(); return; }
+    if (!box) { box = mk("details", "rv-brief rv-parked"); panel.append(box); }
+    const open = box.open;
+    const sm = mk("summary"); sm.innerHTML = svg(ICON.later); sm.append(mk("span", "", "Parked (" + items.length + ")"));
+    const list = mk("div", "rv-parked-list");
+    for (const it of items.slice(0, 20)) list.append(window.LokiAgentSys ? LokiAgentSys.parkedRow(it, () => parked()) : mk("div", "", it.request));
+    box.replaceChildren(sm, list); box.open = open;
+    panel.hidden = false;
   }
 
   function render() {
@@ -212,7 +291,8 @@ const LokiHomeReview = (() => {
       const box = n && n.querySelector(".rv-words"), note = n && n.querySelector(".rv-note-in");
       const typing = n && ((box && (document.activeElement === box || box.value !== box.dataset.orig))
                            || (note && (document.activeElement === note || note.value)));
-      if (!n || (n.dataset.key !== key && !typing)) { n = it.kind === "prompt" ? promptCard(it) : resultCard(it); n.dataset.key = key; }
+      const build = { prompt: promptCard, question: questionCard, upstream: upstreamCard }[it.kind] || resultCard;
+      if (!n || (n.dataset.key !== key && !typing)) { n = build(it); n.dataset.key = key; }
       order.push(n);
     }
     list.replaceChildren(...order);
@@ -227,6 +307,7 @@ const LokiHomeReview = (() => {
     const rank = (x) => (x.status === "working" ? 2 : x.kind === "result" ? 0 : 1);
     S.items = (r.waiting || []).slice().sort((a, b) => rank(a) - rank(b) || a.t - b.t);
     render();
+    parked();
   }
 
   function start() {

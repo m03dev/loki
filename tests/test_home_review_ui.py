@@ -103,7 +103,7 @@ async def main():
                    words: c.querySelector('.rv-words').value, tips: [...c.querySelectorAll('.rv-btn')].map((b) => b.dataset.tipName) }; })()""")
         check("a prompt card: who asks, the asset and stage, the prompt in an editable box", pc["who"] == "Concept Artist"
               and pc["asset"] == "moss-golem / concept" and pc["words"].startswith("a moss golem"), pc)
-        check("... its buttons are icons with names in their tooltips", pc["tips"] == ["Approve and draw", "No"], pc["tips"])
+        check("... its buttons are icons with names in their tooltips", pc["tips"] == ["Approve and draw", "No", "Not now"], pc["tips"])
         await page.fill(".rv-prompt .rv-words", "a moss golem guardian, mossy boulders, amber eyes, front view")
         await page.click(".rv-prompt .rv-ok")
         await page.wait_for_timeout(400)

@@ -34,7 +34,11 @@ from typing import Any, Callable
 GATED_TOOLS = ("make_image", "make_turnaround", "make_sprite")   # every picture an agent makes (owner's choice)
 MARK = "WAITING FOR THE OWNER"
 OWNER_OK = "_owner_ok"           # set by LOKI after the owner approved: the call goes through
-KINDS = ("prompt", "result")
+KINDS = ("prompt", "result", "question", "upstream")
+# question  the interview for work nobody watches (engine/agentsys/interview.py): answer / go as written / not now
+# upstream  an open-source project LOKI uses changed (engine/agentsys/upstream.py): adopt / skip / not now
+# Their decisions go to the handler engine/agentsys/runtime.py registers here (HANDLERS[kind](item, action, data)).
+HANDLERS: dict = {}
 OPEN = ("waiting", "working")    # waiting = the owner's turn; working = LOKI is drawing what was approved
 _LOCK = threading.Lock()
 
@@ -109,9 +113,14 @@ def queue(kind: str, tool: str, args: dict, cwd: str, who: str = "", asset: str 
     """Add an item for the owner. The same open prompt (same tool, words, folder, asset/stage) is ONE card: a retried
     job or a second call finds the card that is already there."""
     if kind not in KINDS:
-        raise ValueError("kind is prompt or result")
+        raise ValueError("kind is one of %s" % ", ".join(KINDS))
     args = {k: v for k, v in dict(args or {}).items() if k != OWNER_OK}
     with _LOCK:
+        if kind == "upstream":           # one open card per repository
+            for it in items(OPEN):
+                if it["kind"] == "upstream" and it["args"].get("repo") == args.get("repo"):
+                    it["args"] = args
+                    return _save(it)
         if kind == "prompt":
             key = (tool, _norm(args.get("prompt") or args.get("subject") or ""), str(cwd), asset, stage)
             for it in items(OPEN):
@@ -150,15 +159,47 @@ def gate(tool: str, args: dict, cwd) -> dict | None:
 
 # ----------------------------------------------------------------------------- the owner's decisions
 def decide(item_id: str, action: str, prompt: str = "", note: str = "", ws=None,
-           runner: Callable[[dict], None] | None = None) -> dict:
-    """approve | reject (a prompt) ; approve | retake (a result). Returns the item. `runner(item)` draws an approved
-    non-pipeline prompt (in the background in the engine); pipeline items go back to the pipeline."""
+           runner: Callable[[dict], None] | None = None, data: dict | None = None) -> dict:
+    """approve | reject | park (a prompt) ; approve | retake | park (a result) ; the question / upstream cards go to
+    their handler. Returns the item. `runner(item)` draws an approved non-pipeline prompt (in the background in the
+    engine); pipeline items go back to the pipeline. park = "not now": the card leaves For you and waits in Parked."""
     it = get(item_id)
     if it is None:
         return {"ok": False, "error": "that card is gone"}
     if it["status"] not in OPEN:
         return {"ok": False, "error": "already %s" % it["status"], "item": it}
     action = str(action or "").lower()
+    if it["kind"] in HANDLERS:
+        try:
+            out = HANDLERS[it["kind"]](it, action, dict(data or {}, note=note, prompt=prompt)) or {}
+        except Exception as exc:  # noqa: BLE001 - the card stays; the owner sees why
+            return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+        if out.get("ok"):
+            fresh = get(item_id) or it
+            fresh.update(status=out.get("status") or "done", decided=time.time(), note=note[:800],
+                         answer=out.get("answer") or fresh.get("answer"))
+            _save(fresh)
+            out["item"] = fresh
+        return out
+    if it["kind"] in ("question", "upstream"):
+        return {"ok": False, "error": "LOKI's agent system is not running in this process"}
+    if action == "park":
+        try:
+            from agentsys import sendback  # pylint: disable=import-outside-toplevel
+            words = str(it["args"].get("prompt") or it["args"].get("subject") or "")
+            sendback.park("review", words, note=note, source="review:" + it["id"], who=it.get("who", ""),
+                          files=it.get("files"))
+        except Exception:  # noqa: BLE001 - parking still takes it off the owner's list
+            pass
+        it.update(status="parked", decided=time.time(), note=note[:800])
+        _save(it)
+        if it.get("asset") and ws is not None:
+            try:
+                _pipeline().owner_prompt(Path(ws), it["asset"], it["stage"], ok=False, note="parked: " + note) \
+                    if it["kind"] == "prompt" else None
+            except Exception:  # noqa: BLE001
+                pass
+        return {"ok": True, "item": it}
     if it["kind"] == "prompt":
         if action not in ("approve", "reject"):
             return {"ok": False, "error": "a prompt is approved or rejected"}
@@ -195,6 +236,19 @@ def decide(item_id: str, action: str, prompt: str = "", note: str = "", ws=None,
             args["prompt"] = ("%s. Owner's note: %s" % (str(args.get("prompt") or "").rstrip(". "), note))[:1800]
         queue("prompt", it["tool"], args, it["cwd"], who=it["who"], note=note, parent=it["id"])
         _feedback(it, note)
+        try:   # the owner's words go into the playbook for that kind of work (engine/agentsys/playbook.py)
+            from agentsys import playbook  # pylint: disable=import-outside-toplevel
+            playbook.owner_note(str(src.get("args", {}).get("prompt") or it["args"].get("prompt") or it["tool"]), note,
+                                kind="turnaround" if it["tool"] == "make_turnaround" else "image",
+                                source="review:" + it["id"], used_ids=list(it["args"].get("_bullets") or []))
+        except Exception:  # noqa: BLE001
+            pass
+    elif action == "approve" and not it.get("asset"):
+        try:   # an approved picture: the prompt words that made it were right
+            from agentsys import playbook  # pylint: disable=import-outside-toplevel
+            playbook.tag(list(it["args"].get("_bullets") or []), "helpful", "review:" + it["id"])
+        except Exception:  # noqa: BLE001
+            pass
     return {"ok": True, "item": it}
 
 
@@ -220,7 +274,7 @@ def draw(it: dict, call: Callable[[str, dict, Path], dict] | None = None) -> dic
     if call is None:
         import make_mcp  # pylint: disable=import-outside-toplevel
         call = make_mcp.call
-    args = dict(it["args"], **{OWNER_OK: True})
+    args = dict({k: v for k, v in it["args"].items() if k != "_bullets"}, **{OWNER_OK: True})
     try:
         res = call(it["tool"], args, Path(it["cwd"])) or {}
     except Exception as exc:  # noqa: BLE001
@@ -276,6 +330,8 @@ def run_expert(item_id: str, ask, ws=None) -> dict | None:
     it["args"][key] = better["prompt"]
     it["expert"] = {"status": "done", "by": better.get("by", ""), "why": better.get("why", ""), "t": time.time(),
                     "refs": better.get("refs") or []}
+    if better.get("bullets"):            # the playbook lines it followed: the owner's verdict on the picture counts for them
+        it["args"]["_bullets"] = list(better["bullets"])[:12]
     return _save(it)
 
 
@@ -327,14 +383,15 @@ def route(state: Any, method: str, route_: str, q: dict, data: dict) -> tuple:
             kick_expert(getattr(state, "agent", None), ws)
         except Exception:  # noqa: BLE001 - the cards show as they are
             pass
-        recent = [it for it in items(("approved", "rejected", "retake", "done", "failed"))][-20:]
+        recent = [it for it in items(("approved", "rejected", "retake", "done", "failed", "answered", "adopted",
+                                      "skipped", "parked"))][-20:]
         import review_plan  # pylint: disable=import-outside-toplevel
         return 200, {"ok": True, "on": on(), "waiting": review_plan.with_plans(waiting()), "recent": recent[::-1],
                      "summary": summary(),
                      "workspace": str(ws)}
     if (method, route_) == ("POST", "/review/decide"):
         out = decide(str(data.get("id") or ""), str(data.get("action") or ""), str(data.get("prompt") or ""),
-                     str(data.get("note") or ""), ws=ws, runner=run_in_background)
+                     str(data.get("note") or ""), ws=ws, runner=run_in_background, data=data)
         if out.get("ok") and (out.get("item") or {}).get("asset"):
             try:   # the pipeline goes on now, not at the autopilot's next pass
                 threading.Thread(target=_pipeline().tick, args=(ws,), daemon=True, name="pipeline-after-review").start()

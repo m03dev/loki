@@ -1024,6 +1024,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import owner_review  # pylint: disable=import-outside-toplevel
             self._send_json(*owner_review.route(self.server.state, "GET", route, {}, {}))
             return
+        if route.startswith("/agentsys/"):   # the agent system: traces, playbooks, upstream, parked (engine/agentsys/)
+            from agentsys import api as _agentsys_api  # pylint: disable=import-outside-toplevel
+            self._send_json(*_agentsys_api.route(self.server.state, "GET", self.path))
+            return
         if route in ("/image/settings", "/image/info", "/image/remake", "/image/feedback"):   # engine/image_api.py
             import image_api  # pylint: disable=import-outside-toplevel
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -1542,6 +1546,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/video/make":   # type a line, get a video (engine/text_video.py)
             import text_video  # pylint: disable=import-outside-toplevel
             self._send_json(*text_video.route(state, "POST", route, data))
+            return
+        if route.startswith("/agentsys/"):   # interview, send back / park, orchestrate, upstream check (engine/agentsys/)
+            from agentsys import api as _agentsys_api  # pylint: disable=import-outside-toplevel
+            self._send_json(*_agentsys_api.route(state, "POST", self.path, data))
             return
         if route == "/review/decide":   # the owner approves / edits / rejects / sends back (engine/owner_review.py)
             import owner_review  # pylint: disable=import-outside-toplevel
@@ -3083,6 +3091,12 @@ async def serve() -> None:
             for name, info in state.jobs.status()["backends"].items()), flush=True)
     except Exception as exc:  # noqa: BLE001 - jobs are optional; chat must still start
         print(f"[loki-bridge] background jobs unavailable: {exc}", flush=True)
+    try:   # the agent system's engine side: For you handlers, the orchestrator's background runs (engine/agentsys/)
+        from agentsys import runtime as _agentsys_rt  # pylint: disable=import-outside-toplevel
+        _agentsys_rt.install(loki)
+        _agentsys_rt.attach(state)
+    except Exception as exc:  # noqa: BLE001 - the chat works without it
+        print(f"[loki-bridge] agent system unavailable: {exc}", flush=True)
     _startup_mark('updater')
     try:
         import updater  # pylint: disable=import-outside-toplevel

@@ -189,8 +189,10 @@ section("one duty per pass, each on its own schedule")
 # The PC-only duties (selftest, task_bench; auto = on for the PC) would run here and, once
 # the bench starts, make the autopilot busy - this test is about the base duty rotation,
 # so turn them off for it (they have their own suites).
-_saved_env = {k: os.environ.get(k) for k in ("LOKI_SELFTEST", "LOKI_TASK_BENCH", "LOKI_AUTOPILOT_ALWAYS")}
+# the upstream check (engine/agentsys/upstream.py) asks GitHub - it has its own suite (tests/test_agentsys.py)
+_saved_env = {k: os.environ.get(k) for k in ("LOKI_SELFTEST", "LOKI_TASK_BENCH", "LOKI_AUTOPILOT_ALWAYS", "LOKI_UPSTREAM")}
 os.environ["LOKI_SELFTEST"] = os.environ["LOKI_TASK_BENCH"] = os.environ["LOKI_AUTOPILOT_ALWAYS"] = "0"
+os.environ["LOKI_UPSTREAM"] = "0"
 clock = Clock()
 calls: list = []
 auto = autopilot.Autopilot(data_dir=TMP / "t", repo=TASKS, clock=clock, state=FakeState(),

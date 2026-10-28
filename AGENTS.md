@@ -60,7 +60,7 @@ render.
 
 | Folder | What |
 | --- | --- |
-| `engine/` | Python core: agent loop `loki.py`, HTTP API `loki_bridge.py` + `*_api.py`, workers, peers, updater |
+| `engine/` | Python core: agent loop `loki.py`, the agent system `agentsys/` around every harness (docs/AGENT_SYSTEM.md), HTTP API `loki_bridge.py` + `*_api.py`, workers, peers, updater |
 | `app/` | the window (`loki_app.py`, pywebview) and its UI `app/ui/` (Forge = `forge*.js`) |
 | `native/` | C++ / Rust modules (`sculpt`, `optcuts`, `carbon_mmo`), each with its own README |
 | `studio/` | LOKI Studio |
