@@ -22,10 +22,27 @@ Last updated: 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of 
 | Python | `harness_data/.venv/bin/python` | `harness_data\.venv\Scripts\python.exe` |
 | Godot | LOKI's own 4.7.2 when no other Godot; Godot_mono 4.8 dev is not LOKI's - never open the owner's projects in it | LOKI's own 4.7.2 (`harness_data\addons\godot-export\editor\Godot_v4.7.2-stable_win64.exe`); never `Godot_v4.8-beta1_mono` / ai_testin |
 
-The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master` only; `macos-app` is a mirror
-ship.py keeps in step. The CI tests workflow was removed (2026-10-25, it only emailed failures); the suites run locally and the Windows build workflow stays.
+The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master` only (the `macos-app`
+mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it only emailed failures); the suites run locally and the Windows build workflow stays.
 
 ## Now (2026-10-25)
+
+**2026-10-27 23:40 (Claude, cloud) - one link, one branch, the owner's own rules, cards that say what runs.**
+- Link: the PC is on another network and the bore relay reset every call (farm had 0 workers, library sync pulled 0,
+  so no render ever came back). New engine/tunnel_link.py: each machine runs a Cloudflare quick tunnel (cloudflared,
+  no account, https) and posts its address, HMAC-signed with the link secret, to a private ntfy.sh topic derived from
+  the secret; `pc=relay` peers now dial the tunnel first, the relay only as fallback. Needs both machines updated.
+- Updates: GitHub master, or straight from the other machine when GitHub fails (engine/peer_update.py, bundle over the
+  signed link, fast-forward only). ship.py no longer mirrors to macos-app; a checkout on any branch whose work is on
+  master moves back to master (it used to be "left alone" forever). 12 agent/* branches + macos-app: archived as tags on
+  the Mac (archive/*), all their work verified on master; deleting them on GitHub needs the owner's command (this
+  session may not delete branches).
+- Rules: AGENTS.md holds only the owner's 14 dated rules; Claude's invented ones removed (BUILD_BRIEF hard rules,
+  safety-branch rules, CLAUDE.md duplicate, stale merge-the-branch notes).
+- For you: every waiting card carries plan{prompt (full, style words included), inputs, engine, output, plan}
+  (engine/review_plan.py) and shows Uses / Engine / Makes / Plan + "Full prompt sent". 3D-asset concepts use the new
+  technical model-reference style (game-concept's cinematic 16:9 words were added after approval and fought the
+  single-subject reference).
 
 **2026-10-27 22:50 (Claude, cloud) - scroll bars drawn on the Mac again.** Owner: "the middle scroll bar doesnt show right can't scroll down". Root cause (the 10-26 'fix' never worked): the Mac window is Apple's WebKit, and once an element has the standard scrollbar-width / scrollbar-color, WebKit (and Chromium 121+) ignores every ::-webkit-scrollbar rule and draws macOS's hidden overlay bar. glass.css set `scrollbar-width: thin` on `*` and home.css on .home-hub, so Home's 12px bar was never drawn on the Mac (Windows draws a classic bar from the same rule). Now the standard properties live only in `@supports not selector(::-webkit-scrollbar)` (Firefox) in glass.css; Home, the chat, Settings and Lab's farm/agents panes get LOKI's own bar on both machines; Forge's hover-only bars untouched. tests/test_scrollbars_ui.py: static rule + live (12px bar, scrolls to the last card, vertical/stacked/in a chat); fails on the old code (bar 15 = native). Not yet seen on the Mac itself (no WebKit in the cloud) - check after the update.
 Also found: library_sync / memory_sync on the Mac have never reached the PC since they shipped - every try ends 'cannot reach pc at http://127.0.0.1:55902 (Connection reset by peer)' through the bore relay, pulled 0. So the PC's pictures (the fox: images/20261026-011337-ethereal-fantasy-concept-art-of-a-sleek-orange-f.png) are not on the Mac. Needs a look from the PC side (is its relay tunnel published?).
@@ -56,7 +73,7 @@ names (a saved LOKI_MODEL never breaks). check_env strips any *_API_KEY-shaped v
 the machines: cloud sessions pushed agent/* branches nobody merged (carbon-editor's last 4 commits sat since 10-24).
 AGENTS.md / CLAUDE.md: everyone ships to master with tools/ship.py (cloud: pip install -r engine/requirements.txt
 first); no side branches. Carbon Editor's stranded commits (viewport nav, window in front, its name, components +
-collision) are in; all agent/* branches deleted. (3) 3D: Forge's "auto" order is TRELLIS.2 (Microsoft, MIT) first, then Pixal3D
+collision) are in; agent/* branches were meant to be deleted (they were not until 2026-10-27). (3) 3D: Forge's "auto" order is TRELLIS.2 (Microsoft, MIT) first, then Pixal3D
 (TencentARC) as the likeness-check retry; Hunyuan3D (Tencent) only when named (owner: "tencent has been making shit
 models"). Same order in the asset pipeline's retries. Hyper3D Rodin was NOT added: it is a paid API (Business plan for
 API access) - waiting on the owner. PC proof: LOKI_TASKS DO FIRST "3D proof, TRELLIS.2 vs Pixal3D". Checks: test_no_daily_free (cloud), the suites that named removed
@@ -240,8 +257,8 @@ opening a long chat lays out once. Tests: tests/test_home_projects.py.
 ## Earlier (2026-10-24)
 
 - **Rules rewritten** (owner: "delete all loki rules ... rewrite them better"): AGENTS.md is the one rulebook,
-  ZIVA.md is gone, docs/BUILD_BRIEF.md is the new direction (3D creation engine). Cloud sessions hand work over on
-  `agent/*` branches; machine agents merge them at session start (AGENTS.md > Git and shipping).
+  ZIVA.md is gone, docs/BUILD_BRIEF.md is the new direction (3D creation engine). (Replaced 2026-10-27: AGENTS.md now holds only
+  the owner's own rules; everything ships to master.)
 - **Forge Level workspace** (owner: "forge as an editor ... close to unreal engine"): docs/FORGE_LEVEL.md. Place
   Actors, Content Browser, Details + scripts, Play in Editor (Alt+P) / Simulate / Stop, Save / Open Level. Cloud:
   tests/test_forge_level_ui.py 21/21 + its node suite 24/24 in headless Chromium. **Not verified on the Mac/PC yet**

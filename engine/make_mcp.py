@@ -110,7 +110,7 @@ def run_imagegen(job: dict, runner=subprocess.run) -> dict:
     return json.loads(lines[-1]) if lines else {"ok": False, "error": (proc.stderr or "no answer")[-400:]}
 
 
-QUALITY_STYLES = ("game-concept", "sprite-source", "concept-art")
+QUALITY_STYLES = ("game-concept", "sprite-source", "concept-art", "model-reference")
 
 
 def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:

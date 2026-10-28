@@ -118,7 +118,7 @@ nothing is published or posted without the owner. Edit freely.
 - After this update, open the Local models tab on the Mac: the Hugging Face models (harness_data/big/huggingface, ~18 GB) and Ollama models must be listed again. Report the count in the task log.
 - Never write into /Volumes/Xero/loki - it is an old copy of the repo, not a cache folder. Big things go to harness_data/big (LokiSSD, which lives on Xero).
 
-## 2026-10-26 - PC: jobs stopped on a non-answer (merge origin/agent/pc-non-answer first)
+## 2026-10-26 - PC: jobs stopped on a non-answer (already on master)
 - Seen on the PC today: 6 of the last 9 team jobs ended "BLOCKED: no tool ran". Chain each time: NVIDIA DeepSeek timed out
   after 1200 s, OpenCode Zen "Model is unavailable", DeepSeek "Insufficient Balance", then Vireonix 'auto' answered
   "Unable to answer question due to internal guardrails" or "I don't see a specific team goal" - and the job stopped there.

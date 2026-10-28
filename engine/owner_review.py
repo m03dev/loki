@@ -324,7 +324,9 @@ def route(state: Any, method: str, route_: str, q: dict, data: dict) -> tuple:
         except Exception:  # noqa: BLE001 - the cards show as they are
             pass
         recent = [it for it in items(("approved", "rejected", "retake", "done", "failed"))][-20:]
-        return 200, {"ok": True, "on": on(), "waiting": waiting(), "recent": recent[::-1], "summary": summary(),
+        import review_plan  # pylint: disable=import-outside-toplevel
+        return 200, {"ok": True, "on": on(), "waiting": review_plan.with_plans(waiting()), "recent": recent[::-1],
+                     "summary": summary(),
                      "workspace": str(ws)}
     if (method, route_) == ("POST", "/review/decide"):
         out = decide(str(data.get("id") or ""), str(data.get("action") or ""), str(data.get("prompt") or ""),

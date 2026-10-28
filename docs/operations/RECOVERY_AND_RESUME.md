@@ -6,7 +6,7 @@ How to find LOKI's state, recover from a bad change, and pick work up again.
 
 | What | Where |
 | --- | --- |
-| Repo | `~/Documents/loki` (Mac), `C:\Users\macul\Documents\loki` (PC); GitHub `m03dev/loki`, branch `master` |
+| Repo | `~/Documents/loki` (Mac), `D:\loki` (PC); GitHub `m03dev/loki`, branch `master` |
 | Keys and settings | `harness_data/.env` |
 | Engine log, token, app settings | `harness_data/app/` (`loki_app.log`, `engine.out`, `engine.token`, `settings.json`) |
 | Chats | `<workspace>/.loki/loki_conversations.json` (older builds: `<workspace>/.godot/`, copied over once) |
@@ -29,9 +29,6 @@ link uses `8768` on a machine that listens.
 ## Recover from a bad change
 
 - Prefer `git checkout -- <file>` or `git revert <commit>` over hand-repairing.
-- Before anything risky, push a safety branch (`git push origin HEAD:refs/heads/safety/<name>`).
-  `safety/pre-hardening` and `safety/pre-restructure` already exist.
-- Never `reset --hard`, force-push or delete a branch without a safety branch first.
 
 ## Traps that cost real time
 

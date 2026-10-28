@@ -30,6 +30,17 @@ STYLES = {
     "sprite-source": ("single subject, full body, centered, isolated on a plain flat white background, no scenery, "
                       "no ground shadow, clean readable silhouette, game asset reference, painterly fantasy style, "
                       "dramatic lighting, detailed", GENERAL_NEG + ", background scenery, multiple subjects, cut off"),
+    # Owner 2026-10-27: "the prompts are non-descriptive, they should be very technical". The concept for anything that
+    # becomes a 3D model is a modeling reference, not a mood painting: a camera, a pose, a light and a background the
+    # Technical Artist and the 3D step can use. (game-concept added cinematic 16:9 light AFTER approval - it fought this.)
+    "model-reference": ("3D modeling reference concept, single subject, full body in frame with margin, three-quarter "
+                        "front view, neutral relaxed A-pose, eye-level camera, 85mm lens look, minimal perspective "
+                        "distortion, even soft studio key light from front-left with fill, no cast shadow, plain flat "
+                        "light grey background, crisp readable silhouette, accurate proportions, clearly separated "
+                        "materials (skin, cloth, leather, metal) with true albedo colours, clean edges, no motion blur, "
+                        "no depth of field, game asset concept, painterly finish",
+                        GENERAL_NEG + ", background scenery, ground plane, multiple subjects, dramatic shadows, "
+                        "fisheye, extreme angle, cut off limbs, text"),
     "concept-art": ("professional concept art, matte painting, cinematic composition, dramatic volumetric lighting, "
                     "rich atmospheric depth, highly detailed, art station quality", GENERAL_NEG),
     "oil-painting": ("oil painting on canvas, visible confident brushstrokes, painterly, classical composition, "

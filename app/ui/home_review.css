@@ -49,3 +49,9 @@
 .rv-expert.working::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-inline-end: 7px; border-radius: 50%;
   background: var(--accent); animation: home-pulse 1.6s ease-in-out infinite; }
 .rv-expert.failed { color: #e0c48a; }
+.rv-facts { display: grid; gap: 4px; font-size: 12.5px; }
+.rv-fact { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.rv-k { flex: 0 0 4.2em; color: var(--muted); }
+.rv-v { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.rv-uses { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.rv-uses img { width: clamp(44px, 14%, 64px); aspect-ratio: 1; object-fit: contain; border-radius: 6px; background: #141418; }

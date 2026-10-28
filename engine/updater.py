@@ -538,6 +538,16 @@ def explain_git_error(out: str, platform: str | None = None) -> tuple:
     return "update failed", "cannot reach GitHub: %s" % tail
 
 
+def _from_peers(repo: Path) -> tuple:
+    if os.getenv("LOKI_PEER_UPDATES", "on").lower() == "off":
+        return False, ""
+    try:
+        import peer_update  # pylint: disable=import-outside-toplevel
+        return peer_update.fetch_from_peers(repo, BRANCH)
+    except Exception as exc:  # noqa: BLE001 - never let this break the GitHub path
+        return False, str(exc)[:160]
+
+
 def check(repo: Path | None = None, fetch: bool = True, timeout: float = 120.0) -> dict:
     """How this checkout compares with GitHub. Fetches unless fetch=False."""
     if _release(repo):   # an installed LOKI (no git): release zips, engine/release_update.py
@@ -553,7 +563,11 @@ def check(repo: Path | None = None, fetch: bool = True, timeout: float = 120.0) 
         code, out = git(repo, "fetch", "--quiet", "origin", BRANCH, timeout=timeout)
         if code != 0:
             problem, error = explain_git_error(out)
-            return {"ok": False, "error": error, "problem": problem, "can_update": False}
+            # GitHub is the backup: the other machine can hand over its version directly (engine/peer_update.py)
+            got, why = _from_peers(repo)
+            if not got:
+                return {"ok": False, "error": error + ("; linked machines: " + why if why else ""), "problem": problem,
+                        "can_update": False}
     target = "origin/" + BRANCH
     _, counts = git(repo, "rev-list", "--left-right", "--count", "HEAD..." + target)
     try:
@@ -902,7 +916,9 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
         if branch != BRANCH:
             git(repo, "fetch", "--quiet", "origin", BRANCH, timeout=timeout)
             code, _ = git(repo, "merge-base", "--is-ancestor", "HEAD", "origin/" + BRANCH)
-            if branch in OLD_BRANCHES and code == 0 and not dirty_files(repo):
+            # Any branch whose work is already on master (macos-app, an agent/* or studio/* branch someone
+            # checked out here) moves back to master. Only a branch with work master lacks is left alone.
+            if code == 0 and not dirty_files(repo):
                 code, out = git(repo, "checkout", "-q", "-B", BRANCH, "origin/" + BRANCH)
                 if code == 0:
                     git(repo, "branch", "--set-upstream-to=origin/" + BRANCH, BRANCH)

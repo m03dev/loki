@@ -114,8 +114,15 @@ def peers(env: dict | None = None) -> list[dict]:
         url = url.strip().rstrip("/")
         if url == RELAY and secret(env):
             import relay_link  # pylint: disable=import-outside-toplevel
+            import tunnel_link  # pylint: disable=import-outside-toplevel
             nm = name.strip() or "peer%d" % (index + 1)
-            out.append({"name": nm, "url": relay_link.local_url(nm, secret(env)), "relay": True})
+            # first choice: that machine's Cloudflare tunnel (https, found through the signed rendezvous);
+            # until one is known, the bore relay. "relay": True either way - answers must be signed.
+            tunnel = tunnel_link.cached(nm, secret(env))
+            if tunnel:
+                out.append({"name": nm, "url": tunnel, "relay": True, "tunnel": True})
+            else:
+                out.append({"name": nm, "url": relay_link.local_url(nm, secret(env)), "relay": True})
             continue
         parsed = urlparse(url)
         if parsed.scheme == "http" and parsed.hostname and private_host(parsed.hostname):
@@ -330,6 +337,16 @@ def call(peer: dict, method: str, path: str, payload: dict | None = None,
     except PeerError:
         if not peer.get("relay"):
             raise
+        if peer.get("tunnel"):
+            # the tunnel address changes when cloudflared restarts there: look it up again, else use the relay
+            import relay_link  # pylint: disable=import-outside-toplevel
+            import tunnel_link  # pylint: disable=import-outside-toplevel
+            fresh = tunnel_link.resolve(peer["name"], secret(env), refresh=True)
+            retry = dict(peer, url=fresh) if fresh and fresh != peer["url"] else \
+                {"name": peer["name"], "url": relay_link.local_url(peer["name"], secret(env)), "relay": True}
+            if method.upper() != "GET" and fresh == peer["url"]:
+                raise      # same address answered nothing: never send a job or an update twice
+            return _call(retry, method, path, payload, env, timeout, opener)
         import relay_link  # pylint: disable=import-outside-toplevel
         fwd = relay_link.forwarder(peer["name"])
         if fwd is None:
@@ -499,6 +516,11 @@ class PeerServer:
             if "check_update" not in cb:
                 return 404, {"ok": False, "error": "updates are not handled here"}
             return 200, {"ok": True, **cb["check_update"]()}
+        if method == "POST" and path == "/peer/update/bundle":
+            # updates straight from this machine when the other cannot reach GitHub (engine/peer_update.py)
+            if "update_bundle" not in cb:
+                return 404, {"ok": False, "error": "direct updates are not handled here"}
+            return 200, cb["update_bundle"](data)
         if method == "POST" and path == "/peer/update/apply":
             # "Update everything" on another machine: update from GitHub (fast-forward
             # only, never over local work) and restart. GitHub decides WHAT version; the

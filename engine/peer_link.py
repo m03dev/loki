@@ -253,12 +253,17 @@ def _safe(fn, default):
 
 # --- the server ---------------------------------------------------------------------
 
+def _tunnel_up() -> bool:
+    import tunnel_link  # pylint: disable=import-outside-toplevel
+    return bool(tunnel_link.STATUS.get("publishing"))
+
+
 def link_back(env_path, origin: str, client: str) -> bool:
     """A machine holding our secret just reached us through the relay but is not one of our
     peers yet: add it as name=relay, so one pasted link code links BOTH directions."""
     name = "".join(ch for ch in str(origin) if ch.isalnum() or ch in "-_.")[:40]
     if (not name or name == "?" or name == peers.my_name() or client not in ("127.0.0.1", "::1")
-            or not relay_link.STATUS.get("publishing") or any(p["name"] == name for p in peers.peers())):
+            or not (relay_link.STATUS.get("publishing") or _tunnel_up()) or any(p["name"] == name for p in peers.peers())):
         return False
     write_env(env_path, {"LOKI_PEERS": _peer_entries(peers.peers() + [{"name": name, "relay": True, "url": ""}])})
     print("[loki-bridge] %s reached this machine through the relay; linked back to it" % name, flush=True)
@@ -308,6 +313,7 @@ def callbacks(state: Any, agent: Any) -> dict:
 
     return {"world": world, "hello": lambda: hello(state, agent), "create_job": create_job, "get_job": get_job,
             "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update,
+            "update_bundle": lambda data: __import__("peer_update").make_bundle(__import__("updater").REPO, str((data or {}).get("have") or "")),
             "apply_update": apply_update, "diagnose": lambda: diagnose(state, agent),
             "restart": lambda: _restart_soon(state),
             "memory_sync": lambda origin, data: _memory_receive(agent, origin, data),
@@ -378,6 +384,10 @@ def start(state: Any, agent: Any):
     server = peers.PeerServer(callbacks(state, agent)).start()
     print("[loki-bridge] peer link listening on %s:%s as %s" % (
         peers.lan_address(), server.address[1], peers.my_name()), flush=True)
+    import tunnel_link  # pylint: disable=import-outside-toplevel
+    if tunnel_link.publish(server.address[1], peers.secret(), peers.my_name()) is not None:
+        print("[loki-bridge] peer link also published through a Cloudflare tunnel (machines on other networks)",
+              flush=True)
     if relay_link.publish(server.address[1], peers.secret(), peers.my_name()) is not None:
         print("[loki-bridge] peer link also published through the relay %s (machines on other networks)"
               % relay_link.host(), flush=True)
@@ -566,6 +576,8 @@ def ui_route(state: Any, agent: Any, method: str, route: str, data: dict):
                 "tuned": {"promoted": bool(getattr(agent, "TUNED_PROMOTED", False)),
                           "model": agent.MODELS["loki-tuned"].model if "loki-tuned" in agent.MODELS else ""}}
         info["relay"] = relay_link.status()
+        import tunnel_link  # pylint: disable=import-outside-toplevel
+        info["tunnel"] = tunnel_link.status()
         if listening:
             # Only ever shown on this machine, to this machine's own authorised app.
             info["link_code"] = link_code(server)

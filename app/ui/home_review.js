@@ -95,6 +95,35 @@ const LokiHomeReview = (() => {
     return d;
   }
 
+  /** Exactly what will run, in a few short lines (owner 2026-10-27: "what the prompt was ... what images they're using,
+      what prompts and what engine, what their plan is ... very minimal, to the point"). From engine/review_plan.py. */
+  function facts(it) {
+    const p = it.plan || {};
+    if (!p.plan && !p.engine && !(p.inputs || []).length) return null;
+    const box = mk("div", "rv-facts");
+    const row = (label, value) => { if (!value) return; const r = mk("div", "rv-fact"); r.append(mk("span", "rv-k", label));
+      if (value instanceof Node) r.append(value); else r.append(mk("span", "rv-v", value)); box.append(r); };
+    if ((p.inputs || []).length) {
+      const strip = mk("span", "rv-uses");
+      for (const f of p.inputs.slice(0, 4)) {
+        if (isPic(f)) { const img = mk("img"); img.alt = f.split(/[\\/]/).pop(); img.title = f; img.loading = "lazy"; strip.append(img); media(f, img); }
+        else strip.append(mk("span", "rv-v", f.split(/[\\/]/).pop()));
+      }
+      row("Uses", strip);
+    }
+    row("Engine", p.engine);
+    row("Makes", p.output);
+    row("Plan", p.plan);
+    if (p.prompt && p.prompt.trim() !== words(it).trim()) {
+      const d = mk("details", "rv-brief rv-full"); if (S.open["full" + it.id]) d.open = true;
+      d.addEventListener("toggle", () => { S.open["full" + it.id] = d.open; });
+      const sm = mk("summary"); sm.innerHTML = svg(ICON.brief); sm.append(mk("span", "", "Full prompt sent"));
+      d.append(sm, mk("pre", "rv-notes", p.prompt + (p.negative ? "\n\nKept out: " + p.negative : "")));
+      box.append(d);
+    }
+    return box;
+  }
+
   function promptCard(it) {
     const c = mk("div", "rv-card rv-prompt"); c.setAttribute("role", "listitem"); c.dataset.id = it.id;
     c.append(head(it));
@@ -109,7 +138,7 @@ const LokiHomeReview = (() => {
     const box = mk("textarea", "rv-words"); box.value = words(it); box.rows = 3; box.dataset.orig = box.value;
     box.setAttribute("aria-label", "The prompt - edit it before you approve");
     box.dataset.tipName = "The prompt"; box.dataset.tipWhat = "Edit the words if you want - Approve uses what is in this box.";
-    const b = brief(it);
+    const b = null;   // the long "What it is for" text is replaced by the short facts (Uses / Engine / Makes / Plan)
     let agentWords = null;
     if (it.agent_prompt) {
       agentWords = mk("details", "rv-brief rv-agent");
@@ -122,7 +151,7 @@ const LokiHomeReview = (() => {
       iconBtn("rv-no", ICON.no, "No", "Do not draw this. The note box below says why (optional).", () => decide(it, "reject", { note: note.value }, c)));
     const note = mk("input", "rv-note-in"); note.type = "text"; note.placeholder = "Note (optional)";
     note.setAttribute("aria-label", "A note for the agent");
-    c.append(box); if (agentWords) c.append(agentWords); if (b) c.append(b);
+    c.append(box); const fx = facts(it); if (fx) c.append(fx); if (agentWords) c.append(agentWords); if (b) c.append(b);
     c.append(mk("div", "rv-row", null)); c.lastChild.append(note, acts);
     c.append(mk("div", "rv-err"));
     if (it.status === "working") { box.disabled = true; acts.hidden = true; note.hidden = true; c.classList.add("working"); }

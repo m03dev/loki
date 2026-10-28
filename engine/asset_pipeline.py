@@ -304,7 +304,9 @@ def _files(rec: dict) -> list:
 
 def _args_concept(asset, inputs, params):
     tall = asset["kind"] in ("character", "creature")
-    return "make_image", {"prompt": asset["brief"], "style": params.get("style", "game-concept"), "folder": "images",
+    scene = asset["kind"] in ("scene", "environment", "level")
+    style = params.get("style") or ("game-concept" if scene else "model-reference")
+    return "make_image", {"prompt": asset["brief"], "style": style, "folder": "images",
                           "width": 768 if tall else 1024, "height": 1024, **({"seed": params["seed"]} if params.get("seed") else {})}
 
 

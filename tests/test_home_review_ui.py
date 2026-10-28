@@ -152,6 +152,27 @@ async def main():
         await page.wait_for_timeout(300)
         check("what the owner is typing is never wiped by a refresh", await E("document.querySelector('.rv-prompt .rv-words').value") == "my own words")
 
+        # the short facts: what it uses, the engine, what it makes, the plan, and the full prompt that is sent
+        planned = dict(PROMPT, id="dddddd444444", tool="make_turnaround", stage="turnaround", who="Technical Artist",
+                       args={"subject": "a moss golem guardian", "concept": "images/golem.png", "kind": "creature"},
+                       plan={"prompt": "Three full-body views of a moss golem guardian, orthographic FRONT view ...",
+                             "inputs": ["images/golem.png"], "engine": "FLUX.2 klein (NVIDIA)",
+                             "output": "orthographic front / side / back sheet",
+                             "plan": "Technical Artist turns the approved concept into front, side and back views."})
+        state["waiting"] = [planned]
+        await E("LokiHomeReview.refresh(true)")
+        await page.wait_for_selector(".rv-facts", timeout=8000)
+        fx = await E("""(() => { const c = document.querySelector('.rv-prompt'), f = c.querySelector('.rv-facts');
+          const rows = Object.fromEntries([...f.querySelectorAll('.rv-fact')].map((r) => [r.querySelector('.rv-k').textContent,
+                                           r.textContent.slice(r.querySelector('.rv-k').textContent.length)]));
+          return { rows, uses: f.querySelectorAll('.rv-uses img').length, full: !!f.querySelector('.rv-full'),
+                   longText: [...c.querySelectorAll('summary')].some((s) => s.textContent.includes('What it is for')) }; })()""")
+        check("a prompt card shows Uses (the concept as a thumbnail), Engine, Makes and Plan",
+              fx["uses"] == 1 and "FLUX" in fx["rows"].get("Engine", "") and fx["rows"].get("Makes")
+              and "Technical Artist" in fx["rows"].get("Plan", ""), fx)
+        check("... the full prompt that is sent is one click away; no long 'What it is for' text",
+              fx["full"] and not fx["longText"], fx)
+
         state["waiting"] = [RESULT]
         await page.set_viewport_size({"width": 700, "height": 1200})     # the owner's vertical screen
         await E("LokiHomeReview.refresh(true)")

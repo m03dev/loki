@@ -34,25 +34,4 @@ Gone for good: LOKI World, the MMO lobby, Spaces, the small-business agents. LOK
 4. **Fast and offline.** Starts quickly, runs without the internet, local models first, nothing paid by surprise.
 5. **Content making** from Forge / Render Studio output.
 
-## How it is built
-
-- **Modular:** every capability is a module that registers itself and can be removed without breaking the rest
-  (AGENTS.md > Architecture rules).
-- **Lightweight:** no framework where 200 lines will do; vendor small permissive code; optional dependencies
-  are imported where they are used.
-- **Native where it pays:** C++ (CMake) for geometry, sculpt, bake, UV and anything tied to C++ ecosystems
-  (Carbon, DCC SDKs); Rust (cargo) for standalone services. Candidates once profiling shows the need:
-  the baker and UV unfold (C++ -> wasm, like `native/sculpt`), the farm worker as one small Rust binary.
-  Always a narrow boundary and a fallback.
-- **Copy before inventing:** prefer adapting proven open-source code with compatible licences - the three.js
-  editor (Forge uses three.js), the PlayCanvas editor frontend, Godot, Material Maker, SculptGL, UVgami.
-
-## Hard rules
-
-1. Inspect first: the checkout and the tests are the truth, docs are not proof.
-2. Never lose work: no destructive git; check twice before moving or deleting files on the owner's machines.
-3. Verify every claim and say where it was verified (Mac, PC, cloud).
-4. Small steps, each with a test; a test run takes at most 1 minute.
-5. Free and local first; never buy or provision anything paid.
-6. Safety stays: policy engine, approvals, signed peer link, secrets out of git.
-7. The Mac's drive is nearly full: big things go on `/Volumes/Xero`.
+The rules are the owner's own, in AGENTS.md > The rules.
