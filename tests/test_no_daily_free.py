@@ -116,12 +116,20 @@ try:
     _saved_job = (loki._job_process, os.environ.get("LOKI_MACHINE_ROLE"))
     loki._job_process = lambda: True
     os.environ["LOKI_MACHINE_ROLE"] = "light"
+    import heavy  # noqa: E402
+    _busy = heavy.busy
+    heavy.busy = lambda: "blender (pid 1, 5s)"
     _mac = loki._oc_providers("nvidia")
+    heavy.busy = lambda: ""
+    _mac_free = loki._oc_providers("nvidia")
+    heavy.busy = _busy
     os.environ["LOKI_MACHINE_ROLE"] = "main"
     _pc = loki._oc_providers("nvidia")
     loki._job_process = _saved_job[0]
     os.environ.pop("LOKI_MACHINE_ROLE") if _saved_job[1] is None else os.environ.__setitem__("LOKI_MACHINE_ROLE", _saved_job[1])
-    check("a job on the Mac never falls back to the local model", "local" not in _mac and "nvidia" in _mac, list(_mac))
+    check("a job on the Mac leaves the local model alone while something heavy runs", "local" not in _mac
+          and "nvidia" in _mac, list(_mac))
+    check("... and may use it when the Mac is free (one at a time, the heavy slot)", "local" in _mac_free, list(_mac_free))
     check("... on the PC the local model stays the last resort", "local" in _pc, list(_pc))
 finally:
     loki.provider_configured, nim_models.served, loki.MODELS["nvidia"].api_key = _saved

@@ -27,6 +27,17 @@ mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it on
 
 ## Now (2026-10-25)
 
+**2026-10-28 14:30 (Claude) - why every agent job came back failed (seen in the Mac's and the PC's real job logs).**
+- The Mac: NVIDIA DeepSeek V4.1 Flash was the ONLY route that worked; at 200 s a step it was "too slow" and the turn
+  moved on - to Nemotron and Kimi, which this NVIDIA key cannot run (404 "Function ... Not found for account") - and
+  the job ended "NOT DONE - OpenCode stopped". Every upstream adopt failed that way. The PC: 429s from NVIDIA with
+  nothing left to try. Fixed: a slow-but-working route comes back after the others fail (re-queued), a 404 "not found
+  for account" benches that route for 24 h (provider_speed), a 429 with nothing left waits a minute and tries again.
+- Local models: a job that falls to a model on this computer now runs LOKI's lean local agent (run_local), never
+  OpenCode (its 12k prompt + 17-53k of session overflowed the 9B model -> nonsense). On the Mac a local-model job holds
+  the heavy slot (one at a time, never beside Blender/ComfyUI, memory checked) instead of being banned.
+- tests: test_opencode_engine (+2, slow-then-404), test_no_daily_free (Mac local rule).
+
 **2026-10-28 13:30 (Claude) - upstream adopts one at a time in LOKI's worktree; Mac jobs never use the local model.**
 - Seen on the Mac (device bridge, its harness_data): the owner adopted 8 upstream cards at 12:21; each ran as a plain
   job in ~/LOKI Projects/Home (no LOKI code there) - 4 side by side, falling back to the 9B local model on the 16 GB Mac

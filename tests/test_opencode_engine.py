@@ -115,6 +115,18 @@ if mode == "slow-first" and "nemotron" in model:
     out("step_finish", part={"type": "step-finish", "reason": "tool-calls"})
     time.sleep(20)
     sys.exit(0)
+if mode == "slow-then-404":   # 2026-10-28 on the Mac: the only working route was slow, the others 404ed
+    mark = os.environ.get("FAKE_OC_LOG", "x") + ".slowmark"
+    if "nemotron" in model and not os.path.exists(mark):
+        open(mark, "w").close()
+        import time
+        out("step_start", part={"type": "step-start"})
+        time.sleep(1.2)
+        out("step_finish", part={"type": "step-finish", "reason": "tool-calls"})
+        time.sleep(20)
+        sys.exit(0)
+    if "nemotron" not in model:
+        out("error", error={"name": "APIError", "data": {"message": "LOKI proxy: host answered 404: Function 'ab': Not found for account 'x'"}}); sys.exit(1)
 if mode == "stops-on-tag" and "Continue the task" not in args[-1]:
     out("step_start", part={"type": "step-start"})
     out("tool_use", part={"type": "tool", "tool": "bash", "state": {"status": "completed", "input": {"command": "ls"}, "output": "x"}})
@@ -226,6 +238,15 @@ if loki:
     check("... and is marked slow, so the next turns put it last",
           provider_speed.is_slow(loki.DATA_DIR, "nvidia-nemotron") and list(loki._oc_providers("nvidia-nemotron"))[0] == "nvidia-pro",  # pylint: disable=protected-access
           list(loki._oc_providers("nvidia-nemotron")))  # pylint: disable=protected-access
+    (Path(loki.DATA_DIR) / "provider_speed.json").unlink(missing_ok=True)
+    _t = time.time()
+    out, ws, calls = turn(REQ, mode="slow-then-404", conv="slow404")
+    models = [c["argv"][c["argv"].index("--model") + 1] for c in calls if "--model" in c["argv"]]
+    check("the only working route was slow, the next 404ed -> back to the slow one, and it finishes the job",
+          [m.split("/")[0] for m in models][:3] == ["loki-nvidia-nemotron", "loki-nvidia-pro", "loki-nvidia-nemotron"]
+          and (ws / "loki-test-repo" / "src" / "main.py").is_file(), (models, out[:200]))
+    check("... and the route this key cannot run is benched for a day (not tried first again)",
+          provider_speed.is_out(loki.DATA_DIR, "nvidia-pro"))
     provider_speed.SLOW_S = 120
     (Path(loki.DATA_DIR) / "provider_speed.json").unlink()
 

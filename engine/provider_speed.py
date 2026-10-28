@@ -67,6 +67,10 @@ def mark_out(data_dir, provider: str, error: str, now: float | None = None) -> f
         hold = 10 * 60.0
     elif "insufficient balance" in text or "insufficient_quota" in text or "out of credit" in text:
         hold = 12 * 3600.0          # DeepSeek's own API with an empty balance (the PC, 2026-10-26)
+    elif ("not found for account" in text or "function '" in text and "not found" in text
+          or "model_not_found" in text or "does not exist" in text and "model" in text):
+        hold = 24 * 3600.0          # this key cannot run that model at all (NVIDIA 404 "Function ... Not found for
+                                    # account", the Mac 2026-10-28: every job tried Nemotron and Kimi first and died)
     elif "model is unavailable" in text or "timed out after" in text or "non-answer" in text:
         hold = 3600.0               # a free model that is down, a route that hung for the whole turn, or one that
                                     # answered without working (a guardrail refusal) - the PC, 2026-10-26

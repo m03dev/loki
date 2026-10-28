@@ -9299,11 +9299,24 @@ def _oc_providers(first: str) -> dict:
 
 
 def _local_off_for_jobs() -> bool:
-    """True on the Mac (or LOKI_MACHINE_ROLE=light): jobs leave this computer's model alone. LOKI_LOCAL_JOBS=on undoes it."""
-    if str(os.getenv("LOKI_LOCAL_JOBS", "")).strip().lower() in ("1", "on", "yes"):
+    """On the Mac (or LOKI_MACHINE_ROLE=light) a job may use the local model only when nothing heavy holds the machine
+    (Blender, ComfyUI, another local-model job - engine/heavy.py): the owner wants it to work ("the mac local model
+    should be able to call tools"), and a 9B model next to Blender once used all the Mac's memory. LOKI_LOCAL_JOBS=on
+    always allows it, =off never."""
+    v = str(os.getenv("LOKI_LOCAL_JOBS", "")).strip().lower()
+    if v in ("1", "on", "yes"):
         return False
     role = str(os.getenv("LOKI_MACHINE_ROLE", "")).strip().lower()
-    return role == "light" or (role != "main" and sys.platform == "darwin")
+    light = role == "light" or (role != "main" and sys.platform == "darwin")
+    if not light:
+        return False
+    if v in ("0", "off", "no"):
+        return True
+    try:
+        import heavy  # pylint: disable=import-outside-toplevel
+        return bool(heavy.busy())
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def engine_status() -> dict:
@@ -9479,6 +9492,9 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     result: dict = {}
     used = ""
     tries = models[:6]   # every provider LOKI has (up to 6) before giving up - the last ones may be slow but working
+    requeued: set = set()     # a slow-but-working route comes back after the others failed (2026-10-28, the Mac: NVIDIA
+                              # DeepSeek was moved off for being slow, the two routes after it 404ed, the job died)
+    waited: set = set()       # a 429 waits once and tries the same route again before moving on
     for i, model in enumerate(tries):
         _progress("thinking", "OpenCode%s%s" % (" (plan, read-only)" if plan else "", (" with " + model) if model else ""))
         pname = next((n for n in providers if model.startswith(opencode_engine.provider_id(n) + "/")), "")
@@ -9488,6 +9504,13 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
                                        "step": meter["step"], "input": meter["input"], "output": meter["output"],
                                        "seconds": round(time.time() - meter["t0"], 1)}))
         is_local = "11434" in str((providers.get(pname) or {}).get("base_url") or "")
+        if is_local and os.getenv("LOKI_LOCAL_VIA_OPENCODE", "") != "1":
+            # a model on this computer does the work with LOKI's lean local agent, never inside OpenCode: OpenCode's
+            # 12k-token prompt plus the session (17-53k tokens) overflow a 9B model's window and it answers nonsense
+            # (2026-10-28, the Mac: "It looks like you just dropped some massive raw HTML..." as an upstream adopt)
+            _progress("thinking", "Handing this to %s on this computer with LOKI's local agent (tools one by one)." % pname)
+            return await run_local(("Carry on: check what is already done first.\n\n" if meter.get("carried") else "")
+                                   + text, pname, task=task, preamble=preamble)
         result = await asyncio.to_thread(opencode_engine.run_turn, prompt, str(WORKSPACE), exe=exe,
                                          config_path=str(cfg_local if is_local else cfg_path), env=env, session=session, model=model,
                                          agent="plan" if plan else "", on_event=on_event,
@@ -9515,6 +9538,9 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
                       "the approach.\n\nGOAL: %s\n\nEnd with one line: 'DONE: <what you made>' or 'BLOCKED: <exactly "
                       "what you need>'." % (stuck[:600], text[:4000]))
             continue
+        if meter.get("too_slow") and not _cancel_event.is_set() and model not in requeued:
+            requeued.add(model)
+            tries.append(model)      # slow is better than nothing: it comes back if the ones after it fail
         if meter.get("too_slow") and not _cancel_event.is_set():
             # carry on in the same session with the next provider; the tools that already ran stay counted
             # never mention the switch: a small model took "the previous model was too slow" as its new task and spent
@@ -9523,6 +9549,19 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
                       "with your tools.\n\nGOAL: %s\n\nEnd with one line: 'DONE: <what you made>' or 'BLOCKED: <exactly "
                       "what you need>'." % text[:4000])
             meter["carried"] = list(meter.get("carried") or []) + list(result.get("tools") or [])
+            continue
+        err_l = str(result.get("error") or "").lower()
+        if ("429" in err_l or "too many requests" in err_l) and model not in waited and i + 1 >= len(tries) \
+                and not _cancel_event.is_set():
+            # rate-limited and nothing left to try: NVIDIA's free tier is ~40 requests a minute shared by every job -
+            # wait it out once and try the same route again instead of giving up
+            waited.add(model)
+            _progress("thinking", "%s is rate-limited - waiting a minute, then the same model again." % (pname or model))
+            for _ in range(60):
+                if _cancel_event.is_set():
+                    break
+                await asyncio.sleep(1)
+            tries.insert(i + 1, model)
             continue
         if result.get("error"):
             try:   # out of credit / daily cap: benched for hours, not just skipped this once
@@ -9694,11 +9733,22 @@ async def run_local(text: str, name: str, task: bool = False, preamble: str = ""
         except Exception:  # noqa: BLE001 - no answer = no
             return False
 
-    res = await asyncio.to_thread(local_agent.run, goal, WORKSPACE, str(cfg.base_url), model,
-                                  key=str(cfg.api_key or ""), deny=_DESTRUCTIVE_SNIPPETS, progress=_progress,
-                                  cancelled=_cancel_event.is_set, history=history,
-                                  max_steps=int(os.getenv("LOKI_LOCAL_AGENT_STEPS", "30")),
-                                  approve=ask_owner, builtins=_chats_command)
+    def go():
+        return local_agent.run(goal, WORKSPACE, str(cfg.base_url), model,
+                               key=str(cfg.api_key or ""), deny=_DESTRUCTIVE_SNIPPETS, progress=_progress,
+                               cancelled=_cancel_event.is_set, history=history,
+                               max_steps=int(os.getenv("LOKI_LOCAL_AGENT_STEPS", "30")),
+                               approve=ask_owner, builtins=_chats_command)
+
+    def go_guarded():
+        # on the Mac a job's local model holds the heavy slot: one at a time, never beside Blender / ComfyUI (rule 7)
+        if _job_process() and _cfg_is_local(cfg) and (sys.platform == "darwin"
+                                                      or os.getenv("LOKI_MACHINE_ROLE", "").lower() == "light"):
+            import heavy  # pylint: disable=import-outside-toplevel
+            with heavy.slot("local model job %s" % os.getenv("LOKI_JOB_ID", "")):
+                return go()
+        return go()
+    res = await asyncio.to_thread(go_guarded)
     _task_ok_calls, _task_failed_calls = int(res.get("commands") or 0), (0 if res.get("ok") else 1)
     reply = res.get("reply") or ""
     messages.append({"role": "assistant", "content": reply})
