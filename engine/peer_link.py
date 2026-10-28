@@ -315,6 +315,7 @@ def callbacks(state: Any, agent: Any) -> dict:
             "cancel_job": cancel_job, "receive_experience": receive, "check_update": check_update,
             "update_bundle": lambda data: __import__("peer_update").make_bundle(__import__("updater").REPO, str((data or {}).get("have") or "")),
             "apply_update": apply_update, "diagnose": lambda: diagnose(state, agent),
+            "logs": lambda: __import__("peer_logs").snapshot(state, agent),
             "restart": lambda: _restart_soon(state),
             "memory_sync": lambda origin, data: _memory_receive(agent, origin, data),
             "apps_sync": lambda origin, data: _apps_receive(agent, origin, data),

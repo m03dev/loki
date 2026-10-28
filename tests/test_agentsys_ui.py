@@ -176,7 +176,26 @@ async def main():
         await page.wait_for_function("document.querySelectorAll('#transcript .as-sb').length === 1", timeout=5000)
         check("only the newest answer keeps the bar", await E("document.querySelectorAll('#transcript .turn.loki')[1].contains(document.querySelector('.as-sb'))"))
 
-        # ---------------------------------------------------------------- not now in the interview
+        # ---------------------------------------------------------------- a reply in a going chat is never held up
+        n_iv = len([1 for b, _ in posts if b == "/agentsys/interview"])
+        n_chat = len([1 for b, _ in posts if b == "/chat"])
+        await page.fill("#prompt", "yes do the second one and make it bigger")
+        await page.press("#prompt", "Enter")
+        await page.wait_for_function("document.querySelectorAll('#transcript .turn.loki').length >= 3", timeout=8000)
+        check("a reply in a going chat goes straight to /chat - no card in front of it",
+              len([1 for b, _ in posts if b == "/agentsys/interview"]) == n_iv
+              and len([1 for b, _ in posts if b == "/chat"]) == n_chat + 1
+              and not await E("!!document.querySelector('.as-iv:not(.as-done)')"))
+        attrs = await E("""(() => { const p = document.getElementById('prompt');
+          return [p.getAttribute('autocorrect'), p.getAttribute('spellcheck'), p.getAttribute('writingsuggestions'), p.getAttribute('autocapitalize')]; })()""")
+        check("the message box has the OS autocorrect and predictions off", attrs == ["off", "false", "false", "off"], attrs)
+        made = await E("""(() => { const i = document.createElement('input'); i.type = 'text'; document.body.append(i);
+          return new Promise((r) => setTimeout(() => r([i.getAttribute('autocorrect'), i.getAttribute('spellcheck')]), 50)); })()""")
+        check("... and so does every text box added later", made == ["off", "false"], made)
+        check("the owner's focus is back in the message box after he answers a card", await E("document.activeElement && document.activeElement.id === 'prompt'"))
+
+        # ---------------------------------------------------------------- not now in the interview (a new chat)
+        await E("document.getElementById('transcript').replaceChildren()")
         n_chat = len([1 for b, _ in posts if b == "/chat"])
         await E("send('make a picture of a fox spirit')")
         await page.wait_for_selector(".as-iv:not(.as-done):not(.as-iv-wait)", timeout=8000)
@@ -188,6 +207,7 @@ async def main():
 
         # ---------------------------------------------------------------- big work -> the specialist team
         st["questions"] = [WHO] + QS
+        await E("document.getElementById('transcript').replaceChildren()")
         await E("send('rework the whole golem asset from scratch')")
         await page.wait_for_selector(".as-iv:not(.as-done):not(.as-iv-wait)", timeout=8000)
         await page.click(".as-iv:not(.as-done) .as-go")

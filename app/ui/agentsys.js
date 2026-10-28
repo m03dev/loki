@@ -68,10 +68,14 @@ const LokiAgentSys = (() => {
     if (!t || t.startsWith("/") || t.includes(ANSWERS_MARK) || /^REVISION \d+/.test(t)) return false;
     const box = transcript();
     if (!box) return false;
+    // a reply in a chat that is already going is never held up (owner 2026-10-28: "i cant even write a response
+    // back"): only a chat's first request - or new big work mid-chat - gets the questions
+    const followup = !!box.querySelector(".turn.loki");
+    if (followup && t.split(/\s+/).length <= 12) return false;
     if (typeof addUser === "function") addUser(t);            // his message shows at once, the card follows
     const wait = mk("div", "as-iv as-iv-wait", "Checking what you want…");
     box.append(wait); scroll(wait);
-    const iv = await Promise.race([call("/agentsys/interview", { text: t }).catch(() => null),
+    const iv = await Promise.race([call("/agentsys/interview", { text: t, followup }).catch(() => null),
       new Promise((res) => setTimeout(() => res(null), 9000))]);
     wait.remove();
     if (!iv || !iv.ok || !iv.ask || !(iv.questions || []).length) { opts.go(t, { quiet: true }); return true; }
@@ -118,7 +122,10 @@ const LokiAgentSys = (() => {
     note.setAttribute("aria-label", "A note for LOKI");
     note.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") go.click(); });
     const acts = mk("div", "as-acts");
-    const done = (how) => { c.classList.add("as-done"); c.dataset.how = how; for (const n of c.querySelectorAll("button, input")) n.disabled = true; };
+    const done = (how) => {
+      c.classList.add("as-done"); c.dataset.how = how; for (const n of c.querySelectorAll("button, input")) n.disabled = true;
+      const p = document.getElementById("prompt"); if (p) setTimeout(() => p.focus(), 0);   // back to typing at once
+    };
     const go = iconBtn("as-go", ICON.go, "Go", "Start with these choices.", async () => {
       done("go");
       const answers = {};
@@ -300,7 +307,13 @@ const LokiAgentSys = (() => {
     kb.append(kl); kids.push(kb);
     P.root.replaceChildren(...kids);
     clearInterval(P.timer);
-    P.timer = setInterval(() => { if (P.root && P.root.offsetParent !== null && !document.hidden) panel(container); }, 15000);
+    P.timer = setInterval(() => {
+      if (!P.root || P.root.offsetParent === null || document.hidden) return;
+      // never rebuilt under the owner's fingers (a playbook line or a note being typed stays)
+      if (P.root.contains(document.activeElement) && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+      if ([...P.root.querySelectorAll("input")].some((i) => i.value)) return;
+      panel(container);
+    }, 15000);
   }
   function leave() { clearInterval(P.timer); P.timer = 0; }
 
@@ -324,7 +337,28 @@ const LokiAgentSys = (() => {
     return row;
   }
 
+  /** macOS / Windows autocorrect and inline predictions fight the owner's typing in LOKI's window (owner 2026-10-28:
+      "the chat keeps try to auto correct me ... like auto correct ai is fighting with each other"): every text box in
+      the window, now and later, has them off. */
+  const PLAIN = { autocorrect: "off", autocapitalize: "off", autocomplete: "off", spellcheck: "false", writingsuggestions: "false",
+    "data-gramm": "false", "data-lt-active": "false" };
+  function plain(n) {
+    if (!n || n.dataset.lokiPlain) return;
+    if (n.tagName === "TEXTAREA" || (n.tagName === "INPUT" && /^(text|search|)$/i.test(n.getAttribute("type") || "")) || n.isContentEditable) {
+      for (const [k, v] of Object.entries(PLAIN)) n.setAttribute(k, v);
+      n.dataset.lokiPlain = "1";
+    }
+  }
+  function plainAll(root) {
+    if (!root || !root.querySelectorAll) return;
+    if (root.matches && root.matches("input, textarea, [contenteditable]")) plain(root);
+    for (const n of root.querySelectorAll("input, textarea, [contenteditable]")) plain(n);
+  }
+
   function start() {
+    plainAll(document.body);
+    if (window.MutationObserver) new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) plainAll(n); })
+      .observe(document.body, { childList: true, subtree: true });
     const box_ = transcript();
     if (box_ && window.MutationObserver) new MutationObserver(() => keepBar()).observe(box_, { childList: true });
     setInterval(keepBar, 1500);   // also once a busy reply has finished

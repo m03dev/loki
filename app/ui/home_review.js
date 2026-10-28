@@ -267,6 +267,8 @@ const LokiHomeReview = (() => {
     const items = (r && r.ok && r.parked) || [];
     if (!items.length) { if (box) box.remove(); return; }
     if (!box) { box = mk("details", "rv-brief rv-parked"); panel.append(box); }
+    // never rebuilt under the owner's fingers: a note being typed in a parked row stays
+    if (box.contains(document.activeElement) || [...box.querySelectorAll("input")].some((i) => i.value)) return;
     const open = box.open;
     const sm = mk("summary"); sm.innerHTML = svg(ICON.later); sm.append(mk("span", "", "Parked (" + items.length + ")"));
     const list = mk("div", "rv-parked-list");

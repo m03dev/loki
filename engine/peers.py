@@ -547,6 +547,11 @@ class PeerServer:
             if "diagnose" not in cb:
                 return 404, {"ok": False, "error": "diagnosis is not available here"}
             return 200, {"ok": True, **cb["diagnose"]()}
+        if method == "GET" and path == "/peer/logs":
+            # every machine's logs on every machine (engine/peer_logs.py): a redacted snapshot of this one
+            if "logs" not in cb:
+                return 404, {"ok": False, "error": "log sharing is not available here"}
+            return 200, {"ok": True, **cb["logs"]()}
         if method == "POST" and path == "/peer/restart":
             # Restart the engine (the app reloads its window). Signed like everything else.
             if "restart" not in cb:

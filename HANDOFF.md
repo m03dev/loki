@@ -27,6 +27,18 @@ mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it on
 
 ## Now (2026-10-25)
 
+**2026-10-28 13:00 (Claude) - typing in the chat; every machine's logs on every machine.**
+- Owner: "the chat keeps try to auto correct me and sends me out of the typing ... i cant even write a response back".
+  Causes: the new interview put a card in front of EVERY message, replies included; the OS autocorrect / inline
+  predictions were on in every text box; two new panels (For you > Parked, Lab > System) rebuilt under his fingers.
+  Fixed: a reply in a going chat is never interviewed (only a chat's first request, or new big work mid-chat); every
+  text box in the window has autocorrect / spellcheck / predictions off (agentsys.js); focus goes back to the message
+  box after a card; panels never rebuild while he types. Mac was on 821cf39 (checked in its harness_data via the
+  device bridge).
+- engine/peer_logs.py: GET /peer/logs (signed, redacted) + every 5 min each machine pulls the others' logs into
+  <data>/machine_logs/<machine>/ (engine.out, app/bridge logs, window errors, runs, failed jobs, summary);
+  GET/POST /logs/machines pulls now. tests/test_peer_logs.py.
+
 **2026-10-28 12:00 (Claude, cloud) - the agent system: one chassis around every harness (docs/AGENT_SYSTEM.md).**
 - Root cause found: memory, lessons, checks and the experience log only ran in LOKI's own loop, so on the default
   path (OpenCode / DSH / CLI harnesses / local agent) none of them did. engine/agentsys/runtime.py now wraps

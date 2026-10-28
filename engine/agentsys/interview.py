@@ -139,7 +139,10 @@ def mode() -> str:
     return m if m in ("always", "big", "off") else "always"
 
 
-def needed(text: str, force: bool = False) -> bool:
+def needed(text: str, force: bool = False, followup: bool = False) -> bool:
+    """followup = the message answers LOKI in a chat that is already going (owner 2026-10-28: "i cant even write a
+    response back" - every reply got a card in front of it). A reply goes straight through; only a new big piece of
+    work in the middle of a chat is still asked about."""
     t = " ".join(str(text or "").split())
     if not t or ANSWERS_MARK in str(text):
         return False
@@ -148,6 +151,8 @@ def needed(text: str, force: bool = False) -> bool:
     m = mode()
     if m == "off" or t.startswith("/") or _SMALL_TALK.match(t) or len(t.split()) < 3:
         return False
+    if followup:
+        return bool(_BIG.search(t)) and len(t.split()) > 12
     if _PLAIN_QUESTION.match(t) and len(t.split()) <= 25:
         return False
     if m == "big":
@@ -232,9 +237,10 @@ def plan_line(text: str, kind: str = "") -> str:
     }.get(kind, "LOKI plans the steps, hands each to the right specialist, checks the result and shows you.")
 
 
-def make(text: str, ask: Callable[[str], str] | None = None, timeout_s: float | None = None, force: bool = False) -> dict:
+def make(text: str, ask: Callable[[str], str] | None = None, timeout_s: float | None = None, force: bool = False,
+         followup: bool = False) -> dict:
     """{"ask": bool, "id", "kind", "plan", "questions": [...], "by": "templates"|"<model>"}. Never raises."""
-    if not needed(text, force=force):
+    if not needed(text, force=force, followup=followup):
         return {"ask": False}
     kind = playbook.kind_of(text)
     qs = template_questions(text, kind)

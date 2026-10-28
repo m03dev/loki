@@ -172,6 +172,9 @@ check("interview: a plain question is answered, not interviewed", not interview.
 check("interview: small talk is not", not interview.needed("thanks!") and not interview.needed("ok"))
 check("interview: slash commands are not", not interview.needed("/video a dragon"))
 check("interview: making something is", interview.needed("make concept art of a moss golem"))
+check("interview: a reply in a going chat is not held up", not interview.needed("yes make it bigger and add a red cape", followup=True))
+check("interview: new big work mid-chat still is", interview.needed(
+    "now rework the whole asset pipeline from scratch so every model is game ready with clean topology", followup=True))
 check("interview: answered requests are not asked again",
       not interview.needed(interview.brief("make art", {"Style": "Pixel art"})))
 os.environ["LOKI_INTERVIEW"] = "off"

@@ -1024,6 +1024,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
             import owner_review  # pylint: disable=import-outside-toplevel
             self._send_json(*owner_review.route(self.server.state, "GET", route, {}, {}))
             return
+        if route == "/logs/machines":   # every linked machine's logs, pulled now (engine/peer_logs.py)
+            import peer_logs  # pylint: disable=import-outside-toplevel
+            self._send_json(*peer_logs.ui_route(self.server.state, self.server.state.agent, "GET", route))
+            return
         if route.startswith("/agentsys/"):   # the agent system: traces, playbooks, upstream, parked (engine/agentsys/)
             from agentsys import api as _agentsys_api  # pylint: disable=import-outside-toplevel
             self._send_json(*_agentsys_api.route(self.server.state, "GET", self.path))
@@ -1546,6 +1550,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route == "/video/make":   # type a line, get a video (engine/text_video.py)
             import text_video  # pylint: disable=import-outside-toplevel
             self._send_json(*text_video.route(state, "POST", route, data))
+            return
+        if route == "/logs/machines":
+            import peer_logs  # pylint: disable=import-outside-toplevel
+            self._send_json(*peer_logs.ui_route(state, state.agent, "POST", route))
             return
         if route.startswith("/agentsys/"):   # interview, send back / park, orchestrate, upstream check (engine/agentsys/)
             from agentsys import api as _agentsys_api  # pylint: disable=import-outside-toplevel
@@ -3136,6 +3144,11 @@ async def serve() -> None:
         import peer_link  # pylint: disable=import-outside-toplevel
         state.peer_server = peer_link.start(state, loki)
         threading.Thread(target=peer_link.sync_forever, args=(state, loki), daemon=True, name="loki-peers").start()
+        try:   # every machine's logs on every machine, every 5 min (engine/peer_logs.py)
+            import peer_logs  # pylint: disable=import-outside-toplevel
+            peer_logs.start(state, loki)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[loki-bridge] log sharing unavailable: {exc}", flush=True)
     except OSError as exc:
         print(f"[loki-bridge] peer link could not listen: {exc}", flush=True)
     except Exception as exc:  # noqa: BLE001 - the link is optional; chat must still start

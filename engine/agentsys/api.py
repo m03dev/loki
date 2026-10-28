@@ -158,7 +158,8 @@ def route(state: Any, method: str, path: str, data: dict | None = None) -> tuple
         if method == "POST":
             if r == "/agentsys/interview":
                 text = str(data.get("text") or "")
-                return 200, {"ok": True, **interview.make(text, ask=_ask_sync(state), force=bool(data.get("force")))}
+                return 200, {"ok": True, **interview.make(text, ask=_ask_sync(state), force=bool(data.get("force")),
+                                                          followup=bool(data.get("followup")))}
             if r == "/agentsys/brief":
                 return 200, {"ok": True, "request": interview.brief(str(data.get("text") or ""), data.get("answers") or {},
                                                                     data.get("questions") or [], str(data.get("note") or "")),
