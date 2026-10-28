@@ -29,7 +29,10 @@ import provider_speed  # noqa: E402
 
 check("empty DeepSeek balance benches it for hours", provider_speed.mark_out(TMP, "deepseek", "Insufficient Balance (request_id: x)") >= 6 * 3600)
 check("a free model that is down is benched", provider_speed.mark_out(TMP, "opencode-zen", '{"message":"Upstream request failed: Model is unavailable."}') > 0)
-check("a route that hung the whole turn is benched", provider_speed.mark_out(TMP, "nvidia", "timed out after 1200s") > 0)
+provider_speed.mark_out(TMP, "nvidia", "timed out after 1200s")
+check("a route that hung the whole turn goes to the end of the line - slow, never left off (it is often the only one "
+      "that works: the Mac, 2026-10-28)", provider_speed.is_slow(TMP, "nvidia") and not provider_speed.is_out(TMP, "nvidia")
+      and "nvidia" in provider_speed.order(TMP, ["nvidia", "groq"]))
 check("a non-answer is benched", provider_speed.mark_out(TMP, "vireonix", "non-answer: Unable to answer question due to internal guardrails") > 0)
 check("an ordinary error is not", provider_speed.mark_out(TMP, "x", "some tool failed") == 0)
 

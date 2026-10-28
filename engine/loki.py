@@ -9557,15 +9557,20 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         _progress("usage", json.dumps({"model": model.split("/", 1)[-1] or "OpenCode's model", "where": meter["where"],
                                        "step": meter["step"], "input": meter["input"], "output": meter["output"],
                                        "seconds": round(time.time() - meter["t0"], 1)}))
-        is_local = "11434" in str((providers.get(pname) or {}).get("base_url") or "")
-        if is_local and os.getenv("LOKI_LOCAL_VIA_OPENCODE", "") != "1":
+        # a model on THIS computer, whatever serves it (Ollama 11434, MLX / LM Studio / llama.cpp on another port) -
+        # 2026-10-28, the Mac: its local model is not on Ollama's port, so it was run inside OpenCode, overflowed,
+        # answered a different task ("auth integration") and looped
+        is_local = pname in LOCAL_PROVIDERS or (pname in MODELS and _cfg_is_local(MODELS[pname])) or \
+            "11434" in str((providers.get(pname) or {}).get("base_url") or "")
+        if is_local and os.getenv("LOKI_LOCAL_VIA_OPENCODE", "") != "1" and opencode_engine.engine_choice() != "opencode":
+            # (the owner picking the OpenCode harness by name keeps it in OpenCode)
             # a model on this computer does the work with LOKI's lean local agent, never inside OpenCode: OpenCode's
             # 12k-token prompt plus the session (17-53k tokens) overflow a 9B model's window and it answers nonsense
             # (2026-10-28, the Mac: "It looks like you just dropped some massive raw HTML..." as an upstream adopt)
             _progress("thinking", "Handing this to %s on this computer with LOKI's local agent (tools one by one)." % pname)
             return await run_local(("Carry on: check what is already done first.\n\n" if meter.get("carried") else "")
                                    + text, pname, task=task, preamble=preamble)
-        result = await asyncio.to_thread(opencode_engine.run_turn, prompt, str(WORKSPACE), exe=exe,
+        result = await asyncio.to_thread(opencode_engine.run_turn, prompt, str(WORKSPACE), exe=exe, timeout=_turn_timeout(),
                                          config_path=str(cfg_local if is_local else cfg_path), env=env, session=session, model=model,
                                          agent="plan" if plan else "", on_event=on_event,
                                          cancelled=lambda: _cancel_event.is_set() or bool(meter.get("too_slow"))
@@ -9643,6 +9648,8 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         result = dict(result, tools=list(meter["carried"]) + list(result.get("tools") or []))
     ok, failed = opencode_engine.tool_counts(result.get("tools") or [])
     _task_ok_calls, _task_failed_calls = ok, failed
+    # why the turn was stopped (stuck in a loop, timed out, every provider failed), or "" - a stopped job is never DONE
+    OC_LAST["stopped"] = str(result.get("error") or (("stuck: " + meter["stuck"]) if meter.get("stuck") else ""))
     reply = result.get("text") or ""
     if opencode_engine.leaked_tool_markup(reply) and result.get("tools") and not plan \
             and not opencode_engine.strip_tool_markup(reply).strip() and not _cancel_event.is_set():
@@ -9656,6 +9663,7 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         result = dict(again, tools=list(result.get("tools") or []) + list(again.get("tools") or []))
         ok, failed = opencode_engine.tool_counts(result.get("tools") or [])
         _task_ok_calls, _task_failed_calls = ok, failed
+        OC_LAST["stopped"] = str(again.get("error") or "")
         reply = again.get("text") or ""
     if opencode_engine.leaked_tool_markup(reply):
         # should not happen any more (dsml_proxy turns them into real calls) - never show the raw tags, never pretend
@@ -10080,8 +10088,13 @@ async def run_job(job_path: str) -> int:
             # team jobs without allow_commands got no bash at all, and the agent said "No shell/Bash tool is
             # available"). OpenCode still blocks the destructive commands and anything outside the job's folder; a
             # job opts out with no_shell.
-            result = _job_outcome(await run_opencode(str(job.get("prompt", "")), task=True,
-                                                     allow_bash=not job.get("no_shell"), preamble=pre))
+            import dsh_engine  # pylint: disable=import-outside-toplevel - its folder snapshot: what REALLY changed
+            before = await asyncio.to_thread(dsh_engine.snapshot, WORKSPACE)
+            OC_LAST["stopped"] = ""
+            reply = await run_opencode(str(job.get("prompt", "")), task=True, allow_bash=not job.get("no_shell"),
+                                       preamble=pre)
+            after = await asyncio.to_thread(dsh_engine.snapshot, WORKSPACE)
+            result = _job_outcome(reply, dsh_engine.changes(before, after), OC_LAST.get("stopped", ""))
         else:
             result = await pursue_goal(str(job.get("prompt", "")))
     except (ModelUnavailable, BudgetExhausted) as exc:
@@ -10128,16 +10141,61 @@ def job_model_choice(job: dict, current: str) -> str:
     return current
 
 
-def _job_outcome(reply: str) -> str:
-    """A job's result must end DONE / BLOCKED (teams and the job list read it): OpenCode's reply, made so."""
+OC_LAST: dict = {"stopped": ""}
+
+
+def _turn_timeout() -> int:
+    """How long one OpenCode turn may run: a job gets the time its own deadline leaves (2026-10-28, the Mac: every turn
+    was cut at 1200 s although the job had 2 hours - on NVIDIA's free tier, 200-290 s a step, a real job dies at step
+    5 or 6, and the cut then benched the only route that worked). Chat keeps LOKI_OPENCODE_TIMEOUT."""
+    at = globals().get("JOB_DEADLINE_AT")
+    if at:
+        return int(max(300, at - time.monotonic() - 30))
+    return int(opencode_engine.DEFAULT_TIMEOUT)
+_NOISE = (".codegraph", ".loki", ".git", "__pycache__", "node_modules")
+
+
+def _job_outcome(reply: str, changed: list | None = None, stopped: str = "") -> str:
+    """A job's result must end DONE / BLOCKED (teams, the task board and the owner read it) - and it must be TRUE.
+
+    2026-10-28 (owner: "jobs finished but nothing happened, why is it fake results?"): this used to write
+    "DONE: <the reply's first line>" whenever ANY tool had run - so a job that read two files, got stuck in a loop and
+    was stopped, or quit mid-investigation, was listed as done ("DONE: I'll start by exploring the project ...").
+    Now the evidence decides, never the model's words alone:
+      - the turn was stopped (stuck, out of time, every provider failed)  -> BLOCKED, with why and what it changed
+      - the agent said DONE but nothing in the folder changed             -> BLOCKED (unless it only had to report)
+      - the agent never said DONE / BLOCKED: DONE only if the folder really changed, else BLOCKED
+    `changed` = the files the job really made or changed (LOKI's own before/after look at the folder)."""
     text = str(reply or "").strip()
+    real = [c for c in (changed or []) if not any(part in _NOISE for part in Path(c[1]).parts)]
+    made = ", ".join(c[1] for c in real[:12]) + (" (+%d more)" % (len(real) - 12) if len(real) > 12 else "")
+    work = ("Changed in the folder: %s." % made) if real else "Nothing in the folder was made or changed."
     if text.startswith("NOT DONE"):
-        return "BLOCKED: " + text
-    if reply_outcome(text):
-        return text
-    if _task_ok_calls > 0:
-        return text + "\n\nDONE: " + (text.splitlines()[0][:200] if text else "finished")
-    return "BLOCKED: no tool ran, so nothing was done. " + text
+        return "BLOCKED: %s\n\n%s" % (text, work)
+    # LOKI's verdict goes FIRST: the job list, the teams and the exit code read the first DONE / BLOCKED line
+    if stopped:
+        return "BLOCKED: the agent was stopped before it finished (%s). %s\n\n%s" % (stopped[:300], work, text)
+    said = reply_outcome(text)
+    if said == "blocked":
+        return text + ("\n\n" + work if real else "")
+    if said == "done":
+        if real or changed is None or _report_only(text):
+            return text + ("\n\n" + work if real else "")
+        return ("BLOCKED: it says DONE, but LOKI looked and nothing in the folder was made or changed - so it did not "
+                "happen.\n\n%s" % text)
+    if real:      # no DONE line, but the work is really on disk and the turn was not stopped
+        return "%s\n\nDONE: %s (LOKI checked the folder - the agent did not say DONE itself)" % (text, work)
+    if not text:
+        return "BLOCKED: the agent ended without an answer. %s" % work
+    return "BLOCKED: the agent ended without finishing - it never said DONE and %s\n\n%s" % (
+        "nothing in the folder was made or changed." if changed is not None else "LOKI could not check the folder.", text)
+
+
+def _report_only(text: str) -> bool:
+    """A DONE that is a report or an answer (a check, a review, research) needs no new file."""
+    head = "\n".join(text.splitlines()[-6:]).lower()
+    return bool(re.search(r"\b(pass|passed|fail|review(ed)?|checked|verified|no changes? (were )?needed|nothing to "
+                          r"change|report|found|answer|research)\b", head))
 
 
 def _write_result(job: dict, text: str) -> None:

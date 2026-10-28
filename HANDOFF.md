@@ -27,6 +27,20 @@ mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it on
 
 ## Now (2026-10-25)
 
+**2026-10-28 23:00 (Claude) - "jobs finished but nothing happened": fake DONE, found in the Mac's real jobs.**
+- loki._job_outcome stamped "DONE: <the reply's first line>" on any job where ONE tool had run (1d23380d: stuck and
+  stopped -> "DONE: I'll start by exploring ..."; 14a65457: quit after 25 min, changed nothing). Now LOKI's own
+  before/after look at the folder (dsh_engine.snapshot) and the stop reason decide, and LOKI's verdict goes first:
+  stopped -> BLOCKED; DONE but nothing changed -> BLOCKED (unless a check/report); no DONE line -> DONE only if the folder
+  really changed.
+- Why they fell to the 9B local model: OpenCode turns were cut at 1200 s even in 2-hour jobs (NVIDIA free ~200-290
+  s/step), and the cut benched NVIDIA "out" - the only working route. Now a job's turn gets the job's own time
+  (_turn_timeout) and a timeout makes a route slow, never out (provider_speed). The Mac's local model is not on Ollama's
+  port, so it was run inside OpenCode (overflow, wrong task, invented tool names) - now any 127.0.0.1/localhost model
+  goes to LOKI's lean local agent.
+- "render a login screen" went to the 3D Lighting / Render specialist - UI / design / LOKI-proof goals are not art jobs.
+- tests/test_job_truth.py (18, from the Mac's two jobs).
+
 **2026-10-28 22:30 (Claude) - one core agent; playbooks + toolboxes written by interviewing the owner.**
 - The owner's meaning (his screenshot): a playbook is HIS workflow for a job (goal, done means, steps, rules), written by
   interviewing him; a toolbox is that job's resources (tools, his files and templates, scripts, apps); ONE core agent

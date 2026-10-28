@@ -71,9 +71,25 @@ def mark_out(data_dir, provider: str, error: str, now: float | None = None) -> f
           or "model_not_found" in text or "does not exist" in text and "model" in text):
         hold = 24 * 3600.0          # this key cannot run that model at all (NVIDIA 404 "Function ... Not found for
                                     # account", the Mac 2026-10-28: every job tried Nemotron and Kimi first and died)
-    elif "model is unavailable" in text or "timed out after" in text or "non-answer" in text:
-        hold = 3600.0               # a free model that is down, a route that hung for the whole turn, or one that
-                                    # answered without working (a guardrail refusal) - the PC, 2026-10-26
+    elif "timed out after" in text:
+        # SLOW, not out (2026-10-28, the Mac: NVIDIA - the only route that worked - was benched "out" for one long
+        # turn, so every job fell to the 9B local model): it goes to the end of the line, it is never left off
+        if not provider:
+            return 0.0
+        data = _load(data_dir)
+        entry = data.get(provider) or {}
+        entry.update(t=now or time.time(), slow_until=(now or time.time()) + 3600.0, last_timeout=str(error)[:200])
+        entry.pop("out", None)
+        data[provider] = entry
+        try:
+            _file(data_dir).parent.mkdir(parents=True, exist_ok=True)
+            _file(data_dir).write_text(json.dumps(data, indent=1), encoding="utf-8")
+        except OSError:
+            pass
+        return 0.0
+    elif "model is unavailable" in text or "non-answer" in text:
+        hold = 3600.0               # a free model that is down, or one that answered without working (a guardrail
+                                    # refusal) - the PC, 2026-10-26
     else:
         return 0.0
     if not provider:
@@ -91,8 +107,11 @@ def mark_out(data_dir, provider: str, error: str, now: float | None = None) -> f
 
 
 def is_out(data_dir, provider: str, now: float | None = None) -> bool:
-    """Benched because it said it is out (credit, a daily or per-minute cap) - not merely slow."""
+    """Benched because it said it is out (credit, a daily or per-minute cap) - not merely slow. A timeout recorded by
+    an older LOKI ("out": "timed out after ...") counts as slow only."""
     entry = _load(data_dir).get(provider) or {}
+    if "timed out after" in str(entry.get("out") or ""):
+        return False
     return bool(entry.get("out")) and float(entry.get("slow_until") or 0) > (now or time.time())
 
 

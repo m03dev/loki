@@ -63,9 +63,14 @@ def for_goal(goal: str) -> list:
     if not ART_GOAL.search(text):
         return []
     low = text.lower()
+    # UI / app / web design and proofs of LOKI itself are not art-pipeline work (2026-10-28, the Mac: "Design
+    # (OpenPencil) proof ... render a dark login screen" went to the 3D Lighting / Render specialist for "render")
+    if re.search(r"\b(ui|login|screen|app design|openpencil|design tool|website|web page|landing page|tests?/|"
+                 r"test_\w+\.py|qa/)\b", low):
+        return []
     if re.search(r"\b(video|shot|clip|animation)\b", low) and not re.search(r"\b3d model|turnaround\b", low):
         return ["video"]
-    if re.search(r"\brender|turntable|lighting\b", low) and not re.search(r"\bconcept|turnaround|model\b", low):
+    if re.search(r"\b(render(ed|ing|s)?|turntable|lighting)\b", low) and not re.search(r"\b(concept|turnaround|model)\b", low):
         return ["render"]
     if re.search(r"\b(concept art|picture|image|illustration)\b", low) and not re.search(r"\b3d|model|turnaround\b", low):
         return ["concept"]
