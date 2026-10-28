@@ -1294,6 +1294,17 @@ def ready_to_apply(idle, waiting_since: float, now: float | None = None) -> bool
     return False
 
 
+def heal_reason(state: dict | None = None) -> str:
+    """Why this engine must update/restart although GitHub has nothing new, or "": the code on disk is not what runs
+    (another LOKI window updated the folder), or a local commit sits on top of master (mirror mode)."""
+    st = STATE if state is None else state
+    if restart_needed():
+        return "LOKI's folder has newer code than this engine runs"
+    if exact() and int(st.get("ahead") or 0) > 0:
+        return "a local commit sits on top of master; going back to exactly master"
+    return ""
+
+
 def run_forever(every_s: float | None = None, idle=None, apply=None) -> None:
     """Background loop for the engine: check GitHub now and then. When an update is waiting,
     `idle()` says LOKI is not busy and force updates are on, `apply()` updates and restarts."""
@@ -1312,6 +1323,14 @@ def run_forever(every_s: float | None = None, idle=None, apply=None) -> None:
                         preflight(REPO, "origin/" + BRANCH)
                     except Exception:  # noqa: BLE001 - only a head start
                         pass
+                # countermeasures (owner 2026-10-28, the PC: "windows is 610 mac is 609"): another LOKI window
+                # updated the folder under this engine, so it kept running old code with nothing to apply; and an
+                # older updater left a local commit on top of master. Both now count as "update waiting": update()
+                # sets the commit aside (mirror mode) and the engine restarts on the code on disk.
+                why = "" if STATE.get("update_available") or not is_checkout(REPO) else heal_reason()
+                if why:
+                    STATE["update_available"] = True
+                    STATE["note"] = why
                 if not STATE.get("update_available"):
                     waiting_since = 0.0
                 elif not waiting_since:

@@ -266,6 +266,42 @@ def wait_for_engine(process: subprocess.Popen | None, timeout: float = ENGINE_ST
     return ""
 
 
+ALREADY_RUNNING_EXIT_CODE = 73   # engine/loki_bridge.py: another engine already serves the port
+
+
+def port_open(timeout: float = 0.5) -> bool:
+    """Something is LISTENING on the engine port (it may be too busy to answer /health in time)."""
+    import socket  # pylint: disable=import-outside-toplevel
+    try:
+        with socket.create_connection((HOST, PORT), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def answer_slowly(token: str, wait_s: float = 25.0) -> int:
+    """A busy engine (a Blender job from the Mac, 2026-10-28) can take more than 1.5 s to answer /health: keep asking
+    while the port is open instead of deciding nothing runs and starting a second engine."""
+    end = time.monotonic() + wait_s
+    status = 0
+    while time.monotonic() < end and port_open():
+        status = probe(token, timeout=5.0)
+        if status:
+            return status
+        time.sleep(0.5)
+    return status
+
+
+def take_over(token: str) -> str:
+    """An engine already runs here (started by another LOKI window, or left behind). Use it when it runs the code on
+    disk; when it runs older code, ask it to quit so a fresh one starts on the new code. Returns "attach" or "start"."""
+    if token and stale_engine(token):
+        log("an engine from another LOKI window runs an older version: asking it to quit, then starting the new one")
+        stop_running_engine(token, wait_s=20.0)
+        return "start" if not port_open() else "attach"
+    return "attach"
+
+
 def stop_engine(process: subprocess.Popen | None) -> None:
     if process is None or process.poll() is not None:
         return
@@ -373,6 +409,20 @@ def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> 
             leave_soon(0, 5.0)           # the window normally closes first; this makes sure the app is gone
             close_window()
             return
+        if code == ALREADY_RUNNING_EXIT_CODE:
+            # not a crash: another engine holds the port (a second LOKI window, or one left behind). Attach to it, or
+            # when it runs older code, make it quit and start ours on the new code.
+            token = read_token()
+            if answer_slowly(token) == 200 and take_over(token) == "attach":
+                log("attached to the engine that was already running")
+                holder["process"] = None
+                show_url(window_url(token))
+                return
+            new_process, token = start_and_wait(python, workspace, godot)
+            holder["process"] = new_process
+            if token:
+                show_url(window_url(token))
+            continue
         if code != RESTART_EXIT_CODE:
             # The engine died on its own (a crash, or killed for memory). Before, the window then
             # sat there dead until LOKI was quit - all night once. Start it again, a few times,
@@ -954,6 +1004,10 @@ def bring_up_engine(workspace: Path, holder: dict, stopping) -> tuple:
     """Attach to a running engine or start one. (token, "", "") or ("", title, what to do)."""
     token = read_token()
     status = probe(token) if token else probe("")
+    if status == 0 and port_open():          # an engine is there but busy: wait for it, never start a second one
+        log("an engine is already listening on port %d; waiting for it to answer" % PORT)
+        token = read_token()
+        status = answer_slowly(token)
     if token and status == 200 and stale_engine(token):
         # LOKI kept working in the background on an older version, and this start just updated the folder:
         # attaching would show the old LOKI and then restart in front of the owner ("why do i see old ui when

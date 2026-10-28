@@ -319,6 +319,9 @@ def world_extras(agent: Any) -> dict:
     return out
 
 
+ALREADY_RUNNING_EXIT_CODE = 73   # app/loki_app.py: "an engine already runs here" - attach to it, not a crash
+
+
 def restart_engine() -> None:
     """Restart this engine on the code now on disk (after an update).
 
@@ -3170,7 +3173,12 @@ async def serve() -> None:
         _startup_report()
     except OSError as exc:
         await stack.aclose()
-        raise RuntimeError(f"Bridge port {PORT} is already occupied; refusing to overwrite the active bridge token.") from exc
+        # another LOKI engine already serves this port (owner 2026-10-28, the PC: a second LOKI window started a second
+        # engine; it crashed 5 times into the first one and the app gave up). Say so with its own exit code: the app
+        # attaches to the running engine (or restarts it on the new code) instead of counting a crash.
+        print(f"[loki-bridge] another LOKI engine already serves port {PORT}; leaving it running (exit "
+              f"{ALREADY_RUNNING_EXIT_CODE})", flush=True)
+        raise SystemExit(ALREADY_RUNNING_EXIT_CODE) from exc
     keeper_stop = threading.Event()
     keeper = threading.Thread(target=keep_secret_alive, args=(secret_path, secret, keeper_stop), name="loki-secret-keeper", daemon=True)
     keeper.start()
