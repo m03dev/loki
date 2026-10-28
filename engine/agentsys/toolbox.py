@@ -18,7 +18,7 @@ from typing import Any
 
 # The making tools (engine/make_mcp.py + loki's tools): which need the GPU / the PC, and which the owner signs off.
 GPU = {"make_image", "make_3d", "make_video", "make_turnaround", "make_sprite", "upscale_image", "render_scene",
-       "make_local_video", "make_music", "ai_render", "make_3d_tool", "region_edit"}
+       "make_local_video", "make_music", "ai_render", "make_3d_tool", "region_edit", "manga"}
 OPEN_WORLD = {"read_web", "web_search", "research_web", "browse_page", "map_site", "reach", "scrape", "conductor",
               "deep_research_tool", "email", "itch", "generate_media"}
 READ_ONLY = {"list_files", "list_tree", "read_file", "folders", "search_files", "code_map", "search_docs",

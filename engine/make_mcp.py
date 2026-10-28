@@ -135,7 +135,7 @@ def make_image(args: dict, cwd: Path, runner=subprocess.run) -> dict:
            "negative": negative[:600], "backend": os.environ.get("LOKI_IMAGE_BACKEND", "auto")}
     if args.get("seed"):
         job["seed"] = int(args["seed"])     # the technical artist draws every view of a turnaround on one seed
-    for k in ("steps", "guidance", "sampler", "strength", "need_edit"):   # engine/image_settings.py
+    for k in ("steps", "guidance", "sampler", "strength", "need_edit", "reference_optional"):   # engine/image_settings.py
         if args.get(k) not in (None, ""):
             job[k] = args[k]
     refs = args.get("reference") or []
@@ -358,6 +358,18 @@ def make_video(args: dict, cwd: Path, make=None) -> dict:
     return res if isinstance(res, dict) else {"ok": False, "error": "no answer"}
 
 
+try:   # Manga Studio (engine/manga.py): idea -> outline -> cast -> script -> drawn, lettered pages
+    import manga as _manga  # noqa: E402
+    TOOLS.append(_manga.TOOL_SCHEMA)
+except Exception:  # noqa: BLE001
+    _manga = None
+
+try:   # Design (engine/design.py): OpenPencil design files, headless
+    import design as _design  # noqa: E402
+    TOOLS.append(_design.TOOL_SCHEMA)
+except Exception:  # noqa: BLE001
+    _design = None
+
 try:   # CC0 assets: Poly Haven, ambientCG (engine/free_assets.py)
     import free_assets as _assets  # noqa: E402
     TOOLS.append(_assets.TOOL)
@@ -397,6 +409,8 @@ def call(name: str, args: dict, cwd: Path) -> dict:
           "make_music": make_music, "make_sprite": make_sprite,
           "make_turnaround": lambda a, cwd: __import__("turnaround").make_turnaround(a or {}, cwd, make_image),
           "render_scene": lambda a, cwd: __import__("render_agent").render(a or {}, cwd),
+          "manga": lambda a, cwd: __import__("manga").tool(a or {}, cwd, make=lambda x: make_image(x, cwd)),
+          "design": lambda a, cwd: __import__("design").tool(a or {}, cwd),
           "library": lambda a, cwd: __import__("creations").library(cwd, str((a or {}).get("kind") or ""),
                                                                    str((a or {}).get("search") or ""),
                                                                    int((a or {}).get("limit") or 40)),
@@ -564,14 +578,14 @@ def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the fo
 
 CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image", "pixel": "pixelize",
        "voice": "voice", "shelf": "toolshelf", "music": "make_music", "library": "library",
-       "render": "render_scene", "sprite": "make_sprite", "turnaround": "make_turnaround", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
+       "render": "render_scene", "sprite": "make_sprite", "manga": "manga", "design": "design", "turnaround": "make_turnaround", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
 
 
 # what the first plain word means for each command (2026-10-25: `loki-make render models/x.glb` sent the file as the
 # prompt and the render tool said "no model None" - found by running it, not by reading it)
 POSITIONAL = {"upscale": "image", "pixel": "image", "run-on": "task", "render": "model", "voice": "text",
               "music": "tags", "library": "search", "job": "job", "shelf": "id",
-              "turnaround": "concept"}
+              "turnaround": "concept", "manga": "action", "design": "action"}
 
 
 def cli(argv: list, cwd: Path | None = None) -> int:

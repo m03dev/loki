@@ -29,6 +29,7 @@ WS = TMP / "ws"
 WS.mkdir(parents=True, exist_ok=True)
 os.environ["LOKI_DATA"] = str(DATA)
 os.environ["LOKI_WORKSPACE"] = str(WS)
+os.environ["LOKI_UPSTREAM"] = "off"   # the daily upstream check (engine/agentsys/upstream.py) has its own suite
 for _k in ("LOKI_IMAGE_BACKEND", "LOKI_DAILY_CREATION", "LOKI_SDCPP_MODEL", "LOKI_SDCPP_TAG", "LOKI_WAN2GP_MODEL",
            "HIGGSFIELD_KEY", "HF_KEY", "HF_API_KEY", "HF_API_SECRET", "MODELSCOPE_API_KEY"):
     os.environ.pop(_k, None)
@@ -560,6 +561,7 @@ class IdleState:
 
 
 made_by_autopilot = []
+os.environ["LOKI_OWNER_REVIEW"] = "off"   # without the owner's sign-off (it is on by default; checked below)
 orig_make = creations.make_image
 creations.make_image = lambda ag, prompt, **kw: made_by_autopilot.append((prompt, kw)) or {"ok": True, "id": "a"}
 pilot = autopilot.Autopilot(state=IdleState(), agent=types.SimpleNamespace(WORKSPACE=WS, DATA_DIR=str(TMP / "auto")),

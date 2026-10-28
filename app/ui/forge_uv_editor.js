@@ -664,6 +664,8 @@ const ForgeUVEditor = (() => {
     }
     if (typeof ForgeBake !== "undefined") ForgeBake.show(ws === "bake");
     if (typeof ForgeLevelUI !== "undefined") ForgeLevelUI.show(ws === "level");   // the Level editor (forge_level.js)
+    if (typeof ForgeManga !== "undefined") ForgeManga.show(ws === "manga");       // Manga Studio (forge_manga.js)
+    if (typeof ForgeDesign !== "undefined") ForgeDesign.show(ws === "design");    // Design: OpenPencil files (forge_design.js)
     const fb = document.querySelector("#forge .forge-body");
     fb?.classList.toggle("ws-uv", ws === "uv");
     fb?.classList.toggle("ws-mat", ws === "mat");                 // Material Maker's own workspace
@@ -689,14 +691,16 @@ const ForgeUVEditor = (() => {
       : ws === "sculpt" ? "Sculpting workspace: brushes along the bottom, right-click for the brush wheel, Done (or q / Esc) goes back to Modeling."
       : ws === "anim" ? "Animation workspace: the time and range sliders under the viewport; Keys on the range slider opens the key tools."
       : ws === "level" ? "Level workspace: place actors, give them scripts, then Play (W A S D, Esc stops) - Stop puts everything back."
+      : ws === "design" ? "Design workspace: app screens, pages and cards as real design files (OpenPencil) - draw from JSX or HTML, or ask an agent."
+      : ws === "manga" ? "Manga workspace: an idea becomes an outline, a cast, a panel script per page, drawn and lettered pages, a PDF."
       : ws === "mat" ? "Materials workspace: Material Maker's node graph beside the viewport - the selected model shows the material live." : "Modeling workspace.";
   }
   function workspacePicker() {
     const name = document.querySelector("#forge .fmy-wsname");
     if (!name || document.getElementById("forge-workspace")) return;
     const sel = el("select", "fmy-menuset fmy-wspick"); sel.id = "forge-workspace";
-    sel.title = "Workspace: Modeling, UV Editing (the UV Editor beside the viewport), Retopology (Quad Draw on a live surface), Baking (high to low maps), Materials (Material Maker's node graph beside a live preview), Animation (the time and range sliders, keys and the Graph Editor) or Level (place actors, scripts, Play in Editor).";
-    for (const [v, t] of [["model", "Modeling"], ["sculpt", "Sculpting"], ["uv", "UV Editing"], ["retopo", "Retopology"], ["bake", "Baking"], ["mat", "Materials"], ["anim", "Animation"], ["level", "Level"]]) { const o = el("option", "", t); o.value = v; sel.append(o); }
+    sel.title = "Workspace: Modeling, UV Editing (the UV Editor beside the viewport), Retopology (Quad Draw on a live surface), Baking (high to low maps), Materials (Material Maker's node graph beside a live preview), Animation (the time and range sliders, keys and the Graph Editor) Level (place actors, scripts, Play in Editor) Manga (an idea to drawn, lettered manga pages) or Design (app screens and pages as OpenPencil design files).";
+    for (const [v, t] of [["model", "Modeling"], ["sculpt", "Sculpting"], ["uv", "UV Editing"], ["retopo", "Retopology"], ["bake", "Baking"], ["mat", "Materials"], ["anim", "Animation"], ["level", "Level"], ["manga", "Manga"], ["design", "Design"]]) { const o = el("option", "", t); o.value = v; sel.append(o); }
     sel.value = workspace();
     sel.addEventListener("change", () => say(setWorkspace(sel.value)));
     name.replaceWith(sel);
@@ -766,7 +770,7 @@ if (typeof FORGE_PRO_CMDS !== "undefined") {
 // Windows > Workspaces (owner 2026-10-22 00:35: "sculpting still isnt in the menu") - every workspace as a command, ticked
 // when it is the one showing; the same list as the Workspace picker at the top right
 const FORGE_WORKSPACES = [["wsModel", "model", "Modeling"], ["wsSculpt", "sculpt", "Sculpting"], ["wsUv", "uv", "UV Editing"],
-  ["wsRetopo", "retopo", "Retopology"], ["wsBake", "bake", "Baking"], ["wsMat", "mat", "Materials"], ["wsAnim", "anim", "Animation"], ["wsLevel", "level", "Level"]];
+  ["wsRetopo", "retopo", "Retopology"], ["wsBake", "bake", "Baking"], ["wsMat", "mat", "Materials"], ["wsAnim", "anim", "Animation"], ["wsLevel", "level", "Level"], ["wsManga", "manga", "Manga"], ["wsDesign", "design", "Design"]];
 if (typeof FORGE_PRO_CMDS !== "undefined") {
   for (const [id, ws, label] of FORGE_WORKSPACES) {
     FORGE_PRO_CMDS[id] = [label + " Workspace", () => ForgeUVEditor.setWorkspace(ws)];

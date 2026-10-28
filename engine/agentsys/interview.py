@@ -180,8 +180,21 @@ def template_questions(text: str, kind: str = "") -> list:
     if is_big(text) and not re.search(WHO[4], text or "", re.I):     # big work: team or one agent?
         out.append({"id": "q1", "header": WHO[0], "question": WHO[1], "multi": False,
                     "options": [{"label": a, "description": b} for a, b in WHO[3]]})
-    for header, q, multi, options, skip in TEMPLATES.get(kind, []) + (TEMPLATES["general"] if kind != "general" else []):
-        if skip and re.search(skip, text or "", re.I):
+    try:   # the domain playbook's own questions come first (skills/playbooks/<kind>/PLAYBOOK.md)
+        from . import foundation  # pylint: disable=import-outside-toplevel
+        book_qs = [(q.get("header") or "Choice", q["question"], bool(q.get("multi")),
+                    [(o.get("label", ""), o.get("description", "")) for o in q.get("options") or [] if o.get("label")],
+                    q.get("skip_if") or "") for q in foundation.questions(text, kind)]
+    except Exception:  # noqa: BLE001
+        book_qs = []
+    for header, q, multi, options, skip in book_qs + TEMPLATES.get(kind, []) + (TEMPLATES["general"] if kind != "general" else []):
+        if len(options) < 2:
+            continue
+        try:
+            said = bool(skip) and bool(re.search(skip, text or "", re.I))
+        except re.error:
+            said = False
+        if said:
             continue          # the request already says it - never ask what was said
         if any(x["header"] == header for x in out):
             continue

@@ -31,7 +31,8 @@ from . import sub, trace
 
 SECTIONS = ("owner", "strategy", "check", "mistake")     # owner = the owner's taste, straight from his words
 PREFIX = {"image": "img", "turnaround": "trn", "3d": "m3d", "video": "vid", "code": "cod", "marketing": "mkt",
-          "research": "res", "writing": "wri", "general": "gen"}
+          "research": "res", "writing": "wri", "general": "gen", "manga": "mng", "design": "dsg", "mobile-test": "mob",
+          "render": "rnd", "music": "mus"}
 MAX_BULLETS = int(os.environ.get("LOKI_PLAYBOOK_MAX", "150") or 150)
 TOP_K = int(os.environ.get("LOKI_PLAYBOOK_TOP_K", "8") or 8)
 _LOCK = threading.Lock()
@@ -85,11 +86,18 @@ def folder() -> Path:
 
 
 def kind_of(task: str) -> str:
+    """The kind of work: the foundation's domain playbooks decide first (their triggers), the specialist library's
+    word lists after."""
     try:
         import specialist_library  # pylint: disable=import-outside-toplevel
         k = specialist_library.kind(task)
     except Exception:  # noqa: BLE001
         k = "general"
+    try:
+        from . import foundation  # pylint: disable=import-outside-toplevel
+        k = foundation.kind_for(task, k if k in PREFIX and k != "general" else "") or k
+    except Exception:  # noqa: BLE001
+        pass
     return k if k in PREFIX else "general"
 
 

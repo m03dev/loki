@@ -6,7 +6,7 @@
 
 const LokiToolShelf = (() => {
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  const AREA = { audio: "Sound & voice", "2d": "2D art & sprites", "3d": "3D models", animation: "Animation", video: "Video & captions", marketing: "Marketing & stores", godot: "Godot" };
+  const AREA = { audio: "Sound & voice", "2d": "2D art & sprites", "3d": "3D models", animation: "Animation", video: "Video & captions", marketing: "Marketing & stores", godot: "Godot", design: "Design (UI, screens)", testing: "Testing (phone, apps)" };
   let box = null;
 
   function mount() {

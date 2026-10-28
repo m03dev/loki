@@ -62,7 +62,8 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from quiet_server import QuietHTTPServer
 from typing import Any, Callable
 from urllib.parse import urlparse
 
@@ -474,7 +475,7 @@ class PeerServer:
             def do_POST(self):  # noqa: N802
                 self._handle("POST")
 
-        self.httpd = ThreadingHTTPServer((host, port(self.env) if port_number is None else port_number), Handler)
+        self.httpd = QuietHTTPServer((host, port(self.env) if port_number is None else port_number), Handler)
         self.httpd.daemon_threads = True
         self.thread: threading.Thread | None = None
 

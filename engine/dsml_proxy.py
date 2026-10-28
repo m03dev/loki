@@ -36,7 +36,8 @@ import threading
 import urllib.error
 import urllib.request
 import uuid
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from quiet_server import QuietHTTPServer
 
 BAR = r"[｜|]{1,2}"
 TAG = r"<\s*/?\s*" + BAR + r"\s*DSML\s*" + BAR
@@ -471,7 +472,7 @@ class _Proxy:
             def do_GET(self):  # noqa: N802
                 self._go("GET")
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.server = QuietHTTPServer(("127.0.0.1", 0), Handler)
         self.server.daemon_threads = True
         self.port = self.server.server_address[1]
         threading.Thread(target=self.server.serve_forever, daemon=True, name="loki-dsml-proxy").start()

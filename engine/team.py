@@ -251,6 +251,8 @@ def choose_roles(goal: str, triage: dict | None = None, decide=None) -> list:
     art = _art.for_goal(goal) if _art is not None else []
     if len(art) == 1:                       # one specialist does it (a concept, a render, a video)
         return ["art_" + art[0]]
+    if art and art[0].startswith("manga_"):  # a manga: writer -> artist -> editor (engine/manga.py)
+        return ["art_" + k for k in art]
     # a small, concrete job (a check, a conversion, one file) needs one agent, not four in turn (2026-10-25: a
     # "pixelize three pictures" request became an Architect writing a plan for 25 minutes on a 9B model)
     if solo_goal(goal, triage):
@@ -418,7 +420,8 @@ class TeamRunner:
         method, goal = team_method(goal)
         if not goal:
             raise ValueError("say what the team should build")
-        if not dry_run and _art is not None and len(_art.for_goal(goal)) > 1:
+        if not dry_run and _art is not None and len(_art.for_goal(goal)) > 1 \
+                and not _art.for_goal(goal)[0].startswith("manga_"):
             # a whole asset (concept -> turnaround -> 3D -> finish -> render): the specialist pipeline does it, each
             # specialist in turn, every prompt and hand-off waiting for the owner (engine/asset_pipeline.py)
             import asset_pipeline  # pylint: disable=import-outside-toplevel

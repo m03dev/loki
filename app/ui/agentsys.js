@@ -211,8 +211,8 @@ const LokiAgentSys = (() => {
       P.root = mk("div", "as-panel"); P.root.setAttribute("aria-label", "LOKI's agent system");
       container.replaceChildren(P.root);
     }
-    const [st, runs, pb, up, pk, orch] = await Promise.all(["/agentsys/status", "/agentsys/traces?days=2", "/agentsys/playbooks",
-      "/agentsys/upstream", "/agentsys/parked", "/agentsys/orchestrations"].map((p) => call(p).catch(() => null)));
+    const [st, runs, pb, up, pk, orch, fd] = await Promise.all(["/agentsys/status", "/agentsys/traces?days=2", "/agentsys/playbooks",
+      "/agentsys/upstream", "/agentsys/parked", "/agentsys/orchestrations", "/agentsys/foundation"].map((p) => call(p).catch(() => null)));
     const kids = [];
     const t = (st && st.traces) || {};
     const head = box("This week", "Every request LOKI ran, from the traces (engine/agentsys/trace.py).");
@@ -253,7 +253,19 @@ const LokiAgentSys = (() => {
     if (!ol.children.length) ol.append(mk("p", "as-muted", "None yet - pick \"Specialist team\" when LOKI asks who should do big work."));
     ob.append(ol); kids.push(ob);
 
-    const pbb = box("Playbooks", "What LOKI learned works, per kind of work. Your own lines (from send-backs and here) always come first.");
+    const fb = box("Foundation", "The rulebook every agent works from, strongest first: your rules (AGENTS.md), how LOKI's agents work (skills/playbooks/CONSTITUTION.md), then one playbook per kind of work (skills/playbooks/<kind>/PLAYBOOK.md) - its stages are the plan, its questions are the interview, its checklist is what every result is checked against.");
+    fb.append(mk("p", "as-muted", ((fd && fd.rules) || []).length + " owner rules · " + ((fd && fd.principles) || []).length + " working principles · " + ((fd && fd.books) || []).length + " playbooks"));
+    const fgrid = mk("div", "as-pb as-found");
+    for (const b of (fd && fd.books) || []) {
+      const card = mk("div", "as-pb-card");
+      card.append(mk("b", "", b.title || b.name), mk("span", "as-muted", b.questions + " questions · " + (b.specialists || []).join(", ")));
+      const steps = mk("div", "as-steps");
+      for (const s of b.stages || []) { const chip = mk("span", "as-chip" + (s.gate === "owner" ? " as-gate" : ""), s.id); chip.title = s.specialist + ": " + s.objective + (s.gate === "owner" ? " (waits for your OK)" : ""); steps.append(chip); }
+      card.append(steps); fgrid.append(card);
+    }
+    fb.append(fgrid); kids.push(fb);
+
+    const pbb = box("Learned lines", "What LOKI learned works, per kind of work. Your own lines (from send-backs and here) always come first.");
     const pgrid = mk("div", "as-pb");
     const books = (pb && pb.playbooks) || {};
     for (const [kind, v] of Object.entries(books)) {

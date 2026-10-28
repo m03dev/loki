@@ -43,7 +43,8 @@ import socket
 import sys
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from quiet_server import QuietHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -396,7 +397,7 @@ class PhoneServer:
             def do_POST(self):  # noqa: N802
                 self._handle("POST")
 
-        self.httpd = ThreadingHTTPServer((host, port_number if port_number is not None else port(self.env)), Handler)
+        self.httpd = QuietHTTPServer((host, port_number if port_number is not None else port(self.env)), Handler)
         self.httpd.daemon_threads = True
         self.thread: threading.Thread | None = None
 

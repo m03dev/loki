@@ -479,5 +479,42 @@ try:
 except ValueError:
     check("hooks: unknown event raises", True)
 
+# ----------------------------------------------------------------------------- the foundation (the real rulebook)
+import re as _re  # noqa: E402
+from agentsys import foundation  # noqa: E402
+os.environ.pop("LOKI_PLAYBOOKS_DIR", None)
+foundation._CACHE.update(stamp=None)  # pylint: disable=protected-access
+BOOKS = foundation.books()
+check("foundation: the owner's rules are read word for word from AGENTS.md",
+      len(foundation.owner_rules()) >= 10 and foundation.owner_rules()[0].startswith("1. **Ship to `master`.**"))
+check("foundation: the constitution's principles go into every preamble",
+      foundation.constitution_brief().count("\n") >= 10)
+for need in ("general", "code", "image", "turnaround", "3d", "video", "render", "research", "writing", "marketing",
+             "design", "mobile-test", "music", "manga"):
+    check("foundation: a %s playbook with stages and questions" % need,
+          need in BOOKS and len(BOOKS[need]["stages"]) >= 3 and BOOKS[need]["questions"])
+bad = []
+for b in BOOKS.values():
+    ids = {s["id"] for s in b["stages"]}
+    for s in b["stages"]:
+        bad += ["%s.%s depends on %s" % (b["name"], s["id"], d) for d in s.get("depends_on") or [] if d not in ids]
+    for qq in b["questions"]:
+        if len(qq.get("header", "")) > 12 or not 2 <= len(qq["options"]) <= 4:
+            bad.append("%s question %r" % (b["name"], qq.get("header")))
+        try:
+            _re.compile(qq.get("skip_if") or "")
+        except _re.error:
+            bad.append("%s skip_if %r" % (b["name"], qq.get("skip_if")))
+check("foundation: every stage depends on real stages; every question is AskUserQuestion-shaped", not bad or print(bad))
+gates = [s["id"] for s in BOOKS["manga"]["stages"] if s.get("gate") == "owner"]
+check("foundation: the manga playbook's drawing stages wait for the owner", {"sheets", "pages"} <= set(gates))
+for text, kind in (("draw a manga page about a robot", "manga"), ("make a 4-koma about a cat", "manga"),
+                   ("draw a cat", "image"), ("make a 3d model of a chair", "3d"), ("fix the failing python test", "code"),
+                   ("test the phone app on the emulator", "mobile-test"), ("design a login screen for the app", "design")):
+    check("foundation: %r is %s work" % (text, kind), playbook.kind_of(text) == kind or print(playbook.kind_of(text)))
+pre = context.build("draw a manga page about a robot", local=True)["text"]
+check("foundation: a local model's preamble has the rules, the method and the manga stages, within its budget",
+      "owner's rules" in pre and "Manga Writer" in pre and len(pre) <= context.budget(True))
+
 print("\n%d failed" % len(FAILED) if FAILED else "\nall passed")
 sys.exit(1 if FAILED else 0)

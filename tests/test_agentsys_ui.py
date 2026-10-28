@@ -118,6 +118,12 @@ async def main():
                 return await r.fulfill(json={"ok": True, "last_run": NOW - 3600, "sources": [
                     {"repo": "stephomi/sculptgl", "pin": "8e45daf", "version": "", "follows": "", "used_in": ["app/ui/forge.js"],
                      "seen": {"status": "behind", "behind": 3}}]})
+            if bare == "/agentsys/foundation":
+                return await r.fulfill(json={"ok": True, "rules": ["1. Ship to master."], "principles": ["1. Know the goal."],
+                                             "books": [{"name": "manga", "title": "Manga and comics", "questions": 3,
+                                                        "specialists": ["Manga Writer"], "stages": [
+                                                            {"id": "outline", "specialist": "Manga Writer", "gate": "", "objective": "x"},
+                                                            {"id": "pages", "specialist": "Manga Artist", "gate": "owner", "objective": "y"}]}]})
             if bare == "/agentsys/orchestrations":
                 return await r.fulfill(json={"ok": True, "runs": [{"id": "o1", "goal": "make a golem asset", "status": "done",
                                                                    "outcome": "verified", "updated": NOW, "steps": [
@@ -244,7 +250,7 @@ async def main():
           const btns = [...d.querySelectorAll('.as-btn')];
           return { boxes, stats: d.querySelectorAll('.as-stat').length, tipless: btns.filter((b) => !b.dataset.tipName || !b.dataset.tipWhat).length,
                    owner: !!d.querySelector('.as-pb-line.as-owner'), up: (d.querySelector('.as-up .as-item') || {}).textContent || '' }; })()""")
-        check("Lab > System: every layer", lab["boxes"] == ["This week", "Runs", "Specialist teams", "Playbooks", "Upstream", "Parked"], lab["boxes"])
+        check("Lab > System: every layer", lab["boxes"] == ["This week", "Runs", "Specialist teams", "Foundation", "Learned lines", "Upstream", "Parked"], lab["boxes"])
         check("Lab > System: the numbers, his playbook lines, upstream behind", lab["stats"] == 8 and lab["owner"] and "behind by 3" in lab["up"], lab)
         check("every button has a name and what it does", lab["tipless"] == 0, lab["tipless"])
         await E("LokiAgentSys.leave()")

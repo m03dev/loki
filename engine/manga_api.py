@@ -1,0 +1,119 @@
+"""HTTP for Manga Studio (engine/manga.py) - the window's Forge > Manga workspace (app/ui/forge_manga.js).
+
+GET  /manga/meta                 formats, styles, layouts, shots, angles, balloon kinds, endings
+GET  /manga/list                 the projects and the character library
+GET  /manga/project?id=          one project (with its review)
+GET  /manga/file?path=           a picture inside <workspace>/manga (pages, panels, sheets)
+GET  /manga/job?id=              a running step (outline, script, drawing ...)
+POST /manga/do  {action, ...}    the same actions as the agents' `manga` tool; writing and drawing steps run in the
+                                 background and answer {"job": id}. The owner's own clicks draw at once - the For you
+                                 OK is for pictures an AGENT asks for (owner's rule 8).
+"""
+from __future__ import annotations
+
+import asyncio
+import threading
+import time
+import uuid
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import manga
+
+SLOW = {"outline", "characters", "script", "sheet", "draw_page", "draw", "edit_panel"}
+JOBS: dict = {}
+_LOCK = threading.Lock()
+
+
+def _ws(state) -> Path:
+    return Path(getattr(getattr(state, "agent", None), "WORKSPACE", "."))
+
+
+def _ask(state, timeout_s: float = 180):
+    agent, loop = getattr(state, "agent", None), getattr(state, "loop", None)
+    if agent is None or loop is None or not hasattr(agent, "_port_ask"):
+        return None
+
+    def ask(prompt: str) -> str:
+        fut = asyncio.run_coroutine_threadsafe(agent._port_ask(prompt, max_tokens=4000), loop)  # pylint: disable=protected-access
+        try:
+            return fut.result(timeout=timeout_s)
+        except Exception:  # noqa: BLE001
+            fut.cancel()
+            raise
+    return ask
+
+
+def _make(ws: Path):
+    def make(args: dict) -> dict:
+        import make_mcp  # pylint: disable=import-outside-toplevel
+        return make_mcp.make_image(args, ws)
+    return make
+
+
+def _start(fn, label: str) -> str:
+    jid = uuid.uuid4().hex[:10]
+    with _LOCK:
+        JOBS[jid] = {"id": jid, "label": label, "status": "running", "t": time.time()}
+        for old in [k for k, v in JOBS.items() if time.time() - v["t"] > 6 * 3600]:
+            JOBS.pop(old, None)
+
+    def run():
+        try:
+            out = fn()
+        except Exception as exc:  # noqa: BLE001 - the window shows why
+            out = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+        with _LOCK:
+            JOBS[jid].update(status="done" if (out or {}).get("ok") else "failed", result=out, finished=time.time())
+    threading.Thread(target=run, daemon=True, name="manga-" + jid).start()
+    return jid
+
+
+def route(state, method: str, path: str, data: dict | None = None) -> tuple:
+    r = urlparse(path).path
+    q = {k: v[0] for k, v in parse_qs(urlparse(path).query).items()}
+    ws = _ws(state)
+    if method == "GET":
+        if r == "/manga/meta":
+            return 200, {"ok": True, "formats": list(manga.FORMATS), "styles": list(manga.STYLES),
+                         "layouts": list(manga.LAYOUTS) + ["strip", "column", "grid5", "grid6", "grid7", "grid8"],
+                         "shots": list(manga.SHOTS), "angles": list(manga.ANGLES), "kinds": list(manga.KINDS),
+                         "endings": manga.ENDINGS}
+        if r == "/manga/list":
+            return 200, manga.tool({"action": "list"}, ws)
+        if r == "/manga/project":
+            out = manga.tool({"action": "status", "project": q.get("id", "")}, ws)
+            if out.get("ok"):                     # each page's panels as boxes in % (the window's click targets)
+                proj = out["project"]
+                for pg in proj.get("pages") or []:
+                    if pg.get("panels"):
+                        W, H, boxes = manga.rects(proj, pg)
+                        pg["boxes"] = [{"n": p["n"], "x": round(100.0 * x / W, 2), "y": round(100.0 * y / H, 2),
+                                        "w": round(100.0 * w / W, 2), "h": round(100.0 * h / H, 2)}
+                                       for p, (x, y, w, h) in zip(pg["panels"], boxes)]
+            return (200 if out.get("ok") else 404), out
+        if r == "/manga/job":
+            j = JOBS.get(q.get("id", ""))
+            return (200, dict(j, ok=True)) if j else (404, {"ok": False, "error": "no such job"})
+        if r == "/manga/file":
+            base = manga.root(ws).resolve()
+            try:
+                p = (ws / q.get("path", "")).resolve()
+                p.relative_to(base)
+            except (OSError, ValueError):
+                return 403, {"ok": False, "error": "outside the manga folder"}
+            if not p.is_file():
+                return 404, {"ok": False, "error": "no such file"}
+            kind = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+                    ".pdf": "application/pdf", ".cbz": "application/zip"}.get(p.suffix.lower(), "application/octet-stream")
+            return 200, p.read_bytes(), kind
+        return 404, {"ok": False, "error": "Unknown endpoint."}
+    if r == "/manga/do":
+        a = dict(data or {})
+        act = str(a.get("action") or "")
+        if act in SLOW:
+            jid = _start(lambda: manga.tool(a, ws, make=_make(ws), ask=_ask(state)), "%s %s" % (act, a.get("project", "")))
+            return 200, {"ok": True, "job": jid}
+        out = manga.tool(a, ws, make=_make(ws), ask=_ask(state))
+        return (200 if out.get("ok") else 400), out
+    return 404, {"ok": False, "error": "Unknown endpoint."}

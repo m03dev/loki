@@ -6413,6 +6413,47 @@ TOOL_CATEGORIES["creative"] += ["make_3d", "render_scene"]
 MODIFYING |= {"make_3d"}
 
 
+async def manga_tool(**args) -> str:
+    """Manga Studio (engine/manga.py) for LOKI's own loop: the writing steps use this request's model, the drawing
+    steps wait for the owner's OK (one For you card per page / character sheet)."""
+    import make_mcp  # pylint: disable=import-outside-toplevel
+    import manga  # pylint: disable=import-outside-toplevel
+    import owner_review  # pylint: disable=import-outside-toplevel
+    waits = owner_review.gate("manga", args, WORKSPACE)
+    if waits is not None:
+        return json.dumps(waits)
+    loop = asyncio.get_running_loop()
+
+    def ask(prompt: str) -> str:
+        return asyncio.run_coroutine_threadsafe(_port_ask(prompt, max_tokens=4000), loop).result(timeout=300)
+    out = await asyncio.to_thread(manga.tool, args, WORKSPACE, lambda a: make_mcp.make_image(a, WORKSPACE), ask)
+    return json.dumps(out, default=str)
+
+
+async def design_tool(**args) -> str:
+    """Design (engine/design.py): OpenPencil design files in designs/, headless."""
+    import design  # pylint: disable=import-outside-toplevel
+    return json.dumps(await asyncio.to_thread(design.tool, args, WORKSPACE), default=str)
+
+
+LOCAL_TOOLS["design"] = design_tool
+_DESIGN_SCHEMA = schema("design", __import__("design").TOOL_SCHEMA["description"],
+                        __import__("design").TOOL_SCHEMA["inputSchema"]["properties"], ["action"])
+TOOL_SCHEMAS.append(_DESIGN_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_DESIGN_SCHEMA)
+MODEL_TOOL_NAMES.add("design")
+TOOL_CATEGORIES["creative"] += ["design"]
+MODIFYING |= {"design", "manga"}
+
+LOCAL_TOOLS["manga"] = manga_tool
+_MANGA_SCHEMA = schema("manga", __import__("manga").TOOL_SCHEMA["description"],
+                       __import__("manga").TOOL_SCHEMA["inputSchema"]["properties"], ["action"])
+TOOL_SCHEMAS.append(_MANGA_SCHEMA)
+MODEL_TOOL_SCHEMAS.append(_MANGA_SCHEMA)
+MODEL_TOOL_NAMES.add("manga")
+TOOL_CATEGORIES["creative"] += ["manga"]
+
+
 # --- the asset pipeline (engine/asset_pipeline.py): concept -> turnaround -> model -> finish -> render, each stage
 # checked before it is handed on, lessons kept per stage (owner 2026-10-26: "like an industry pipeline")
 async def asset_pipeline_tool(**args) -> str:

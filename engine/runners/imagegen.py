@@ -1,8 +1,8 @@
 """Make one image. stdin/stdout JSON, like every runner.
 
     {"prompt": "...", "width": 1024, "height": 1024, "out_dir": "<workspace>/images",
-     "backend": "auto" | "sdcpp" | "mflux" | "zimage" | "qwen" | "nvidia" | "huggingface", "seed": 0,
-     "count": 1-4, "negative": "..."}
+     "backend": "auto" | "sdcpp" | "mflux" | "zimage" | "qwen" | "nvidia" | "gemini" | "huggingface", "seed": 0,
+     "count": 1-4, "negative": "...", "reference": [paths], "reference_optional": false}
     -> {"ok", "file", "files", "seed", "seeds", "backend", ...}   (seed 0 = a random one, reported)
 
 Backends, in "auto" order:
@@ -19,7 +19,13 @@ Backends, in "auto" order:
                 when MODELSCOPE_API_KEY is set. Asynchronous: submit, then poll the task.
   nvidia        FLUX.2 [klein] / FLUX.1 [dev] / [schnell] on NVIDIA's hosted API (build.nvidia.com), with the
                 NVIDIA_API_KEY the chat already uses.
+  gemini        Google's Nano Banana image models (GEMINI_API_KEY, pay per picture) through the Interactions API -
+                up to 14 reference pictures, so a manga's character sheets keep the cast the same in every panel
+                (the model FURU's 4-koma system draws with). First for a job WITH reference pictures.
   huggingface   FLUX.1 [dev] / [schnell] through Hugging Face Inference (HF_TOKEN, free monthly credits).
+
+"reference_optional": a backend that cannot take the reference pictures draws without them instead of failing
+(Manga Studio's panels: the sheet helps, but a panel is still a panel without it).
 """
 import json
 import os
@@ -165,11 +171,15 @@ def plan_order(backend=None):
     hf = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
     if not hf:
         skipped["huggingface"] = "HF_TOKEN is not set"
+    gem = gemini_key()
+    if not gem:
+        skipped["gemini"] = "GEMINI_API_KEY is not set"
     # this machine's own model first (free, private), then the strongest hosted ones. No Pollinations any more
     # (owner 2026-10-26: "pollination is giving awful results lets get rid of it")
     order = ([local] if local_ready else []) + (["zimage"] if ready else []) + \
         (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + \
-        (["nvidia"] if os.environ.get("NVIDIA_API_KEY") else []) + (["huggingface"] if hf else [])
+        (["nvidia"] if os.environ.get("NVIDIA_API_KEY") else []) + (["gemini"] if gem else []) + \
+        (["huggingface"] if hf else [])
     if pc and not local_ready:        # the linked PC's own model (engine/offload.py): after the hosted ones the owner
         order.append("local")         # liked, before giving up; area edits always go to it (region_edit.py)
         skipped.pop(local, None)
@@ -618,6 +628,65 @@ def huggingface(prompt, width, height, out_dir, seed, opener=None):
     raise RuntimeError("Hugging Face image models: " + "; ".join(errors))
 
 
+# Google's Nano Banana image models (the Interactions API, snake_case; the image comes back as JPEG in the completed
+# model_output step - the same shape github.com/FURUYAN1234/nano-banana-pro uses, checked 2026-10-28)
+GEMINI_BASE = os.environ.get("LOKI_GEMINI_BASE", "https://generativelanguage.googleapis.com").rstrip("/")
+GEMINI_IMAGE_MODELS = [m.strip() for m in os.environ.get("LOKI_GEMINI_IMAGE_MODELS", "gemini-nano-banana-2.1").split(",")
+                       if m.strip()]
+GEMINI_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]
+
+
+def gemini_key() -> str:
+    return (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+
+
+def gemini_ratio(width, height) -> str:
+    want = width / float(height)
+    return min(GEMINI_RATIOS, key=lambda r: abs(int(r.split(":")[0]) / float(r.split(":")[1]) - want))
+
+
+def gemini(prompt, width, height, out_dir, seed, refs=None, opener=None):  # noqa: ARG001 - no seed in this API
+    import base64  # pylint: disable=import-outside-toplevel
+    key = gemini_key()
+    if not key:
+        raise RuntimeError("GEMINI_API_KEY is not set")
+    opener = opener or urllib.request.urlopen
+    parts = [{"type": "text", "text": prompt[:4000]}]
+    for r in (refs or [])[:14]:
+        data = _small_png(r, 1024)
+        parts.append({"type": "image", "mime_type": "image/png", "data": base64.b64encode(data).decode()})
+    size = "2K" if max(width, height) > 1400 else "1K"
+    errors = []
+    for model in GEMINI_IMAGE_MODELS:
+        body = {"model": model, "input": parts,
+                "response_format": {"type": "image", "mime_type": "image/jpeg", "aspect_ratio": gemini_ratio(width, height),
+                                    "image_size": size}}
+        req = urllib.request.Request(GEMINI_BASE + "/v1beta/interactions", data=json.dumps(body).encode(), method="POST",
+                                     headers={"x-goog-api-key": key, "Content-Type": "application/json",
+                                              "User-Agent": "Loki/1.0"})
+        try:
+            with opener(req, timeout=600) as resp:
+                d = json.loads(resp.read().decode("utf-8") or "{}")
+        except urllib.error.HTTPError as exc:
+            errors.append("%s: HTTP %s %s" % (model, exc.code, _http_detail(exc)[:160]))
+            if exc.code in (401, 403, 429):
+                break
+            continue
+        if d.get("error"):
+            errors.append("%s: %s" % (model, str(d["error"].get("message") or d["error"])[:200]))
+            continue
+        blocks = [c for st in d.get("steps") or [] for c in st.get("content") or [] if c.get("type") == "image" and c.get("data")]
+        if not blocks:
+            errors.append("%s: no picture in the answer (%s)" % (model, d.get("status", "?")))
+            continue
+        best = max(blocks, key=lambda c: len(c["data"]))
+        kind = str(best.get("mime_type") or "image/jpeg")
+        path = _out_path(out_dir, prompt, "png" if "png" in kind else "jpg")
+        path.write_bytes(base64.b64decode(best["data"]))
+        return {"file": str(path), "backend": "gemini", "model": model, "reference": bool(refs)}
+    raise RuntimeError("Gemini images: " + "; ".join(errors))
+
+
 def local(prompt, width, height, out_dir, seed, count=1, negative="", extra=None):
     """sd.cpp (PC) or mflux (Mac) through engine/creative.py; a whole batch in one go. `extra`: steps, guidance,
     sampler, and a reference picture + strength (image-to-image) from engine/image_settings.py."""
@@ -666,23 +735,33 @@ def main():
         if not prompt:
             raise ValueError("describe the image")
         order = plan_order(backend)["order"]
+        if refs and "gemini" in order and backend == "auto":   # keeping a subject the same: the model that reads refs
+            order.remove("gemini")
+            order.insert(1 if order and order[0] in ("sdcpp", "mflux") else 0, "gemini")
+        optional = bool(job.get("reference_optional"))
         errors = []
         for name in order:
             try:
                 if name in ("sdcpp", "mflux", "local"):
                     # a turnaround needs a model that can TURN the subject: FLUX.2 klein edit (mflux) - plain
                     # image-to-image only redraws the same view, so it is never used for that
-                    result = local(prompt, width, height, out_dir, seed, count, negative,
-                                   dict(extra, need_edit=bool(job.get("need_edit"))))
+                    ex = dict(extra, need_edit=bool(job.get("need_edit")))
+                    if optional:          # a character sheet is not a start picture (image-to-image would redraw it)
+                        ex.pop("reference", None)
+                    result = local(prompt, width, height, out_dir, seed, count, negative, ex)
                     print(json.dumps({"ok": True, **result}))
                     return
-                fn = {"zimage": zimage, "qwen": qwen, "nvidia": nvidia, "huggingface": huggingface}.get(name)
+                fn = {"zimage": zimage, "qwen": qwen, "nvidia": nvidia, "gemini": gemini,
+                      "huggingface": huggingface}.get(name)
                 if fn is None:
-                    raise ValueError("unknown backend %r (sdcpp, mflux, zimage, qwen, nvidia, huggingface)" % name)
-                if refs and name != "nvidia":
+                    raise ValueError("unknown backend %r (sdcpp, mflux, zimage, qwen, nvidia, gemini, huggingface)" % name)
+                if refs and name not in ("nvidia", "gemini") and not optional:
                     raise ValueError("%s cannot use a reference picture" % name)
-                if name == "nvidia":
-                    fn = (lambda p, w, h, o, sd, _x=extra: nvidia(p, w, h, o, sd, extra=_x))
+                if name == "nvidia":   # optional references are character sheets, not a picture to edit: left out
+                    fn = (lambda p, w, h, o, sd, _x=({k: v for k, v in extra.items() if k != "reference"} if optional
+                                                     else extra): nvidia(p, w, h, o, sd, extra=_x))
+                if name == "gemini":
+                    fn = (lambda p, w, h, o, sd, _r=refs: gemini(p, w, h, o, sd, refs=_r))
                 result = one_by_one(fn, prompt, width, height, out_dir, seed, count)
                 print(json.dumps({"ok": True, **result}))
                 return

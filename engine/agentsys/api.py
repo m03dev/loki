@@ -139,6 +139,16 @@ def route(state: Any, method: str, path: str, data: dict | None = None) -> tuple
                 if q.get("kind"):
                     return 200, {"ok": True, "playbook": playbook.load(q["kind"])}
                 return 200, {"ok": True, "playbooks": playbook.overview()}
+            if r == "/agentsys/foundation":   # the rulebook: owner's rules > constitution > domain playbooks
+                from . import foundation  # pylint: disable=import-outside-toplevel
+                books = []
+                for b in foundation.books().values():
+                    books.append({"name": b["name"], "title": b["title"], "specialists": b["specialists"],
+                                  "questions": len(b["questions"]), "triggers": b["triggers"][:12],
+                                  "stages": [{"id": s["id"], "specialist": s.get("specialist", ""), "gate": s.get("gate", ""),
+                                              "objective": s["objective"][:200]} for s in b["stages"]]})
+                principles = [l.strip() for l in foundation.constitution().splitlines() if l[:3].strip().rstrip(".").isdigit()]
+                return 200, {"ok": True, "rules": foundation.owner_rules(), "principles": principles, "books": books}
             if r == "/agentsys/upstream":
                 st = upstream.load_state()
                 reg = upstream.registry()

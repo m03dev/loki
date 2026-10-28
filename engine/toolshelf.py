@@ -32,7 +32,7 @@ from typing import Any, Callable
 
 HERE = Path(__file__).resolve().parent
 RECIPES = HERE / "toolshelf"
-AREAS = ("audio", "2d", "3d", "animation", "video", "marketing", "godot")
+AREAS = ("audio", "2d", "3d", "animation", "video", "marketing", "godot", "design", "testing")
 
 
 class ShelfError(RuntimeError):

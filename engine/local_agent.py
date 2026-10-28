@@ -65,7 +65,7 @@ Rules:
   photo pixel-art 3d-render texture ...; --upscale 4)
   loki-make 3d "<object>" [--backend pixal3d]   loki-make video "<clip>"   loki-make upscale pic.png
   loki-make pixel pic.png --size 64   loki-make music "<style>" --seconds 60   loki-make voice --action speak --text "Hi"
-  loki-make shelf --action list   (more tools: sfx, sprites, LODs, captions)
+  loki-make shelf --action list   (more: sfx, sprites, LODs; loki-make manga / design)
 - The owner's other machine: loki-make machines   loki-make run-on "<full task>" --machine mac   loki-make job --job <id> --machine mac
 - When the task is done AND you have checked it (ls, cat, run it, git log ...), reply with exactly:
 ```bash

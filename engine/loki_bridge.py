@@ -15,6 +15,7 @@ try:   # no console windows on Windows (engine/no_console.py)
 except Exception:  # noqa: BLE001
     pass
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -25,7 +26,8 @@ import traceback
 import time
 import uuid
 from contextlib import AsyncExitStack
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from quiet_server import QuietHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse, parse_qs, quote
@@ -147,7 +149,7 @@ def validate_session(state, project) -> None:
 def begin_sign_in(state, project) -> str:
     """Open the browser to Loki Cloud sign-in and capture the loopback code."""
     ensure_cloud_running()
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from http.server import BaseHTTPRequestHandler
 
     class Callback(BaseHTTPRequestHandler):
         def log_message(self, *_a) -> None:
@@ -177,7 +179,7 @@ def begin_sign_in(state, project) -> str:
             self.end_headers()
             self.wfile.write(html)
 
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Callback)
+    httpd = QuietHTTPServer(("127.0.0.1", 0), Callback)
     port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     redirect_uri = quote("http://127.0.0.1:%d/callback" % port, safe="")
@@ -1032,6 +1034,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
             from agentsys import api as _agentsys_api  # pylint: disable=import-outside-toplevel
             self._send_json(*_agentsys_api.route(self.server.state, "GET", self.path))
             return
+        if route.startswith("/manga/"):   # Manga Studio (engine/manga_api.py)
+            import manga_api  # pylint: disable=import-outside-toplevel
+            self._send_forge(manga_api.route(self.server.state, "GET", self.path))
+            return
+        if route.startswith("/design/"):   # Design: OpenPencil files (engine/design_api.py)
+            import design_api  # pylint: disable=import-outside-toplevel
+            self._send_forge(design_api.route(self.server.state, "GET", self.path))
+            return
         if route in ("/image/settings", "/image/info", "/image/remake", "/image/feedback"):   # engine/image_api.py
             import image_api  # pylint: disable=import-outside-toplevel
             q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
@@ -1558,6 +1568,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
         if route.startswith("/agentsys/"):   # interview, send back / park, orchestrate, upstream check (engine/agentsys/)
             from agentsys import api as _agentsys_api  # pylint: disable=import-outside-toplevel
             self._send_json(*_agentsys_api.route(state, "POST", self.path, data))
+            return
+        if route.startswith("/manga/"):   # Manga Studio (engine/manga_api.py)
+            import manga_api  # pylint: disable=import-outside-toplevel
+            self._send_json(*manga_api.route(state, "POST", self.path, data))
+            return
+        if route.startswith("/design/"):   # Design: OpenPencil files (engine/design_api.py)
+            import design_api  # pylint: disable=import-outside-toplevel
+            self._send_json(*design_api.route(state, "POST", self.path, data))
             return
         if route == "/review/decide":   # the owner approves / edits / rejects / sends back (engine/owner_review.py)
             import owner_review  # pylint: disable=import-outside-toplevel
@@ -2806,7 +2824,7 @@ def job_screenshot(state: "BridgeState", query: dict[str, list[str]]) -> tuple[i
     return 200, {"ok": True, "image": "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode("ascii")}
 
 
-class BridgeHTTPServer(ThreadingHTTPServer):
+class BridgeHTTPServer(QuietHTTPServer):   # a client hanging up is not an engine error (quiet_server.py)
     daemon_threads = True
     # SO_REUSEADDR: the engine must be able to rebind its port at once after a restart. A
     # previous instance that just exited leaves the port in TIME_WAIT, and macOS/Linux then
@@ -2826,15 +2844,6 @@ class BridgeHTTPServer(ThreadingHTTPServer):
     # with dead panels (Play, Creations, Brain, the drawing pad) or, if app.js or app.css is one of
     # the dropped ones, blank. A generous backlog costs nothing; both platforms accept it.
     request_queue_size = 128
-
-    def handle_error(self, request, client_address):  # noqa: D401
-        """A client that hangs up mid-reply (BrokenPipe/ConnectionReset - a probe sending junk, a
-        window closed while loading) is not an engine error: skip the traceback that buried real
-        errors in engine.out. Everything else is logged as before."""
-        exc = sys.exc_info()[1]
-        if isinstance(exc, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
-            return
-        super().handle_error(request, client_address)
 
     def __init__(self, state: BridgeState) -> None:
         super().__init__((HOST, PORT), BridgeHandler)

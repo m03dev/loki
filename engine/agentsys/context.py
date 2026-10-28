@@ -17,13 +17,13 @@ import os
 from pathlib import Path
 from typing import Any
 
-from . import playbook, toolbox
+from . import foundation, playbook, toolbox
 
 
 def budget(local: bool = False) -> int:
     if local:
-        return int(os.environ.get("LOKI_PREAMBLE_LOCAL_CHARS", "2500") or 2500)
-    return int(os.environ.get("LOKI_PREAMBLE_CHARS", "6000") or 6000)
+        return int(os.environ.get("LOKI_PREAMBLE_LOCAL_CHARS", "4000") or 4000)
+    return int(os.environ.get("LOKI_PREAMBLE_CHARS", "10000") or 10000)
 
 
 def _memory(task: str, agent: Any) -> tuple:
@@ -49,9 +49,18 @@ def build(task: str, agent: Any = None, local: bool = False, ledger_text: str = 
     if with_tools and agent is not None:
         names = toolbox.for_task(task, list(getattr(agent, "TOOL_SCHEMAS", []) or []), limit=6)
         tools_text = "Tools that fit this task:\n" + toolbox.describe(names, agent) if names else ""
-    sections = [("extra", extra), ("memory", mem_text), ("playbook", pb), ("tools", tools_text), ("ledger", ledger_text)]
-    # trim from the least important end until it fits: tools, then memory, then the playbook's tail
-    order_to_cut = ["tools", "memory", "playbook", "extra"]
+    # the foundation (skills/playbooks): the owner's rules, the constitution, this kind of work's playbook
+    try:
+        rules = foundation.owner_rules_text()
+        consti = foundation.constitution_brief(900 if local else 1800)
+        domain = foundation.brief(task, playbook.kind_of(task), limit=1200 if local else 3500)
+    except Exception:  # noqa: BLE001
+        rules = consti = domain = ""
+    sections = [("rules", rules), ("constitution", consti), ("extra", extra), ("domain", domain), ("memory", mem_text),
+                ("playbook", pb), ("tools", tools_text), ("ledger", ledger_text)]
+    # trim from the least important end until it fits: tools, memory, the learned lines' tail, the domain playbook's
+    # tail, the constitution - the owner's rules are never cut
+    order_to_cut = ["tools", "memory", "playbook", "domain", "constitution", "extra"]
     parts = {k: (v or "").strip() for k, v in sections}
 
     def size() -> int:

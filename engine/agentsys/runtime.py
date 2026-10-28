@@ -490,6 +490,30 @@ def _say(cid: str):
     return say
 
 
+def _check_off(step: dict, res: dict, run: dict) -> str:
+    """A gated stage's hand-off goes to Home > For you as a result card (the owner checks it off or sends it back)."""
+    import owner_review  # pylint: disable=import-outside-toplevel
+    if not owner_review.on():
+        return ""
+    ws = str(getattr(_agent(), "WORKSPACE", ".") or ".")
+    card = owner_review.queue("result", "orchestrator", {"prompt": step["objective"], "run": run["id"], "stage": step["id"]},
+                              ws, who=step["specialist"], files=res.get("files") or [],
+                              handoff=("%s - %s\n\n%s" % (step["id"], step["objective"], res.get("summary", "")))[:4000])
+    return card["id"]
+
+
+def _card_state(card_id: str) -> tuple:
+    import owner_review  # pylint: disable=import-outside-toplevel
+    it = owner_review.get(card_id) or {}
+    return str(it.get("status") or ""), str(it.get("note") or "")
+
+
+def _orchestrator(conversation_id: str = "") -> "orchestrator.Orchestrator":
+    orch = orchestrator.Orchestrator(_ask, _worker, specialists(), on_event=_say(conversation_id))
+    orch.check_off, orch.card_state = _check_off, _card_state
+    return orch
+
+
 def start_orchestration(goal: str, conversation_id: str = "") -> dict:
     """Run the delegation loop in the background on the engine's loop; the report lands in the chat (or Lab)."""
     state, agent = STATE["state"], _agent()
@@ -498,7 +522,7 @@ def start_orchestration(goal: str, conversation_id: str = "") -> dict:
         return {"ok": False, "error": "the engine is not running"}
     import uuid  # pylint: disable=import-outside-toplevel
     run_id = uuid.uuid4().hex[:12]
-    orch = orchestrator.Orchestrator(_ask, _worker, specialists(), on_event=_say(conversation_id))
+    orch = _orchestrator(conversation_id)
     if conversation_id:
         try:
             agent.append_to_conversation(conversation_id, "user", goal.split("\n\n" + interview.ANSWERS_MARK)[0])
@@ -525,7 +549,7 @@ def resume_orchestration(run_id: str, conversation_id: str = "") -> dict:
     loop = getattr(state, "loop", None)
     if loop is None:
         return {"ok": False, "error": "the engine is not running"}
-    orch = orchestrator.Orchestrator(_ask, _worker, specialists(), on_event=_say(conversation_id))
+    orch = _orchestrator(conversation_id)
 
     async def go() -> None:
         run = await orch.resume(run_id)
@@ -554,6 +578,8 @@ def parked_orchestrations_ready() -> list:
         except (OSError, ValueError):
             continue
         jobs = {str((s.get("result") or {}).get("job") or "") for s in run["steps"] if s["status"] == "waiting"}
-        if not (jobs & open_jobs):
+        cards = [s.get("card") for s in run["steps"] if s["status"] == "waiting" and s.get("card")]
+        cards_open = any(_card_state(c)[0] in ("waiting", "working") for c in cards)
+        if not (jobs & open_jobs) and not cards_open and not any(_card_state(c)[0] == "parked" for c in cards):
             out.append(r["id"])
     return out

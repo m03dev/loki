@@ -31,7 +31,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-GATED_TOOLS = ("make_image", "make_turnaround", "make_sprite")   # every picture an agent makes (owner's choice)
+GATED_TOOLS = ("make_image", "make_turnaround", "make_sprite", "manga")   # every picture an agent makes (owner's choice)
 MARK = "WAITING FOR THE OWNER"
 OWNER_OK = "_owner_ok"           # set by LOKI after the owner approved: the call goes through
 KINDS = ("prompt", "result", "question", "upstream")
@@ -149,6 +149,15 @@ def gate(tool: str, args: dict, cwd) -> dict | None:
     """make_mcp.call asks this first. None = go ahead; else the answer the agent gets instead of a picture."""
     if tool not in GATED_TOOLS or not on() or (args or {}).get(OWNER_OK):
         return None
+    if tool == "manga":                  # Manga Studio: only its drawing steps wait - one card per page / sheet
+        try:
+            import manga  # pylint: disable=import-outside-toplevel
+            text = manga.card_text(args or {}, cwd)
+        except Exception:  # noqa: BLE001 - a step that draws nothing goes ahead
+            text = ""
+        if not text:
+            return None
+        args = dict(args or {}, prompt=text, _card=text)
     it = queue("prompt", tool, args or {}, str(cwd))
     words = str((args or {}).get("prompt") or (args or {}).get("subject") or "")[:200]
     return {"ok": False, "waiting_for_owner": True, "review": it["id"],
@@ -228,6 +237,8 @@ def decide(item_id: str, action: str, prompt: str = "", note: str = "", ws=None,
     _save(it)
     if it.get("asset") and ws is not None:
         _pipeline().owner_result(Path(ws), it["asset"], it["stage"], ok=action == "approve", note=note)
+    elif action == "retake" and it.get("tool") == "orchestrator":
+        pass        # a specialist team's hand-off: the orchestrator sends the stage back with this note (agentsys)
     elif action == "retake":
         # the old prompt + the note comes back as a new card; nothing is redrawn until the owner approves it
         src = get(it.get("parent") or "") or {}

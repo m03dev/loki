@@ -69,6 +69,7 @@ a.as-item-t { color: var(--accent); text-decoration: none; }
 .as-chip { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: rgba(0, 0, 0, .25); color: var(--muted); }
 .as-chip.as-done { color: var(--ok); }
 .as-chip.as-failed { color: var(--err); }
+.as-chip.as-gate { box-shadow: inset 0 0 0 1px var(--accent, #6c9bd2); }
 .as-chip.as-waiting, .as-chip.as-working { color: var(--warn); }
 .as-pb { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 8px; }
 .as-pb-card { display: flex; flex-direction: column; gap: 5px; padding: 8px; border-radius: 9px; background: rgba(0, 0, 0, .16); min-width: 0; }

@@ -12,7 +12,7 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-28 12:00 (the agent system, engine/agentsys/); before that 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
+Last updated: 2026-10-28 21:00 (the foundation, Manga Studio, Design + phone testing); before that 2026-10-28 12:00 (the agent system, engine/agentsys/); before that 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
 
 ## The machines
 
@@ -26,6 +26,35 @@ The repo is PUBLIC and AGPL-3.0 since 2026-10-17 (W43, 910dab2). Branch `master`
 mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it only emailed failures); the suites run locally and the Windows build workflow stays.
 
 ## Now (2026-10-25)
+
+**2026-10-28 21:00 (Claude) - the foundation (playbooks are the rules), Manga Studio, Design (OpenPencil), phone testing.**
+- Foundation (engine/agentsys/foundation.py): owner's rules (AGENTS.md, word for word) > skills/playbooks/CONSTITUTION.md
+  (how LOKI's agents work, 15 principles + the hand-off block) > 14 domain playbooks skills/playbooks/<kind>/PLAYBOOK.md
+  (general, code, image, turnaround, 3d, video, render, research, writing, marketing, design, mobile-test, music,
+  manga): stages = the orchestrator's plan, questions = the interview, checklist = what every result is checked
+  against, plus quality bar, failure modes, tools. Fed into every harness's preamble (context.py), the interview and
+  the orchestrator. Lab > System shows it ("Foundation"); the learned lines are "Learned lines".
+- Manga Studio (engine/manga.py, manga_api.py, Forge > Workspace > Manga, the `manga` tool): Oniichan's features and
+  FURU's 4-koma method rebuilt (no code copied - FURU's terms forbid it in AGPL): project -> outline -> cast with locked
+  looks + reference sheets (library across projects) -> per-page panel script -> each panel drawn alone at its shape
+  with no text -> real lettering (speech, thought, shout, whisper, narration, sfx; OFL fonts in engine/data/fonts) ->
+  review -> PDF/CBZ; 4-koma strip, 5-8 panel pages, webtoon, rtl. Agents: writer/artist/editor specialists
+  (art_specialists, skills/art-pipeline/manga-*); every drawing step = one For you card per page / sheet.
+- Gemini "Nano Banana" image backend (runners/imagegen.py "gemini", GEMINI_API_KEY, paid): takes up to 14 reference
+  pictures - first for jobs WITH references (manga panels with character sheets). Panels pass reference_optional:
+  backends that cannot use references draw without them (local img2img never redraws the sheet).
+- Design (engine/design.py, design_api.py, Forge > Workspace > Design, the `design` tool): OpenPencil's CLI headless
+  (import HTML/CSS, render JSX, eval, any core tool, export png/svg/jsx/tailwind-jsx/html/pptx, lint, tree); a PNG
+  preview after every change. Tool Shelf recipe "openpencil" installs it into LOKI's data folder; else npx. PDF export
+  is broken in 0.16.0. OpenPencil's own MCP server starts only while its desktop app is open.
+- Phone testing: mobile-mcp 1.0.14 in engine/mcp_servers.json ("mobile", 14 tools), started only when a simulator /
+  emulator / phone is reachable (engine/mobile_test.py); Forge > Design shows the devices and "Test the Phone App".
+- Root causes from the machines' logs: the PC's failed jobs ended in ConnectionResetError tracebacks from LOKI's local
+  servers (a client hanging up) - every local server is now engine/quiet_server.py; /open/link (a link clicked in
+  chat) crashed on a missing `import re`. The Mac's upstream-adopt failures (slow NVIDIA -> 404 routes) predate
+  46eef6d, which fixes them.
+- tests: test_manga (40), test_design (30, one real OpenPencil run), test_agentsys (+foundation), test_agentsys_ui.
+- Open: the proofs in LOKI_TASKS.md (manga page on the PC, design on the Mac, phone test on the PC).
 
 **2026-10-28 14:30 (Claude) - why every agent job came back failed (seen in the Mac's and the PC's real job logs).**
 - The Mac: NVIDIA DeepSeek V4.1 Flash was the ONLY route that worked; at 200 s a step it was "too slow" and the turn

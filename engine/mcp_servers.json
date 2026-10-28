@@ -176,6 +176,54 @@
       "enabled": false,
       "cwd": "${LOKI_DATA}",
       "note": "dcc-mcp-blender (github.com/loonghao/dcc-mcp-blender, MIT): ~205 typed Blender tools (mesh, UV, rigging, materials, render). Needs its own Blender extension installed; Blender 5.x support unverified. Opt in with LOKI_MCP_ENABLE=blender_dcc after LOKI_TASKS checks it on the PC."
+    },
+    "mobile": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mobilenext/mobile-mcp@1.0.14"
+      ],
+      "requires_cmd": "npx",
+      "requires_check": "mobile_test.devices_ready",
+      "env": {
+        "MOBILEMCP_DISABLE_TELEMETRY": "1",
+        "MOBILEMCP_ALLOW_UNSAFE_URLS": "1"
+      },
+      "tools": [
+        "mobile_list_available_devices",
+        "mobile_install_app",
+        "mobile_launch_app",
+        "mobile_terminate_app",
+        "mobile_list_apps",
+        "mobile_list_elements_on_screen",
+        "mobile_click_on_screen_at_coordinates",
+        "mobile_type_keys",
+        "mobile_swipe_on_screen",
+        "mobile_press_button",
+        "mobile_open_url",
+        "mobile_save_screenshot",
+        "mobile_get_screen_size",
+        "mobile_get_device_logs"
+      ],
+      "note": "mobile-mcp (github.com/mobile-next/mobile-mcp, Apache-2.0), pinned so the Mac and the PC run the same one. Tests apps on iOS simulators (Mac, Xcode), Android emulators and phones (PC, adb). Starts only when a device is reachable (engine/mobile_test.py; LOKI_MOBILE_MCP=on forces it). Screenshots are of the phone only. Telemetry off."
+    },
+    "openpencil": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "-p",
+        "@open-pencil/mcp@0.16.0",
+        "openpencil-mcp"
+      ],
+      "requires_cmd": "npx",
+      "requires_check": "design.app_running",
+      "env": {
+        "OPENPENCIL_TELEMETRY": "0",
+        "DO_NOT_TRACK": "1",
+        "OPENPENCIL_MCP_EVAL": "1"
+      },
+      "max_tools": 40,
+      "note": "OpenPencil's MCP server (github.com/open-pencil/open-pencil, MIT): edits the design open in the OpenPencil desktop app live. It only works while the app is open, so it starts only then (design.app_running). Without the app LOKI's own `design` tool does the same work headlessly on designs/*.fig (engine/design.py)."
     }
   }
 }

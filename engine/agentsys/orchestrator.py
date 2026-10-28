@@ -129,6 +129,7 @@ def normalize_plan(plan: Any, specialists: dict, limit: int) -> list:
                     "boundaries": _clip(st.get("boundaries") or "only this step's objective", 300),
                     "writes": bool(st.get("writes", True)), "depends_on": [str(d) for d in (st.get("depends_on") or [])],
                     "check": _clip(st.get("check") or "the output exists and matches the objective", 300),
+                    "gate": "owner" if str(st.get("gate") or "").lower() == "owner" else "",
                     "status": "todo", "attempts": 0, "result": None, "review": None})
         if len(out) >= limit:
             break
@@ -171,6 +172,8 @@ class Orchestrator:
                  specialists: dict, budget: guardrails.Budget | None = None,
                  exists: Callable[[str], bool] | None = None, on_event: Callable[[str, str], None] | None = None):
         self._ask, self.run_worker, self.specialists = ask, run_worker, dict(specialists or {})
+        self.check_off: Callable | None = None     # (step, result, run) -> For you card id (the owner's check-off)
+        self.card_state: Callable | None = None    # card id -> (status, note)
         self.ask_timeout = float(os.environ.get("LOKI_ORCH_ASK_S", "120") or 120)
         self.specialists.setdefault("worker", "a general agent: does any step with the full tool set")
         self.budget = budget or guardrails.Budget()
@@ -200,9 +203,26 @@ class Orchestrator:
             pass
 
     # ------------------------------------------------------------------ the outer loop
+    def skeleton(self, goal: str) -> list:
+        """The domain playbook's stages for this goal (skills/playbooks/<kind>/PLAYBOOK.md), or []."""
+        try:
+            from . import foundation  # pylint: disable=import-outside-toplevel
+            return foundation.stages(goal)
+        except Exception:  # noqa: BLE001
+            return []
+
     async def ledger(self, goal: str, previous: str = "") -> dict:
+        skel = self.skeleton(goal)
+        for st in skel:                       # a playbook's specialists are always available to the plan
+            self.specialists.setdefault(st.get("specialist") or "worker", "the playbook's %s" % (st.get("specialist") or "worker"))
         specs = "\n".join("- %s: %s" % (k, _clip(v, 160)) for k, v in self.specialists.items())
-        prompt = LEDGER_PROMPT % {"goal": _clip(goal, 4000), "specialists": specs, "effort": EFFORT,
+        effort = EFFORT
+        if skel:
+            effort += ("\n\nTHE PLAYBOOK for this kind of work gives the stages - use them as the plan's skeleton, in this "
+                       "order, keep their ids, specialists, tools, checks and owner gates; fill each objective and output "
+                       "in for THIS goal; drop a stage only if the goal clearly does not need it:\n"
+                       + json.dumps(skel, ensure_ascii=False)[:5000])
+        prompt = LEDGER_PROMPT % {"goal": _clip(goal, 4000), "specialists": specs, "effort": effort,
                                   "previous": ("\nThe last plan stalled. What happened:\n" + previous +
                                                "\nRewrite the facts (what we now know) and plan ONLY the remaining work.")
                                   if previous else ""}
@@ -211,7 +231,18 @@ class Orchestrator:
                 data = _json(await self.ask(prompt))
             except Exception as exc:  # noqa: BLE001 - one plain step with the general worker
                 data = {"facts_given": [], "acceptance": [], "plan": [], "error": str(exc)[:200]}
-        plan = normalize_plan(data.get("plan"), self.specialists, limit=8)
+        plan = normalize_plan(data.get("plan"), self.specialists, limit=10)
+        if not plan and skel and not previous:     # no model: the playbook's own stages, as they are
+            plan = normalize_plan([dict(st, objective="%s (for: %s)" % (st["objective"], _clip(goal, 200))) for st in skel],
+                                  self.specialists, limit=10)
+        by_id = {st["id"]: st for st in skel}
+        for st in plan:                       # the owner's gates and the playbook's checks are never dropped by a model
+            src = by_id.get(st["id"])
+            if src:
+                if src.get("gate") == "owner":
+                    st["gate"] = "owner"
+                if src.get("check") and src["check"] not in st["check"]:
+                    st["check"] = _clip(st["check"] + "; " + src["check"], 600)
         if not plan:
             plan = normalize_plan([{"id": "s1", "specialist": "worker", "objective": goal[:400],
                                     "output": "the finished result with file paths", "writes": True}],
@@ -238,8 +269,17 @@ class Orchestrator:
         p = folder() / ("%s.json" % run_id)
         run = json.loads(p.read_text(encoding="utf-8"))
         for s in run["steps"]:
-            if s["status"] == "waiting":
-                s["status"] = "todo"           # the owner answered: that step goes again, the done ones stay done
+            if s["status"] != "waiting":
+                continue
+            verdict = self.card_state(s["card"]) if s.get("card") and self.card_state else ("", "")
+            if verdict[0] == "approved":       # he checked the hand-off off: the stage is done
+                s["status"] = "done"
+            elif verdict[0] in ("retake", "rejected"):   # sent back with his note: the same specialist again
+                s["status"], s["owner_note"] = "todo", verdict[1]
+            elif verdict[0] in ("parked",):
+                s["status"] = "waiting"        # not now: it keeps waiting
+            else:
+                s["status"] = "todo"           # the owner answered a picture prompt: that step goes again
         run["status"] = "working"
         with trace.span("invoke_agent orchestrator (resume)", "agent", **{"loki.orchestration": run_id}) as sp:
             await self._loop(run)
@@ -302,6 +342,8 @@ class Orchestrator:
             self.budget.steps += 1
             step["attempts"] += 1
             step["status"] = "working"
+            if step.get("owner_note") and not fixes:
+                fixes = ["The owner sent this back: " + step.pop("owner_note")]
             text = brief(step, run["goal"], (run["ledgers"] or [{}])[-1], done, fixes, instruction)
             self._say("task", "%s -> %s: %s" % (step["id"], step["specialist"], step["objective"][:160]))
             with trace.span("invoke_agent %s" % step["specialist"], "handoff",
@@ -326,6 +368,16 @@ class Orchestrator:
             review = await self._review(step, res)
             step["review"] = review
             if review.get("pass"):
+                if step.get("gate") == "owner" and self.check_off is not None:
+                    # the owner's rule 8: every hand-off waits for his check-off (Home > For you)
+                    try:
+                        step["card"] = self.check_off(step, res, run)
+                    except Exception:  # noqa: BLE001 - no For you here: the check passed, it goes on
+                        step["card"] = ""
+                    if step.get("card"):
+                        step["status"] = "waiting"
+                        self._say("task", "%s waits for your check-off in Home > For you." % step["id"])
+                        return
                 step["status"] = "done"
                 return
             if step["attempts"] > self.budget.max_revisions or not self.budget.check().ok:
@@ -346,8 +398,14 @@ class Orchestrator:
             return {"pass": False, "fixes": ["it was blocked: %s" % res["summary"][:300]]}
         try:
             with trace.span("evaluate %s" % step["id"], "guardrail"):
+                try:
+                    from . import foundation  # pylint: disable=import-outside-toplevel
+                    book = foundation.checklist_for(step["objective"], step["id"])
+                except Exception:  # noqa: BLE001
+                    book = ""
                 data = _json(await self.ask(REVIEW_PROMPT % {
-                    "objective": step["objective"], "output": step["output"], "check": step["check"],
+                    "objective": step["objective"], "output": step["output"],
+                    "check": step["check"] + (("\nThe playbook's checklist for this work:\n" + book[:2500]) if book else ""),
                     "summary": res["summary"][:3000], "files": ", ".join(res["files"]) or "none",
                     "missing": ", ".join(missing) or "none"}))
             return {"pass": bool(data.get("pass")), "fixes": [_clip(f, 300) for f in (data.get("fixes") or [])][:5]}
