@@ -80,6 +80,11 @@ def settings_yaml(provider: dict) -> str:
     clean = lambda s: "".join(ch for ch in str(s) if ch.isalnum() or ch in "-_./:@")   # noqa: E731
     if not base or any(h in base for h in OFFICIAL_HOSTS):
         return "agent-default-model:\n  provider: deepseek-official\n  model: %s\n" % clean(model)
+    if "/" in model and "127.0.0.1" in base and "/u/" in base:
+        # dsh reads "a/b" as provider/model and never finds it (UNKNOWN_MODEL, benched on the Mac for days): it gets a
+        # plain alias, and LOKI's proxy (which it already goes through) sends the real name upstream
+        import dsml_proxy  # pylint: disable=import-outside-toplevel
+        model = dsml_proxy.alias_for(model)
     return ("agent-default-model:\n  provider: loki-deepseek\n  model: %s\n"
             "llm-pi-ai:\n  providers:\n    loki-deepseek:\n      displayName: LOKI DeepSeek\n      apiKeyEnv: LOKI_DSH_KEY\n"
             "      api: openai-completions\n      baseURL: %s\n      defaultContextWindow: 131072\n"
@@ -152,6 +157,7 @@ def changes(before: dict, after: dict) -> list:
 
 
 STALL_S = float(os.getenv("LOKI_DSH_STALL_S", "900") or 900)
+MODEL_NAME_FIX_T = 1793229300.0     # 2026-10-28: dsh got slash-free model names from here on
 BENCH_S = float(os.getenv("LOKI_DSH_BENCH_S", "86400") or 86400)
 
 
@@ -168,6 +174,8 @@ def benched(home, name: str, now: float | None = None) -> str:
     except (OSError, ValueError):
         return ""
     entry = data.get(name) or {}
+    if "UNKNOWN_MODEL" in str(entry.get("why") or "") and float(entry.get("t") or 0) < MODEL_NAME_FIX_T:
+        return ""     # benched by LOKI's own model-name bug (fixed: slash-free alias); try it again
     if entry.get("ok") is False and (now or time.time()) - float(entry.get("t") or 0) < BENCH_S:
         return str(entry.get("why") or "it failed")
     return ""

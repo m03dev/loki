@@ -160,6 +160,38 @@ check("a failed run benches dsh for a day; a success clears it", "no progress" i
       and not dsh_engine.benched(_hd, "nvidia", now=__import__("time").time() + 90000))
 dsh_engine.record(_hd, "nvidia", True)
 check("... (cleared)", not dsh_engine.benched(_hd, "nvidia"))
+# ---- a model name with "/" (dsh reads it as provider/model: UNKNOWN_MODEL, benched on the Mac for days)
+import json as _json  # noqa: E402
+import threading as _th  # noqa: E402
+import urllib.request as _ur  # noqa: E402
+from http.server import BaseHTTPRequestHandler as _H, HTTPServer as _S  # noqa: E402
+import dsml_proxy  # noqa: E402
+_got = []
+
+
+class _Up(_H):
+    def log_message(self, *a): pass
+
+    def do_POST(self):  # noqa: N802
+        _got.append(_json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+        d = _json.dumps({"choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}}]}).encode()
+        self.send_response(200); self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)
+
+
+_up = _S(("127.0.0.1", 0), _Up)
+_th.Thread(target=_up.serve_forever, daemon=True).start()
+_purl = dsml_proxy.proxy().url_for("http://127.0.0.1:%d/v1" % _up.server_address[1])
+nv = dsh_engine.settings_yaml({"base_url": _purl, "model": "deepseek-ai/deepseek-v4.1-flash"})
+_alias = nv.split("model: ", 1)[1].split("\n", 1)[0]
+check("through LOKI's proxy dsh gets a slash-free model name", "/" not in _alias and "id: %s" % _alias in nv, nv)
+_ur.urlopen(_ur.Request(_purl + "/chat/completions", data=_json.dumps({"model": _alias, "messages": []}).encode(),
+                        headers={"Content-Type": "application/json"}), timeout=10).read()
+check("... and the proxy sends the real name upstream", _got and _got[-1]["model"] == "deepseek-ai/deepseek-v4.1-flash", _got)
+dsh_engine.record(_hd, "nvidia", False, 'dsh exited 1: dsh: UNKNOWN_MODEL: pi-ai provider "loki-deepseek" has no configured model "x"')
+_h = _json.loads((Path(_hd) / "health.json").read_text()); _h["nvidia"]["t"] = 1793211679.0
+(Path(_hd) / "health.json").write_text(_json.dumps(_h))
+check("a bench from that old model-name bug is lifted (dsh is tried again)", not dsh_engine.benched(_hd, "nvidia"))
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

@@ -354,6 +354,8 @@ class _Proxy:
                 body = self.rfile.read(n) if n else None
                 headers = {k: v for k, v in self.headers.items()
                            if k.lower() not in ("host", "content-length", "connection", "accept-encoding")}
+                if body and "chat/completions" in url and MODEL_ALIASES:
+                    body = _unalias(body)
                 req = urllib.request.Request(url, data=body, method=method, headers=headers)
                 if "chat/completions" in url:
                     _pace(url)
@@ -518,6 +520,32 @@ class _Proxy:
 
 
 _PROXY: dict = {}
+# A client that cannot take a model name with "/" in it gets a plain alias and the proxy sends the real name upstream
+# (2026-10-28, the Mac: DeepSeek Harness benched for days - "UNKNOWN_MODEL ... deepseek/deepseek-v4.1-flash" - because dsh
+# reads "deepseek-ai/deepseek-v4.1-flash" as a provider/model pair). alias -> real name.
+MODEL_ALIASES: dict = {}
+
+
+def alias_for(model: str) -> str:
+    """A slash-free name for `model` that this proxy turns back into `model` on the way out."""
+    model = str(model or "")
+    if "/" not in model:
+        return model
+    alias = "loki--" + model.replace("/", "--")
+    MODEL_ALIASES[alias] = model
+    return alias
+
+
+def _unalias(body: bytes) -> bytes:
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return body
+    real = MODEL_ALIASES.get(str(data.get("model") or "")) if isinstance(data, dict) else None
+    if not real:
+        return body
+    data["model"] = real
+    return json.dumps(data).encode()
 
 
 def proxy() -> _Proxy:
