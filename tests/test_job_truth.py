@@ -158,6 +158,10 @@ check("no lazy pictures in the window (WebKit, the Mac's window, never loads the
 _hr = (_ui / "home_review.js").read_text(encoding="utf-8")
 check("For you resolves a card's relative files against the card's own folder", "media(f, img, it)" in _hr
       and "it.cwd" in _hr)
+import team  # noqa: E402
+_old = team.present({"id": "t1", "goal": "a manga", "roles": ["art_manga_writer", "builder"], "status": "done"}, {})
+check("a saved team naming a retired role still shows (the PC's status call broke 78 times on art_manga_writer)",
+      _old["roles"][0].startswith("Manga Writer") and _old["roles"][1] == "Builder", _old.get("roles"))
 check("this suite stays under 60 s", time.time() - T0 < 60, time.time() - T0)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

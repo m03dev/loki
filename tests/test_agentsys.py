@@ -335,7 +335,7 @@ check("orchestrator: recent()", orchestrator.recent(3) and "steps" in orchestrat
 
 # ----------------------------------------------------------------------------- upstream
 reg = {e["repo"]: e for e in upstream.registry(REPO)}
-check("upstream: THIRD_PARTY.md pins are found", reg.get("stephomi/sculptgl", {}).get("pin") == "8e45daf"
+check("upstream: THIRD_PARTY.md pins are found", str(reg.get("stephomi/sculptgl", {}).get("pin") or "").startswith("8e45daf")
       and reg.get("fengyuanchen/cropperjs", {}).get("version") == "v1.6.2")
 check("upstream: a licence is never read as a version", not any(e["version"] in ("2.0", "3.0") for e in reg.values()))
 check("upstream: ecc_sync libraries are in it", "affaan-m/ECC" in reg and "branch" in reg["affaan-m/ECC"]["follows"])

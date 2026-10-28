@@ -50,16 +50,23 @@ const ForgeManga = (() => {
     return text;
   }
 
-  async function picture(path, img) {
+  async function picture(path, img, tries) {
     if (!path) { img.removeAttribute("src"); return; }
     const key = path + "@" + ((S.proj && S.proj.updated) || 0);
     if (S.blobs[key]) { img.src = S.blobs[key]; return; }
+    let why = "";
     try {
       const r = await fetch("/manga/file?path=" + encodeURIComponent(path), { headers: { Authorization: "Bearer " + state.token } });
-      if (!r.ok) return;
-      const url = await dataUrl(await r.blob());     // a data URL: the window's CSP allows img-src 'self' data:, never blob:
-      S.blobs[key] = url; img.src = url;
-    } catch (_) { /* the page shows without it */ }
+      if (r.ok) {
+        const url = await dataUrl(await r.blob());   // a data URL: the window's CSP allows img-src 'self' data:, never blob:
+        const probe = new Image(); probe.src = url;
+        await probe.decode();                         // a picture caught half-written is never cached (it shows blank)
+        S.blobs[key] = url; img.src = url; img.title = ""; return;
+      }
+      why = ((await r.json().catch(() => ({}))).error) || "HTTP " + r.status;
+    } catch (e) { why = "not a whole picture yet"; }
+    img.title = path.split("/").pop() + " - " + why;
+    if ((tries || 0) < 5 && img.isConnected) setTimeout(() => picture(path, img, (tries || 0) + 1), 2500);
   }
 
   // ---------------------------------------------------------------- the panel
@@ -273,6 +280,9 @@ const ForgeManga = (() => {
     box.replaceChildren();
     const pn = pg && (pg.panels || []).find((x) => x.n === S.sel);
     if (!pn) { box.append(el("div", "fmg-hint", "Click a panel on the page (or in the script) to change it.")); return; }
+    if (pn.image) {                                   // the panel's own picture, uncropped
+      const pi = el("img", "fmg-panelimg"); pi.alt = "Panel " + pn.n; box.append(pi); picture(pn.image, pi);
+    }
     const kinds = (S.meta && S.meta.kinds) || ["speech", "thought", "shout", "whisper", "narration", "sfx"];
     const act = area(pn.action, "What we see", 3);
     const style = select((S.meta && S.meta.styles) || ["normal"], pn.style);
@@ -325,7 +335,7 @@ const ForgeManga = (() => {
     if (!d.job) { say(action + " done."); return refresh(S.proj.id); }
     S.busy = action; say(label(action) + " ...");
     const t0 = Date.now();
-    for (;;) {
+    for (let tick = 1; ; tick++) {
       await new Promise((r) => setTimeout(r, 1500));
       const j = await call("/manga/job?id=" + d.job);
       if (!j.ok || j.status !== "running") {
@@ -335,6 +345,11 @@ const ForgeManga = (() => {
         return refresh(S.proj.id);
       }
       say(label(action) + " ... " + Math.round((Date.now() - t0) / 1000) + " s");
+      // the page shows each panel as it is drawn (the engine composes after every panel)
+      if (/draw|edit_panel|sheet/.test(action) && tick % 4 === 0) {
+        const p = await call("/manga/project?id=" + encodeURIComponent(S.proj.id));
+        if (p && p.ok && p.project.updated !== S.proj.updated) { S.proj = p.project; S.review = p.review; drawProject(); }
+      }
     }
   }
   function label(a) { return { outline: "Writing the outline", characters: "Writing the cast", script: "Writing page " + S.page, sheet: "Drawing the sheet", draw_page: "Drawing page " + S.page, edit_panel: "Redrawing the panel", letter: "Lettering" }[a] || a; }

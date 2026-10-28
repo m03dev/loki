@@ -68,3 +68,4 @@
 #forge .fds-code, #forge .fds-css { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
 #forge .fds-pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10px; max-height: 40vh; overflow: auto; margin: 0; }
 #forge .fds-format { width: auto; }
+#forge .fmg-panelimg { display: block; width: 100%; max-height: 40%; object-fit: contain; background: #fff; border-radius: 3px; margin: 0 0 2% 0; }

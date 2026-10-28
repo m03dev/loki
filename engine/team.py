@@ -26,7 +26,18 @@ import time
 import uuid
 from pathlib import Path
 
-ROLES = {
+class _Roles(dict):
+    """A team saved with a role LOKI has since retired (2026-10-28, the PC: the manga specialists were removed and a
+    saved team that named art_manga_writer broke the window's status call 78 times - KeyError) still shows and still
+    runs: the retired role reads as itself and works as a Builder without commands."""
+
+    def __missing__(self, key):
+        name = str(key).split("#")[0].replace("art_", "").replace("_", " ").strip().title() or "Agent"
+        return {"name": name + " (retired)", "stage": "build", "writes": True, "commands": False,
+                "brief": "Do your part of the team's goal in the project folder and report what you made."}
+
+
+ROLES = _Roles({
     "researcher": {"name": "Researcher", "stage": "plan", "writes": False, "commands": False,
                    "brief": "Find the facts the team needs (APIs, libraries, constraints, examples). "
                             "Do not build anything. Post your findings to the team board."},
@@ -48,7 +59,7 @@ ROLES = {
     "browser": {"name": "Browser tester", "stage": "check", "writes": False, "commands": True,
                 "brief": "Open the built site or app in a browser (the conductor's browse role) and "
                          "check it works like a user would. Report PASS or FAIL with what you saw."},
-}
+})
 # The art specialists (engine/art_specialists.py; owner 2026-10-27: "the builder is too vague. They need specialized
 # agents"): an art goal gets the specialist for it, with its skill and its tool, never the coding Builder.
 try:

@@ -140,7 +140,15 @@ def engine_checks():
     check("a character sheet is drawn, set and kept in the library", sh.get("ok") and manga.load(ws, pid)["characters"][0]["sheet"]
           and any(x["name"] == "Bolt" for x in manga.library(ws)), sh)
     n0 = len(CALLS)
-    d = manga.draw_page(ws, pid, 1, make)
+    seen_mid = []
+
+    def watching(args):   # what the window would see in the middle of a draw
+        pg = (manga.load(ws, pid).get("pages") or [{}])[0]
+        seen_mid.append((bool(pg.get("file")) and (ws / pg["file"]).is_file(), sum(1 for x in pg.get("panels") or [] if x.get("image"))))
+        return make(args)
+    d = manga.draw_page(ws, pid, 1, watching)
+    check("the page shows the panels already drawn while the rest are still drawing (owner: 'make sure they show "
+          "preview')", seen_mid[2][0] and seen_mid[2][1] == 2 and seen_mid[-1][1] == 5, seen_mid)
     check("draw_page draws every panel at its own shape and composes the page",
           d.get("ok") and len(CALLS) - n0 == 6 and (ws / d["file"]).is_file() and d["balloons"] == 6, d)
     sizes = {(a["width"], a["height"]) for a in CALLS[n0:]}
@@ -285,6 +293,8 @@ async def window_checks():
               shown[0] > 0 and shown[1] == "data:image/", shown)
         await E("document.querySelectorAll('.fmg-hotpanel')[3].click()")
         await page.wait_for_selector(".fmg-line", timeout=5000)
+        await page.wait_for_function("document.querySelector('.fmg-panelimg') && document.querySelector('.fmg-panelimg').naturalWidth > 0", timeout=10000)
+        check("a clicked panel shows its own picture in the panel editor", True)
         await E("""(() => { const t = document.querySelectorAll('.fmg-line input')[1]; t.value = 'Stop right there!';
           document.querySelector('[data-tip-name="Letter Panel"]').click(); })()""")
         await page.wait_for_function("[...document.querySelectorAll('.fmg-say')].some((n) => n.textContent.includes('Stop right there!'))", timeout=10000)

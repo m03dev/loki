@@ -577,6 +577,15 @@ def draw_page(ws, pid: str, n: int, make: Callable[[dict], dict], only: list | N
         panel["image"] = str(res["files"][0]).replace("\\", "/")
         panel["prompt"] = args["prompt"]
         made.append(panel["image"])
+        # the page grows panel by panel in the window (owner 2026-10-28: "make sure they show preview" - before this the
+        # page stayed empty until every panel of a several-minute draw was done)
+        save(ws, proj)
+        try:
+            compose(ws, pid, n)
+            done = _page(load(ws, pid), n, create=False) or {}
+            page["file"] = done.get("file") or page.get("file")
+        except Exception:  # noqa: BLE001 - the final compose below reports it
+            pass
     save(ws, proj)
     out = compose(ws, pid, n)
     out.update(drawn=made, errors=errors, ok=bool(out.get("ok")) and not (errors and not made))
@@ -734,7 +743,9 @@ def compose(ws, pid: str, n: int) -> dict:
     out_dir = pdir(ws, pid) / "pages"
     out_dir.mkdir(parents=True, exist_ok=True)
     f = out_dir / ("page-%02d.png" % n)
-    img.save(f, optimize=True)
+    tmp = out_dir / ("page-%02d.part%d.png" % (n, os.getpid()))
+    img.save(tmp, optimize=True)
+    os.replace(tmp, f)        # never a half-written page in the window (it would show blank)
     rel = os.path.relpath(f, ws).replace("\\", "/")
     page["file"] = rel
     page["missing"] = missing
