@@ -54,7 +54,13 @@
 .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--home-card-min, 160px), 1fr)); gap: 12px; margin-top: 2px; }
 .home-day { grid-column: 1 / -1; margin: 10px 2px -2px; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .3px; }
 .home-day:first-child { margin-top: 0; }
-.home-more { justify-self: center; align-self: center; margin: 4px auto 12px; display: block; }
+.home-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; margin: 10px auto 14px; }
+.home-pager[hidden] { display: none; }
+.home-page { min-width: 30px; height: 28px; padding: 0 8px; border-radius: 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.home-page.on { background: var(--accent, #6c8cff); color: #fff; font-weight: 600; }
+.home-page:disabled { opacity: .35; cursor: default; }
+.home-page-gap { color: var(--muted); padding: 0 2px; }
+.home-page-count { color: var(--muted); font-size: 12px; margin-inline-start: 8px; }
 .home-card-tools { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
 .home-card:hover .home-card-tools, .home-card:focus-within .home-card-tools, .home-card:focus .home-card-tools { opacity: 1; }
 .home-card-tools .home-ico { width: 28px; height: 26px; background: rgba(16, 18, 24, .82); color: var(--text); border-radius: 7px; }
@@ -99,7 +105,7 @@
 .home-start-btn svg { width: 16px; height: 16px; }
 
 /* while a new chat is open on Home: one row, no big preview */
-.home-hub.chatting .home-hero, .home-hub.chatting .home-empty, .home-hub.chatting .home-recent-head, .home-hub.chatting .home-day, .home-hub.chatting .home-more { display: none; }
+.home-hub.chatting .home-hero, .home-hub.chatting .home-empty, .home-hub.chatting .home-recent-head, .home-hub.chatting .home-day, .home-hub.chatting .home-more, .home-hub.chatting .home-pager { display: none; }
 .home-hub.chatting .home-grid { grid-auto-rows: 0; grid-template-rows: auto; overflow: hidden; row-gap: 0; margin-top: 0; }
 .home-hub.chatting { flex: 0 0 auto; padding-bottom: 0; }
 

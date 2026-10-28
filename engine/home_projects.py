@@ -1,6 +1,8 @@
 """The home screen's preview hub: everything the owner is making, newest first, in one list.
 
     GET /home/projects        {ok, items: [...], errors: {source: "why"}, counts: {kind: n}}
+    GET /home/projects?page=N&kind=K&per=P   one page of everything ever made in that tab, newest first:
+                              {ok, items, page, pages, total, per, kind, running: [running jobs], errors, counts}
 
 Each item: {kind, name, path_or_id, updated (epoch seconds), thumb, status?, open: {mode, ...}}
 
@@ -130,11 +132,11 @@ def renders(state: Any) -> list:
     return out
 
 
-def forge(state: Any) -> list:
+def forge(state: Any, n: int | None = PER_KIND) -> list:
     import forge3d  # pylint: disable=import-outside-toplevel
     ws = _workspace(state)
     out = []
-    for it in forge3d.list_models(ws / "models", limit=PER_KIND):
+    for it in forge3d.list_models(ws / "models", limit=n if n else 100000):
         name = str(it.get("prompt") or _display(it["name"]) or it["name"])
         out.append({"kind": "forge", "name": name[:120], "path_or_id": "models/" + it["name"], "updated": float(it.get("t") or 0),
                     "thumb": _creation_url(ws, str(it.get("image") or "")), "status": "",
@@ -202,7 +204,7 @@ CONTENT_DIR = "brand"            # what LOKI's agents make for the app's brand a
 CONTENT_TYPES = {".md", ".txt", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".gif", ".html", ".json"}
 
 
-def content(state: Any) -> list:
+def content(state: Any, n: int | None = PER_KIND) -> list:
     """Brand and marketing work in <workspace>/brand/ (owner 2026-10-22: "give them a task to make a logo and come up
     with a new name ... start doing ads and making social media content for the app") - every file, newest first,
     pictures with a thumbnail; a card opens the file in Files."""
@@ -219,10 +221,10 @@ def content(state: Any) -> list:
             found.append((p.stat().st_mtime, p))
         except (OSError, ValueError):
             continue
-        if len(found) > 2000:
+        if len(found) > 20000:
             break
     found.sort(key=lambda t: -t[0])
-    for updated, p in found[:PER_KIND]:
+    for updated, p in (found[:n] if n else found):
         rel = p.relative_to(ws).as_posix()
         parts = p.relative_to(root).parts
         sub = parts[0] if len(parts) > 1 else ""
@@ -236,7 +238,7 @@ def content(state: Any) -> list:
 MADE_KINDS = {"images": "image", "sprites": "image", "sketches": "image", "turnarounds": "image", "videos": "video"}
 
 
-def made(state: Any) -> list:
+def made(state: Any, n: int | None = PER_KIND) -> list:
     """What LOKI's makers wrote into the workspace - pictures, sprites, sketches, videos - as real previews (owner
     2026-10-26: "whats the point of the home middle collum if it doesnt have a thumbnail preview ... i dont wanna see
     folders or text i wanna see real results"). The picture itself is the thumbnail, served at /creations/<kind>/<file>
@@ -244,7 +246,7 @@ def made(state: Any) -> list:
     import creations  # pylint: disable=import-outside-toplevel
     ws = _workspace(state)
     out: list = []
-    for c in creations.list_creations(ws, limit=PER_KIND * 3):
+    for c in creations.list_creations(ws, limit=PER_KIND * 3 if n else 1_000_000, meta=bool(n)):
         kind = c["path"].split("/", 1)[0]
         show = MADE_KINDS.get(kind)
         if not show or c.get("show") != show:
@@ -256,13 +258,87 @@ def made(state: Any) -> list:
                     "video": url if show == "video" else None, "status": "",
                     "detail": what + (" · " + str(c["prompt"])[:80] if c.get("prompt") else ""),
                     "open": {"mode": "files", "path": c["path"]}})
-        if len(out) >= PER_KIND * 2:
+        if n and len(out) >= n * 2:
             break
     return out
 
 
 SOURCES: dict = {"made": made, "render": renders, "forge": forge, "godot": godot, "studio": studio, "content": content,
                  "job": jobs}
+
+
+def _limited(fn, state, n):
+    """Call a source with a per-kind limit when it takes one (n=None: everything)."""
+    try:
+        return fn(state, n)
+    except TypeError:
+        return fn(state)
+
+
+PER_PAGE = 60
+PAGE_KINDS = ("all",) + KINDS
+RUNNING = re.compile(r"^(working|running|queued|pending|starting)$", re.I)
+
+
+def _shown(it: dict, kind: str) -> bool:
+    """What a Home tab lists (the same rule as app/ui/home.js visible()): a tab shows only its kind, jobs only under
+    Agents, and only things you can SEE (a picture or a video)."""
+    if kind == "job":
+        return it.get("kind") == "job"
+    return it.get("kind") != "job" and bool(it.get("thumb") or it.get("video")) and kind in ("all", it.get("kind"))
+
+
+def _fill_made(state: Any, items: list) -> None:
+    """Prompt / title from the sidecar, read only for the pictures on the page being sent."""
+    try:
+        import creations  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        return
+    ws = _workspace(state)
+    for it in items:
+        if it.get("kind") != "made":
+            continue
+        try:
+            meta = creations.read_meta(ws, it["path_or_id"])
+        except Exception:  # noqa: BLE001
+            continue
+        if meta.get("title"):
+            it["name"] = str(meta["title"])[:120]
+        if meta.get("prompt"):
+            it["detail"] = (it.get("detail") or "").split(" · ")[0] + " · " + str(meta["prompt"])[:80]
+
+
+def page(state: Any, kind: str = "all", number: int = 1, per: int = PER_PAGE, sources: dict | None = None,
+         clock: Callable[[], float] = time.time) -> dict:
+    """One page of EVERYTHING ever made, newest first (owner 2026-10-27: "add pages so i can see more images, i should
+    always be able to see the images" - the old answer only held the newest 48 pictures, older ones fell off Home
+    although the files were still there). {ok, items, page, pages, total, per, kind, running, errors, counts}"""
+    kind = kind if kind in PAGE_KINDS else "all"
+    per = max(1, min(int(per or PER_PAGE), 300))
+    items: list = []
+    errors: dict = {}
+    counts: dict = {}
+    running: list = []
+    for k, fn in (sources or SOURCES).items():
+        if kind not in ("all", k) and k != "job":
+            continue                                    # only what this tab shows (jobs: always, for "working now")
+        try:
+            got = _limited(fn, state, None)
+        except Exception as exc:  # noqa: BLE001 - one source never takes the home screen down
+            errors[k] = "%s: %s" % (type(exc).__name__, str(exc)[:200])
+            got = []
+        running += [it for it in got if it.get("kind") == "job" and RUNNING.match(str(it.get("status") or ""))]
+        got = [it for it in got if _shown(it, kind)]
+        counts[k] = len(got)
+        items.extend(got)
+    items.sort(key=lambda i: -float(i.get("updated") or 0))
+    total = len(items)
+    pages = max(1, (total + per - 1) // per)
+    number = max(1, min(int(number or 1), pages))
+    sl = items[(number - 1) * per: number * per]
+    _fill_made(state, sl)
+    return {"ok": True, "items": sl, "page": number, "pages": pages, "total": total, "per": per, "kind": kind,
+            "running": running[:50], "errors": errors, "counts": counts, "t": clock()}
 
 
 def collect(state: Any, sources: dict | None = None, clock: Callable[[], float] = time.time) -> dict:
@@ -282,7 +358,15 @@ def collect(state: Any, sources: dict | None = None, clock: Callable[[], float] 
     return {"ok": True, "items": items, "errors": errors, "counts": counts, "t": clock()}
 
 
-def route(state: Any, path: str) -> tuple | None:
+def route(state: Any, path: str, query: dict | None = None) -> tuple | None:
+    """GET /home/projects (the newest of each kind, as before) or /home/projects?page=N[&kind=K][&per=P] (a page of
+    everything)."""
     if path != "/home/projects":
         return None
+    q = query or {}
+    if q.get("page"):
+        try:
+            return 200, page(state, str(q.get("kind") or "all"), int(q.get("page") or 1), int(q.get("per") or PER_PAGE))
+        except (TypeError, ValueError):
+            return 400, {"ok": False, "error": "page and per are whole numbers"}
     return 200, collect(state)

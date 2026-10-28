@@ -121,6 +121,11 @@ def shell_env() -> dict:
     env.setdefault("GIT_AUTHOR_EMAIL", "loki@localhost")
     env.setdefault("GIT_COMMITTER_NAME", env["GIT_AUTHOR_NAME"])
     env.setdefault("GIT_COMMITTER_EMAIL", env["GIT_AUTHOR_EMAIL"])
+    try:   # git in a job folder can never reach LOKI's own repo (engine/live_guard.py)
+        import live_guard  # pylint: disable=import-outside-toplevel
+        live_guard.git_env(env)
+    except Exception:  # noqa: BLE001
+        pass
     return env
 
 
@@ -146,6 +151,13 @@ def observation(code: int, out: str) -> str:
 
 
 def run_command(cmd: str, cwd: Path, timeout: float = 180, shell: list | None = None, run=subprocess.run) -> tuple:
+    try:   # never a git command that changes the LOKI that is running (engine/live_guard.py)
+        import live_guard  # pylint: disable=import-outside-toplevel
+        why = live_guard.touches_live(cmd, str(cwd))
+        if why:
+            return 1, why
+    except ImportError:
+        pass
     try:
         p = run((shell or find_shell()[0]) + [cmd], cwd=str(cwd), capture_output=True, text=True, timeout=timeout,
                 env=shell_env(), stdin=subprocess.DEVNULL)

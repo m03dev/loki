@@ -68,7 +68,7 @@ const LokiHome = (() => {
   };
   const STORE = "loki-home";
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
-  const S = { items: [], errors: {}, filter: "all", pick: "", shown: 60, size: "m", timer: 0, loading: false, loaded: false };
+  const S = { items: [], errors: {}, filter: "all", pick: "", page: 1, pages: 1, total: 0, server: false, running: [], size: "m", timer: 0, loading: false, loaded: false };
   const PAGE = 60, SIZES = { s: 110, m: 160, l: 240 };
   let pc = null, root = null, hero = null, grid = null, empty = null, more = null, live = null, studioPane = null, studioFrame = null, studioBody = null;
   try { const saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; S.filter = saved.filter || "all"; if (!["all", "made", "render", "forge", "content", "job"].includes(S.filter)) S.filter = "all"; if (SIZES[saved.size]) S.size = saved.size; } catch (_) { /* private mode */ }
@@ -99,7 +99,23 @@ const LokiHome = (() => {
   // shown under Agents even before it has a picture (its status is what you look at there)
   const visible = () => S.items.filter((it) => (S.filter === "job" ? it.kind === "job"
     : it.kind !== "job" && seeable(it) && (S.filter === "all" || it.kind === S.filter)));
-  const running = () => S.items.filter((it) => it.kind === "job" && /^(working|running|queued|pending|starting)$/i.test(it.status || ""));
+  const running = () => {   // jobs on this page plus the ones the engine says run now (a page may not hold them)
+    const seen = new Set(), out = [];
+    for (const it of S.items.concat(S.running || [])) {
+      if (it.kind === "job" && /^(working|running|queued|pending|starting)$/i.test(it.status || "") && !seen.has(keyOf(it))) { seen.add(keyOf(it)); out.push(it); }
+    }
+    return out;
+  };
+  // pages (owner 2026-10-27: "add pages so i can see more images, i should always be able to see the images"): the
+  // engine sends one page of EVERYTHING in the tab (engine/home_projects.py page()); an older engine that sends one
+  // list is paged here
+  function goPage(n) {
+    const to = Math.max(1, Math.min(n, S.pages || 1));
+    if (to === S.page) return;
+    S.page = to; S.sig = ""; S.pick = "";
+    if (root) root.scrollTop = 0;
+    if (S.server) refresh(true); else render();
+  }
   const whatOpens = { made: "opens it in Files", render: "opens it in Studio", forge: "opens it in Forge", godot: "opens it in the Engine tab",
     studio: "opens it in Studio", content: "opens it in Files", job: "opens it in Lab > Agents" };
 
@@ -111,7 +127,7 @@ const LokiHome = (() => {
     const head = mk("div", "home-head");
     const kinds = mk("div", "home-kinds"); kinds.setAttribute("role", "toolbar"); kinds.setAttribute("aria-label", "Show");
     const kindBtn = (id, icon, name, what) => {
-      const b = iconBtn("home-kind", icon, name, what, () => { S.filter = id; S.pick = ""; S.shown = PAGE; remember(); render(); });
+      const b = iconBtn("home-kind", icon, name, what, () => { S.filter = id; S.pick = ""; S.page = 1; S.sig = ""; remember(); render(); refresh(true); });
       b.dataset.kind = id; b.setAttribute("aria-pressed", String(S.filter === id));
       return b;
     };
@@ -138,8 +154,7 @@ const LokiHome = (() => {
     const recent = mk("div", "home-recent-head");     // kept for the chat-folded layout's styles
     recent.hidden = true;
     grid = mk("div", "home-grid"); grid.setAttribute("role", "list");
-    more = mk("button", "home-more quiet small"); more.type = "button";
-    more.addEventListener("click", () => { S.shown += PAGE; render(); });
+    more = mk("nav", "home-pager"); more.setAttribute("aria-label", "Pages"); more.hidden = true;
     empty = mk("div", "home-empty");
     root.append(head, hero, recent, grid, more, empty);
     applySize();
@@ -397,7 +412,10 @@ const LokiHome = (() => {
   function render() {
     if (!root) return;
     for (const b of root.querySelectorAll(".home-kind")) b.setAttribute("aria-pressed", String(b.dataset.kind === S.filter));
-    const list = visible(), shown = list.slice(0, S.shown), nodes = [];
+    const list = visible();
+    if (!S.server) S.pages = Math.max(1, Math.ceil(list.length / PAGE));
+    if (S.page > S.pages) S.page = S.pages;
+    const shown = S.server ? list : list.slice((S.page - 1) * PAGE, S.page * PAGE), nodes = [];
     let day = "";
     for (const it of shown) {   // grouped by day, newest first (Google Photos / Lightroom style)
       const d = dayOf(it.updated);
@@ -407,9 +425,7 @@ const LokiHome = (() => {
     const top = root.scrollTop;   // a redraw (new things arriving) never moves the page
     grid.replaceChildren(...nodes);
     root.scrollTop = top;
-    more.hidden = list.length <= shown.length;
-    more.textContent = "Show more (" + (list.length - shown.length) + ")";
-    more.title = "Show the next " + Math.min(PAGE, list.length - shown.length) + ".";
+    renderPager(S.server ? S.total : list.length);
     const r = running();
     live.hidden = !r.length;
     live.replaceChildren(mk("span", "home-live-dot"), mk("span", "", r.length + " working"));
@@ -418,18 +434,53 @@ const LokiHome = (() => {
     renderEmpty();
   }
 
+  // ‹ 1 … 4 5 6 … 12 ›  under the grid; numbers you can click, newest page first
+  function renderPager(total) {
+    const pages = S.pages || 1;
+    more.hidden = pages <= 1;
+    if (more.hidden) { more.replaceChildren(); return; }
+    const btn = (label, to, name, cur) => {
+      const b = mk("button", "home-page quiet small" + (cur ? " on" : ""), label); b.type = "button";
+      b.disabled = to < 1 || to > pages; if (cur) b.setAttribute("aria-current", "page");
+      b.dataset.page = String(to); b.dataset.tipName = name; b.dataset.tipWhat = "Page " + to + " of " + pages + ".";
+      b.setAttribute("aria-label", name);
+      b.addEventListener("click", () => goPage(to));
+      return b;
+    };
+    const nums = new Set([1, pages, S.page - 1, S.page, S.page + 1, S.page - 2, S.page + 2]);
+    for (const n of [...nums]) if (nums.has(n + 2) && !nums.has(n + 1)) nums.add(n + 1);   // never "…" for one page
+    const parts = [btn("‹", S.page - 1, "Newer", false)];
+    let last = 0;
+    for (let n = 1; n <= pages; n++) {
+      if (!nums.has(n)) continue;
+      if (last && n > last + 1) parts.push(mk("span", "home-page-gap", "…"));
+      parts.push(btn(String(n), n, "Page " + n, n === S.page));
+      last = n;
+    }
+    parts.push(btn("›", S.page + 1, "Older", false));
+    parts.push(mk("span", "home-page-count", total + " in all"));
+    more.replaceChildren(...parts);
+  }
+
   // ---------------------------------------------------------------- data
-  async function refresh() {
-    if (S.loading || typeof state === "undefined" || !state.token) return;
-    S.loading = true;
+  async function refresh(force) {
+    if (typeof state === "undefined" || !state.token) return;
+    if (S.loading) { S.again = true; return; }   // one at a time; the newest ask runs right after
+    S.loading = true; S.again = false;
+    const want = S.page + "|" + S.filter;
     try {
-      const r = await call("/home/projects");
-      if (r && r.ok) { S.items = r.items || []; S.errors = r.errors || {}; }
+      const r = await call("/home/projects?page=" + S.page + "&per=" + PAGE + "&kind=" + encodeURIComponent(S.filter));
+      if (r && r.ok && want === S.page + "|" + S.filter) {   // a page clicked meanwhile wins
+        S.items = r.items || []; S.errors = r.errors || {};
+        S.server = !!r.pages; S.running = r.running || [];
+        if (S.server) { S.pages = r.pages; S.total = r.total || 0; S.page = r.page || S.page; }
+      }
     } catch (_) { /* engine restarting: keep what is shown */ }
     S.loading = false; S.loaded = true;
+    if (S.again) { S.again = false; S.sig = ""; refresh(); return; }
     // nothing changed: keep the cards as they are (re-building them every 5-15 s made Home flicker and feel slow);
     // still redraw once a minute so "3 min ago" stays true
-    const sig = S.items.map((it) => keyOf(it) + "|" + (it.updated || 0) + "|" + (it.status || "") + "|" + ((it.thumb || "").length)).join("\n")
+    const sig = S.page + "/" + S.pages + "/" + S.filter + ":" + S.items.map((it) => keyOf(it) + "|" + (it.updated || 0) + "|" + (it.status || "") + "|" + ((it.thumb || "").length)).join("\n")
       + "#" + Object.keys(S.errors).join(",");
     if (sig === S.sig && Date.now() - (S.drawn || 0) < 60000) return;
     S.sig = sig; S.drawn = Date.now();

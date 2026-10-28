@@ -1053,7 +1053,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return
         if route == "/home/projects":   # the home screen's preview hub (engine/home_projects.py)
             import home_projects  # pylint: disable=import-outside-toplevel
-            self._send_json(*home_projects.route(self.server.state, route))
+            q = {k: (v[0] if v else "") for k, v in parse_qs(urlparse(self.path).query).items()}
+            self._send_json(*home_projects.route(self.server.state, route, q))
             return
         if route.startswith("/render/"):   # Render Studio (engine/ai_renderer.py)
             import ai_renderer  # pylint: disable=import-outside-toplevel

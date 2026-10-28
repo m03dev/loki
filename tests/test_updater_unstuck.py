@@ -3,7 +3,7 @@
 The PC sat on "update waiting: local changes to 1 file(s) (engine/opencode_engine.py)" forever: it had an agent's
 uncommitted edit AND one local commit, and the updater only carried edits across when there were no local commits.
 Real git repos:
-  1. local commit + uncommitted edit -> updates; the commit stays on top; the edit is saved (patch + copy) and put back
+  1. local commit + uncommitted edit -> updates to exactly master; both are saved whole (patches + copy), not put back
   2. the edit conflicts with GitHub's change -> still updates to GitHub's version; the edit is saved, never lost
   3. a local commit that conflicts with GitHub -> moves to GitHub's version; the commit is saved as a patch
 
@@ -72,8 +72,11 @@ sh(pc, "git", "commit", "-qm", "a local commit on the PC")
 res = updater.update(pc)
 check("local commit + uncommitted edit: the PC updates (it used to wait forever)",
       res.get("updated") and (pc / "engine" / "loki.py").read_text() == "VERSION = 2\n", res)
-check("... the local commit stays on top", (pc / "notes.txt").is_file() and "a local commit" in sh(pc, "git", "log", "-1", "--format=%s"))
-check("... the agent's edit is back in the file", "B = 20" in (pc / "engine" / "opencode_engine.py").read_text())
+check("... the machine runs EXACTLY master (same patch as the other machine - owner: 'mac 608, windows 609')",
+      sh(pc, "git", "rev-parse", "HEAD").strip() == sh(pc, "git", "rev-parse", "origin/master").strip())
+check("... the local commit is parked as a patch, not lost",
+      any(f.suffix == ".patch" for f in (pc / "harness_data" / "update_kept").rglob("commits/*.patch")))
+check("... the agent's edit is NOT left in the running code", "B = 20" not in (pc / "engine" / "opencode_engine.py").read_text())
 check("... and saved (patch + copy) in harness_data/update_kept", any(p.name == "edits.patch" for p in kept(pc)), kept(pc))
 
 # 2. the edit clashes with GitHub's change to the same line

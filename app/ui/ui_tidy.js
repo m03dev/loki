@@ -130,7 +130,7 @@
           if (k.classList.contains("home-grid")) {   // the cards: the day label and the first row only
             const day = k.querySelector(".home-day"), card = k.querySelector(".home-card");
             other += (day ? day.getBoundingClientRect().height + 8 : 0) + (card ? card.getBoundingClientRect().height : 0) + gap;
-          } else if (k.id !== "tidy-hero-edge" && !k.classList.contains("home-more")) other += k.getBoundingClientRect().height + gap;
+          } else if (k.id !== "tidy-hero-edge" && !k.classList.contains("home-more") && !k.classList.contains("home-pager")) other += k.getBoundingClientRect().height + gap;
           if (k.classList.contains("home-grid")) break;   // everything after the first row scrolls
         }
         const side = $(".home-hero-side"), sideH = side && hero && getComputedStyle(hero).gridTemplateColumns.split(" ").length < 2 ? side.getBoundingClientRect().height + 6 : 0;

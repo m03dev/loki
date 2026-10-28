@@ -711,7 +711,7 @@ check("the portal tests, signs in, hands off and updates everywhere", all(s in s
 check("the portal no longer offers the OpenRouter sign-in", "/signin/openrouter" not in settings_js
       and "signInOpenRouter" not in settings_js)
 check("the home hub reads one engine call through api() (GET /home/projects); the JS worlds stay gone",
-      'call("/home/projects")' in home_js and "fetch(" not in home_js
+      'call("/home/projects?page="' in home_js and "fetch(" not in home_js
       and not any((ui / f).exists() for f in ("world_babylon.js", "world_three.js", "world_noise.js", "character.js", "mmo/mmo_core.js"))
       and not (ui / "vendor" / "babylon").exists() and "world-bg-canvas" not in html)
 check("the home hub loads nothing from outside and never evals", all(s not in home_js for s in (

@@ -9373,7 +9373,8 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
     cfg_dir = DATA_DIR / "opencode"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = cfg_dir / "opencode.json"
-    oc_cfg = opencode_engine.build_config(providers, cg if cg else "", plan, _DESTRUCTIVE_SNIPPETS)
+    oc_cfg = opencode_engine.build_config(providers, cg if cg else "", plan, _DESTRUCTIVE_SNIPPETS,
+                                         workspace=str(WORKSPACE))
     if not allow_bash:
         oc_cfg["permission"]["bash"] = "deny"
     if os.getenv("LOKI_JOB_ID"):                                   # a background job: its own config file

@@ -254,6 +254,8 @@ async def window():
         errors, posts, state = [], [], {"items": ITEMS}
         page.on("pageerror", lambda e: errors.append(str(e)))
 
+        asked = []
+
         async def route(r):
             bare = r.request.url.split("8893", 1)[1].split("#")[0].split("?")[0]
             if bare == "/":
@@ -263,6 +265,7 @@ async def window():
             if r.request.method == "POST":
                 posts.append(bare)
             if bare == "/home/projects":
+                asked.append(r.request.url)
                 return await r.fulfill(json=state["items"])
             if bare == "/studio/embed":
                 return await r.fulfill(json={"ok": True, "running": True, "url": "about:blank#token=x"})
@@ -303,13 +306,16 @@ async def window():
               and await E("[...document.querySelectorAll('.home-ico')].every((b) => b.dataset.tipName && b.dataset.tipWhat && b.getAttribute('aria-label'))"), info)
         hero = await E("(() => { const h = document.querySelector('.home-hero'); return h && !h.hidden ? h.querySelector('.home-hero-name').textContent : ''; })()")
         check("the big preview shows the latest render", hero == "Castle at dusk", hero)
+        await page.locator(".home-card[data-kind=made]").scroll_into_view_if_needed()   # Playwright scrolls to click
         top0 = await E("document.getElementById('home-hub').scrollTop")
         await page.click(".home-card[data-kind=made]")
         await page.wait_for_selector(".lv .lv-img", timeout=5000)
         check("a click on a picture opens it big RIGHT THERE (the viewer), the page does not jump or redraw (owner 2026-10-26)",
               await E("document.querySelector('.lv-name').textContent") == "Knight with sword and shield"
               and await E("document.querySelector('.home-hero-name').textContent") == "Castle at dusk"
-              and await E("document.getElementById('home-hub').scrollTop") == top0)
+              and await E("document.getElementById('home-hub').scrollTop") == top0,
+              [await E("(document.querySelector('.lv-name')||{}).textContent"), await E("(document.querySelector('.home-hero-name')||{}).textContent"),
+               await E("document.getElementById('home-hub').scrollTop"), top0])
         await page.keyboard.press("Escape")
         check("... Esc closes it and you are where you were", await E("!document.querySelector('.lv')"))
         days = await E("[...document.querySelectorAll('.home-day')].map((d) => d.textContent)")
@@ -478,11 +484,26 @@ async def window():
         state["items"] = many
         await E("LokiHome.refresh()")
         await page.wait_for_timeout(300)
-        row = await E("(() => { const c = [...document.querySelectorAll('.home-card')], m = document.querySelector('.home-more'); return { n: c.length, more: m.hidden ? '' : m.textContent }; })()")
-        check("the grid shows everything (60 at a time), 'Show more' for the rest - no one-row 'All' toggle", row == {"n": 60, "more": "Show more (10)"}, row)
-        await page.click(".home-more")
-        check("Show more adds the rest, in place", await E("document.querySelectorAll('.home-card').length") == 70
-              and await E("document.querySelector('.home-more').hidden"))
+        row = await E("(() => { const c = [...document.querySelectorAll('.home-card')], m = document.querySelector('.home-pager'); return { n: c.length, pages: m.hidden ? [] : [...m.querySelectorAll('.home-page')].map((b) => b.textContent), cur: (m.querySelector('.home-page.on') || {}).textContent }; })()")
+        check("the grid shows 60 a page with page numbers under it (owner 2026-10-27: 'add pages')",
+              row == {"n": 60, "pages": ["‹", "1", "2", "›"], "cur": "1"}, row)
+        await page.click(".home-page[data-page='2']:not([disabled])")
+        await page.wait_for_timeout(200)
+        check("page 2 shows the rest", await E("document.querySelectorAll('.home-card').length") == 10
+              and await E("document.querySelector('.home-page.on').textContent") == "2")
+        await page.click(".home-page[aria-label='Newer']")
+        await page.wait_for_timeout(200)
+        check("'Newer' goes back to page 1", await E("document.querySelectorAll('.home-card').length") == 60)
+        # the engine's own pages: everything ever made, not only the newest 48 (the fox kid picture fell off Home)
+        state["items"] = dict(many, items=many["items"][:60], page=1, pages=5, total=290, per=60)
+        await E("LokiHome.refresh()")
+        await page.wait_for_timeout(300)
+        nums = await E("[...document.querySelectorAll('.home-pager .home-page')].map((b) => b.textContent)")
+        check("with the engine's pages: 5 pages listed, '290 in all'", nums == ["‹", "1", "2", "3", "4", "5", "›"]
+              and "290" in await E("document.querySelector('.home-page-count').textContent"), nums)
+        await page.click(".home-page[data-page='3']")
+        await page.wait_for_timeout(300)
+        check("a click on page 3 asks the engine for page 3", any("page=3" in u for u in asked), asked[-3:])
         state["items"] = ITEMS
         await E("LokiHome.refresh()")
         await page.set_viewport_size({"width": 760, "height": 540})

@@ -159,7 +159,7 @@ def liked_meta(workspace: Path, limit: int = 60) -> list:
 
 
 # ----------------------------------------------------------------------------- the wall
-def list_creations(workspace: Path, limit: int = 120) -> list:
+def list_creations(workspace: Path, limit: int = 120, meta: bool = True) -> list:
     """Every creation, newest first: {kind, show, path, title, t, size} + its metadata
     (prompt, style, backend, seed, liked, ...) when it has a sidecar."""
     out = []
@@ -180,6 +180,8 @@ def list_creations(workspace: Path, limit: int = 120) -> list:
                         "title": title_of(p.name), "t": st.st_mtime, "size": st.st_size})
     out.sort(key=lambda c: c["t"], reverse=True)
     out = out[:limit]
+    if not meta:            # Home's pages: the sidecars are read only for the page that is sent
+        return out
     for c in out:
         meta = read_meta(workspace, c["path"])
         for key in META_KEYS:

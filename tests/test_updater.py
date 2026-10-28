@@ -10,6 +10,8 @@ conflicting changes, and linked machines are told about a new version.
 from __future__ import annotations
 
 import os
+os.environ["LOKI_UPDATE_EXACT"] = "0"   # these checks cover the carry/rebase machinery (developer mode);
+#                                       mirror mode (the machines' default) is checked in test_updater_unstuck.py
 import shutil
 import subprocess
 import sys

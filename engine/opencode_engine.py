@@ -23,6 +23,7 @@ Standard library only; the subprocess runner is injectable for tests.
 """
 from __future__ import annotations
 
+import live_guard  # noqa: E402 - engine/ is on sys.path for every LOKI module
 import json
 import os
 import sys
@@ -241,7 +242,7 @@ def output_cap(base_url: str) -> int:
 
 
 def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny: Iterable[str] = (),
-                 make_tools: bool = True) -> dict:
+                 make_tools: bool = True, workspace: str = "") -> dict:
     """providers: name -> {"base_url", "model", "key"}; returns OpenCode's config (keys referenced by env, not inlined)."""
     prov = {}
     for name, p in providers.items():
@@ -260,9 +261,10 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
                 "output": output_cap(p.get("upstream") or base)}}},
         }
     cfg: dict = {"$schema": "https://opencode.ai/config.json", "provider": prov,
-                 "permission": {"edit": "deny" if plan else "allow", "read": "allow", "glob": "allow", "grep": "allow",
+                 "permission": {"edit": "deny" if plan else live_guard.edit_rules(workspace),
+                                "read": "allow", "glob": "allow", "grep": "allow",
                                 "list": "allow", "webfetch": "allow", "todowrite": "allow",
-                                "bash": "deny" if plan else deny_rules(deny),
+                                "bash": "deny" if plan else {**deny_rules(deny), **live_guard.bash_rules(workspace)},
                                 "external_directory": external_rules(plan)},
                  "autoupdate": False, "share": "disabled"}
     mcp: dict = {}
@@ -360,6 +362,7 @@ def env_for(providers: dict, base: dict | None = None) -> dict:
         key = str(p.get("key") or "")
         env[key_env(name)] = key if key and key != "none" else "none"
     env.setdefault("OPENCODE_DISABLE_AUTOUPDATE", "1")
+    live_guard.git_env(env)          # git in a job folder can never reach LOKI's own repo (the PC's stray commit)
     env["PATH"] = os.pathsep.join([env.get("PATH", "")] + [d for d in _global_bins() if Path(d).is_dir()])
     if os.name == "nt" and os.getenv("LOKI_OC_SHELL", "bash").strip().lower() != "powershell" \
             and not (env.get("SHELL") and os.path.isfile(str(env.get("SHELL")))):

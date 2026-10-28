@@ -703,6 +703,28 @@ def _save_commits(repo: Path, target: str) -> str:
         return ""
 
 
+
+def exact() -> bool:
+    """Mirror mode (default on): every machine runs EXACTLY GitHub's master - the same patch number on the Mac and the
+    PC. Owner 2026-10-27: "why is mac 608 while windows 609" - the PC's updater had kept an agent's local commit
+    ("Add selftest_hello.txt") on top of master. Local commits and live edits are never lost: they are saved whole
+    (patches + copies in harness_data/update_kept/, a refs/loki/backup ref) and this checkout goes to master.
+    Real changes reach the machines one way only: tools/ship.py -> master. LOKI_UPDATE_EXACT=0 keeps the old
+    'local commits stay on top' behaviour (a developer's own checkout)."""
+    return str(os.getenv("LOKI_UPDATE_EXACT", "1")).strip().lower() not in ("0", "off", "false", "no")
+
+
+def _park_local_commits(repo: Path, target: str) -> tuple:
+    """Save this checkout's commits that master does not have (patches + backup ref), then move to master.
+    (ok, note)."""
+    backup = _backup(repo, "parked")
+    kept_dir = _save_commits(repo, target)
+    code, out = git(repo, "reset", "--keep", "--quiet", target)
+    if code != 0:
+        return False, "could not move to master past local commits: %s" % " ".join(out.split())[-160:]
+    return True, ("local commit(s) that were never shipped were set aside (patches in %s, ref %s) - this machine now "
+                  "runs exactly master" % (kept_dir or "-", backup or "-"))
+
 def _keep_copies(repo: Path, files: list) -> str:
     """Copy edited files GitHub deleted to harness_data/update_kept/<time>/<path> (never committed)."""
     if not files:
@@ -979,6 +1001,19 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
             return _done(False, "; ".join(notes), error=state.get("error", ""),
                          problem=state.get("problem", "update failed"), repo=repo)
         target = "origin/" + BRANCH
+        if not state["behind"] and state["ahead"] and exact():
+            # up to date but carrying commits master does not have (the PC's "patch 609" vs the Mac's 608)
+            unique, _same = _local_commits(repo, target)
+            if unique and state.get("dirty"):
+                _set_aside(repo, state["dirty"])
+            ok_park, why_park = _park_local_commits(repo, target)
+            notes.append(why_park)
+            if ok_park:
+                after = version(repo)["commit"]
+                STATE.update({"current": after, "latest": state["latest"], "ahead": 0, "behind": 0,
+                              "dirty": dirty_files(repo), "update_available": False})
+                note_history("parked", repo, **{"from": state["current"], "to": after})
+                return _done(True, "; ".join(notes + ["now exactly master (%s)" % after]), repo=repo)
         if not state["behind"]:
             STATE.update({"current": state["current"], "latest": state["latest"], "ahead": state["ahead"],
                           "behind": 0, "dirty": state["dirty"], "update_available": False})
@@ -1064,6 +1099,13 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
                                        % (len(same), out[-200:]))
                 notes.append("%d local commit(s) were already on GitHub; moved to GitHub's version "
                              "(old state kept as %s)" % (len(same), backup or "-"))
+            elif exact():
+                ok_park, why_park = _park_local_commits(repo, target)
+                if not ok_park:
+                    STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
+                    STATE["update_available"] = True
+                    return _done(False, "; ".join(notes), repo=repo, problem="local commits conflict", error=why_park)
+                notes.append(why_park)
             else:
                 code, out = git(repo, *_identity_args(repo), "rebase", "--quiet", target, timeout=timeout)
                 if code != 0:
@@ -1090,6 +1132,12 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
                 return _done(False, "; ".join(notes), repo=repo,
                              problem="update failed" if problem == "GitHub unreachable" else problem,
                              error="update failed: %s" % " ".join(out.split())[-200:])
+        if exact() and (set_aside or carried):
+            # mirror mode: live edits are not put back on top of master (an agent's edit in the running code is how
+            # the PC got stuck); they stay saved whole in harness_data/update_kept/
+            notes.append("live edits were saved in harness_data/update_kept/ and not put back - this machine runs "
+                         "exactly master")
+            set_aside, carried = "", {}
         if set_aside:                        # edits that were set aside go back when they still apply
             code, out = git(repo, "apply", "--3way", "--whitespace=nowarn", set_aside)
             notes.append("put your set-aside edits back" if code == 0 else
