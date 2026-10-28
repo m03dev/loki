@@ -40,6 +40,11 @@ def sh(cwd, *args):
     return proc.returncode, (proc.stdout + proc.stderr).strip()
 
 
+def kept_text(repo, name):
+    root = repo / "harness_data" / "update_kept"
+    return "".join(p.read_text(errors="replace") for p in root.rglob(name) if p.is_file()) if root.exists() else ""
+
+
 if not shutil.which("git"):
     print("SKIP: git is not installed")
     sys.exit(0)
@@ -118,11 +123,12 @@ check("a second update is a no-op", not updater.update(MAC)["updated"])
 (MAC / "engine" / "loki.py").write_text("VERSION = 'my local edit'\n", encoding="utf-8")
 publish("VERSION = 3\n")
 result = updater.update(MAC)
-check("local changes are never overwritten", not result["updated"]
-      and "my local edit" in (MAC / "engine" / "loki.py").read_text(), result)
-check("...and it says why", "local changes" in result["note"], result["note"])
-sh(MAC, "git", "checkout", "--", "engine/loki.py")
-check("once the edit is gone it updates", updater.update(MAC)["updated"])
+# owner 2026-10-27 ("windows isnt updating"): a local edit never stops an update again - it is saved whole
+check("a clashing local edit no longer blocks: GitHub's version is installed", result["updated"]
+      and (MAC / "engine" / "loki.py").read_text() == "VERSION = 3\n", result)
+check("...the edit is saved whole, never lost", "my local edit" in kept_text(MAC, "loki.py"), result["note"])
+check("...and the note names the file and where it is kept", "engine/loki.py" in result["note"]
+      and "update_kept" in result["note"], result["note"])
 
 section("an agent's unfinished edits are carried across an update when they merge cleanly")
 # The PC fell behind the Mac all day because an agent's uncommitted edits stopped every update.
@@ -155,11 +161,10 @@ sh(MAC, "git", "checkout", "--", "engine/loki.py")
 publish("A = 'theirs'\nB = 2\nC = 3\nD = 4\nE = 'from github'\n")
 before = (MAC / "engine" / "loki.py").read_text()
 result = updater.update(MAC)
-check("a real conflict still blocks and changes nothing", not result["updated"]
-      and (MAC / "engine" / "loki.py").read_text() == before, result)
-check("...and names the file and why", "same place" in result["note"] and "engine/loki.py" in result["note"], result["note"])
-sh(MAC, "git", "checkout", "--", "engine/loki.py")
-check("once that edit is gone it updates", updater.update(MAC)["updated"])
+check("a real conflict no longer blocks: GitHub's version is installed", result["updated"]
+      and (MAC / "engine" / "loki.py").read_text().startswith("A = 'theirs'"), result)
+check("...the conflicting edit is saved whole", "A = 'mine'" in kept_text(MAC, "loki.py"), result["note"])
+check("...no conflict markers left", "<<<<<<<" not in (MAC / "engine" / "loki.py").read_text())
 
 section("an edited file that GitHub deleted (a retired feature) no longer blocks every update")
 (SEED / "old").mkdir(exist_ok=True)
@@ -214,9 +219,11 @@ sh(MAC, "git", "commit", "-q", "-am", "mac edit")
 mine = sh(MAC, "git", "rev-parse", "HEAD")[1]
 publish("VERSION = 'pc edit'\n")
 result = updater.update(MAC)
-check("a conflicting local commit is not rebased", not result["updated"] and sh(MAC, "git", "rev-parse", "HEAD")[1] == mine
+check("a conflicting local commit no longer blocks: GitHub's version is installed", result["updated"]
+      and "pc edit" in (MAC / "engine" / "loki.py").read_text()
       and not (MAC / ".git" / "rebase-merge").exists() and not (MAC / ".git" / "rebase-apply").exists(), result)
-check("...and the reason says so", result["problem"] == "local commits conflict" and "conflict" in result["error"], result)
+check("...the commit is saved as a patch and in a backup ref", "mac only" in kept_text(MAC, "*.patch")
+      and "conflicted" in result["note"], result["note"])
 sh(MAC, "git", "reset", "-q", "--hard", "origin/master")
 
 # (c) dirty tracked files: an older committed version, GitHub's new version, a deleted file
@@ -236,13 +243,12 @@ check("...the deleted file is back", (MAC / "README.md").is_file())
 (MAC / "engine" / "loki.py").write_text("VERSION = 'hand edited'\n", encoding="utf-8")
 publish("VERSION = 'one more'\n")                                   # GitHub changed the same line
 result = updater.update(MAC)
-check("a genuinely edited file that conflicts blocks the update", not result["updated"]
-      and "hand edited" in (MAC / "engine" / "loki.py").read_text(), result)
-check("...naming the file", "engine/loki.py" in result["error"] and result["problem"] == "local edits block the update", result)
-check("...the outcome is kept for the engine's /health", updater.last_result(MAC).get("problem") == "local edits block the update",
+check("a genuinely edited file that conflicts no longer blocks the update", result["updated"]
+      and "one more" in (MAC / "engine" / "loki.py").read_text(), result)
+check("...the edit is saved, naming the file", "hand edited" in kept_text(MAC, "loki.py")
+      and "engine/loki.py" in result["note"], result["note"])
+check("...the outcome is kept for the engine's /health", updater.last_result(MAC).get("updated") is True,
       updater.last_result(MAC))
-sh(MAC, "git", "checkout", "--", "engine/loki.py")
-check("once the edit is gone it updates", updater.update(MAC)["updated"])
 
 section("git can never open a sign-in window (it blocked LOKI from starting)")
 env = updater.git_env("win32")

@@ -661,6 +661,48 @@ def _backup_edits(repo: Path) -> str:
     return ref if code == 0 else ""
 
 
+def _kept_dir(repo: Path) -> Path:
+    d = repo / "harness_data" / "update_kept" / time.strftime("%Y%m%d-%H%M%S")
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _set_aside(repo: Path, files: list) -> tuple:
+    """Save uncommitted edits whole (a patch, copies of the files, a backup ref), then clean them so the update can
+    go through. (patch path or "", note)."""
+    try:
+        backup = _backup_edits(repo)
+        dest = _kept_dir(repo)
+        code, diff = git(repo, "diff", "--binary", "HEAD", "--", *files)
+        if code != 0:
+            return "", ""
+        patch = dest / "edits.patch"
+        patch.write_text(diff + ("\n" if diff and not diff.endswith("\n") else ""), encoding="utf-8")
+        for rel in files:
+            src = repo / rel
+            if src.is_file():
+                out = dest / "files" / rel
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(src.read_bytes())
+        code, _ = git(repo, "checkout", "HEAD", "--", *files)
+        if code != 0:
+            return "", ""
+        return str(patch), ("set aside your edits to %s (saved in %s and %s) so the update can go through"
+                            % (_names(files), patch.parent.relative_to(repo), backup or "-"))
+    except OSError:
+        return "", ""
+
+
+def _save_commits(repo: Path, target: str) -> str:
+    """Local commits not on GitHub as patch files under harness_data/update_kept/ (they also stay in the backup ref)."""
+    try:
+        dest = _kept_dir(repo) / "commits"
+        code, _ = git(repo, "format-patch", "-q", "-o", str(dest), "%s..HEAD" % target)
+        return str(dest.relative_to(repo)) if code == 0 else ""
+    except OSError:
+        return ""
+
+
 def _keep_copies(repo: Path, files: list) -> str:
     """Copy edited files GitHub deleted to harness_data/update_kept/<time>/<path> (never committed)."""
     if not files:
@@ -965,6 +1007,14 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
                 notes.append("restored %d file(s) that only held another LOKI version (%s)"
                              % (len(state["restorable"]), _names(state["restorable"])))
         carried = {}
+        set_aside = ""          # a patch of edits that could not be carried, re-applied after the update
+        if not state["can_update"] and state.get("blocking") and state["ahead"]:
+            # local commits AND edits (the PC 2026-10-27: an agent's edit to engine/opencode_engine.py plus one local
+            # commit kept it on "update waiting" forever - the carry below only ran without local commits)
+            set_aside, why = _set_aside(repo, state["blocking"])
+            if set_aside:
+                state["can_update"] = True
+                notes.append(why)
         if not state["can_update"] and state.get("blocking") and not state["ahead"]:
             # Uncommitted edits (an agent mid-task on this machine) used to stop EVERY update,
             # so this machine fell behind the other one all day. Carry them across instead when
@@ -983,7 +1033,15 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
                 notes.append("carried %d edited file(s) across the update (%s; old state kept as %s)"
                              % (len(state["blocking"]), _names(state["blocking"]), backup or "-"))
             else:
-                state["reason"] += "; " + why
+                # a real conflict: never stop updating over it (owner 2026-10-27: "windows isnt updating") - the
+                # edits are saved whole and put back after the update when they still apply
+                set_aside, why2 = _set_aside(repo, state["blocking"])
+                if set_aside:
+                    carried = {}
+                    state["can_update"] = True
+                    notes.append(why2)
+                else:
+                    state["reason"] += "; " + why
         if not state["can_update"]:
             STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
             STATE["update_available"] = True
@@ -1010,15 +1068,21 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
                 code, out = git(repo, *_identity_args(repo), "rebase", "--quiet", target, timeout=timeout)
                 if code != 0:
                     git(repo, "rebase", "--abort")
-                    STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
-                    STATE["update_available"] = True
-                    return _done(False, "; ".join(notes), repo=repo, problem="local commits conflict",
-                                 error="%d local commit(s) that are not on GitHub conflict with GitHub's version; "
-                                       "nothing was changed. Resolve with `git rebase origin/%s` in %s, then "
-                                       "publish with tools/ship.py (%s)"
-                                       % (len(unique), BRANCH, repo, " ".join(out.split())[-160:]))
-                notes.append("kept %d local commit(s) that are not on GitHub yet on top of GitHub's version "
-                             "(publish them with tools/ship.py; old state kept as %s)" % (len(unique), backup or "-"))
+                    # never stuck on a conflicting local commit: it is saved as patches (and in the backup ref),
+                    # this machine moves to GitHub's version
+                    kept_dir = _save_commits(repo, target)
+                    code, out2 = git(repo, "reset", "--keep", "--quiet", target)
+                    if code != 0:
+                        STATE.update({k: state[k] for k in ("current", "latest", "ahead", "behind", "dirty")})
+                        STATE["update_available"] = True
+                        return _done(False, "; ".join(notes), repo=repo, problem="local commits conflict",
+                                     error="%d local commit(s) conflict with GitHub's version and could not be set "
+                                           "aside: %s" % (len(unique), " ".join(out2.split())[-160:]))
+                    notes.append("%d local commit(s) conflicted with GitHub's version: saved as patches in %s and as %s, "
+                                 "then moved to GitHub's version" % (len(unique), kept_dir or "-", backup or "-"))
+                else:
+                    notes.append("kept %d local commit(s) that are not on GitHub yet on top of GitHub's version "
+                                 "(publish them with tools/ship.py; old state kept as %s)" % (len(unique), backup or "-"))
         else:
             code, out = git(repo, "merge", "--ff-only", "--quiet", target)
             if code != 0:
@@ -1026,6 +1090,12 @@ def update(repo: Path | None = None, timeout: float = 120.0) -> dict:
                 return _done(False, "; ".join(notes), repo=repo,
                              problem="update failed" if problem == "GitHub unreachable" else problem,
                              error="update failed: %s" % " ".join(out.split())[-200:])
+        if set_aside:                        # edits that were set aside go back when they still apply
+            code, out = git(repo, "apply", "--3way", "--whitespace=nowarn", set_aside)
+            notes.append("put your set-aside edits back" if code == 0 else
+                         "your set-aside edits no longer fit the new version - they are kept in %s" % set_aside)
+            if code != 0:
+                git(repo, "checkout", "HEAD", "--", ".")   # a half-applied 3-way merge never stays behind
         for path, data in carried.items():   # the merged edits go back on top of the new version
             try:
                 (repo / path).write_bytes(data)
