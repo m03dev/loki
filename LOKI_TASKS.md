@@ -144,3 +144,11 @@ nothing is published or posted without the owner. Edit freely.
   an hour; empty-balance DeepSeek is benched 12 h, a 1200 s timeout 1 h.
 - Check on the PC: run one Builder job ("make a 64-pixel sprite of a knight") with the local abliterated model
   (huihui_ai/qwen3-abliterated:8b, installed) and report the file it made, the model that made it and how long it took.
+
+## 2026-10-28 - Mac + PC: the Mac uses the PC's local model (pc-local) - proof needed
+- PC: Lab > Machines (or GET /offload/status on the Mac) must list "llm" among the work the PC takes. If it does not,
+  report the reason shown (no local model loaded, LOKI_PEER_LLM_SERVE=off ...).
+- Mac: with NVIDIA set aside (pick the model "pc-local" in the chat), ask "write a haiku about a fox" and report the
+  answer and the PC's log line "[peer-llm] answered ... with <model> in N s".
+- Mac: one Manga Studio page drawn in Forge > Manga - save the composed page PNG under Home and report its path; the page
+  must fill in panel by panel while it draws.
