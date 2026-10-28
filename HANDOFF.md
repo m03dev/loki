@@ -27,6 +27,15 @@ mirror stopped 2026-10-27). The CI tests workflow was removed (2026-10-25, it on
 
 ## Now (2026-10-25)
 
+**2026-10-28 13:30 (Claude) - upstream adopts one at a time in LOKI's worktree; Mac jobs never use the local model.**
+- Seen on the Mac (device bridge, its harness_data): the owner adopted 8 upstream cards at 12:21; each ran as a plain
+  job in ~/LOKI Projects/Home (no LOKI code there) - 4 side by side, falling back to the 9B local model on the 16 GB Mac
+  (NVIDIA answered 404 for Nemotron / Kimi on that key). Fixed: Adopt goes into <data>/upstream/adopt_queue.json and
+  starts through improve_loki (LOKI's own worktree, tests, ship.py) one at a time (autopilot tick); a background job on
+  the Mac (LOKI_MACHINE_ROLE=light or darwin) never falls back to a local model (LOKI_LOCAL_JOBS=on undoes it). The
+  owner's 8 adoptions were put in the Mac's queue; they start after the running Home jobs end.
+- Pre-existing failures, unchanged: test_max_fast_modes 1, test_job_reliability 2, test_task_success 11.
+
 **2026-10-28 13:00 (Claude) - typing in the chat; every machine's logs on every machine.**
 - Owner: "the chat keeps try to auto correct me and sends me out of the typing ... i cant even write a response back".
   Causes: the new interview put a card in front of EVERY message, replies included; the OS autocorrect / inline

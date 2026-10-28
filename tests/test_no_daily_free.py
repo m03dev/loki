@@ -111,6 +111,18 @@ try:
     check("a job asks NVIDIA for the Nemotron its key serves (2026-10-27: the PC's first try was a 404 every time)",
           (_routes.get("nvidia-nemotron") or {}).get("model") == "nvidia/nemotron-3-super-120b-a12b", _routes)
     check("Hugging Face is never a chat route for jobs", "huggingface" not in _routes, list(_routes))
+    # the Mac is not the powerhouse: a background job there never falls back to the local model (2026-10-28)
+    loki.provider_configured = lambda n: n in ("nvidia", "nvidia-nemotron", "local")
+    _saved_job = (loki._job_process, os.environ.get("LOKI_MACHINE_ROLE"))
+    loki._job_process = lambda: True
+    os.environ["LOKI_MACHINE_ROLE"] = "light"
+    _mac = loki._oc_providers("nvidia")
+    os.environ["LOKI_MACHINE_ROLE"] = "main"
+    _pc = loki._oc_providers("nvidia")
+    loki._job_process = _saved_job[0]
+    os.environ.pop("LOKI_MACHINE_ROLE") if _saved_job[1] is None else os.environ.__setitem__("LOKI_MACHINE_ROLE", _saved_job[1])
+    check("a job on the Mac never falls back to the local model", "local" not in _mac and "nvidia" in _mac, list(_mac))
+    check("... on the PC the local model stays the last resort", "local" in _pc, list(_pc))
 finally:
     loki.provider_configured, nim_models.served, loki.MODELS["nvidia"].api_key = _saved
 

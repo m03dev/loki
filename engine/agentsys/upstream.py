@@ -370,3 +370,43 @@ def skip(repo: str, mark: str) -> None:
     rec = st["repos"].setdefault(str(repo).lower(), {})
     rec["skipped"] = mark
     save_state(st)
+
+
+# ----------------------------------------------------------------------------- the adopt queue (one at a time)
+def _queue_path() -> Path:
+    return sub("upstream") / "adopt_queue.json"
+
+
+def adopt_queue() -> list:
+    try:
+        return json.loads(_queue_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def _queue_save(items: list) -> None:
+    p = _queue_path()
+    tmp = p.with_suffix(".tmp%d" % os.getpid())
+    tmp.write_text(json.dumps(items, indent=1), encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def adopt_queue_add(repo: str, prompt: str, front: bool = False, error: str = "") -> list:
+    items = [x for x in adopt_queue() if x.get("repo") != repo]
+    entry = {"repo": repo, "prompt": prompt, "t": time.time(), "error": error,
+             "tries": next((x.get("tries", 0) for x in adopt_queue() if x.get("repo") == repo), 0) + (1 if error else 0)}
+    if entry["tries"] > 3:              # it keeps failing to start: leave it out, the report says so
+        _queue_save(items)
+        return items
+    items = [entry] + items if front else items + [entry]
+    _queue_save(items)
+    return items
+
+
+def adopt_queue_pop() -> dict | None:
+    items = adopt_queue()
+    if not items:
+        return None
+    first, rest = items[0], items[1:]
+    _queue_save(rest)
+    return first

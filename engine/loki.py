@@ -9287,10 +9287,23 @@ def _oc_providers(first: str) -> dict:
         out = {n: out[n] for n in names}
     except Exception:  # noqa: BLE001
         pass
+    if _job_process() and _local_off_for_jobs() and any(n not in LOCAL_PROVIDERS for n in out):
+        # the Mac is not the powerhouse (owner's rule 7): a background job there never falls back to the local model -
+        # 2026-10-28, six adopt jobs at once all fell to the 9B model on the 16 GB Mac (the one that crashed it before)
+        out = {n: v for n, v in out.items() if n not in LOCAL_PROVIDERS}
+        local = ""
     names = list(out)[:6]
     if local and local in out and local not in names:
         names = names[:5] + [local]
     return {n: out[n] for n in names}
+
+
+def _local_off_for_jobs() -> bool:
+    """True on the Mac (or LOKI_MACHINE_ROLE=light): jobs leave this computer's model alone. LOKI_LOCAL_JOBS=on undoes it."""
+    if str(os.getenv("LOKI_LOCAL_JOBS", "")).strip().lower() in ("1", "on", "yes"):
+        return False
+    role = str(os.getenv("LOKI_MACHINE_ROLE", "")).strip().lower()
+    return role == "light" or (role != "main" and sys.platform == "darwin")
 
 
 def engine_status() -> dict:

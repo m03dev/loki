@@ -424,6 +424,31 @@ up2 = owner_review.queue("upstream", "upstream", {"repo": "a/b", "mark": "m2", "
 check("For you: one open upstream card per repo", up["id"] == up2["id"] and up2["args"]["mark"] == "m2")
 d2 = owner_review.decide(up["id"], "skip")
 check("For you: skip an upstream change", d2["ok"] and upstream.load_state()["repos"]["a/b"]["skipped"] == "m2")
+# adopting upstream changes: one at a time, through improve_loki (LOKI's own worktree), never a Home job
+improved = []
+
+
+class FakeJobs:
+    running = []
+
+    class store:  # noqa: N801
+        @staticmethod
+        def all():
+            return [{"title": t, "status": "working"} for t in FakeJobs.running]
+
+fa.improve_loki = lambda task: (improved.append(task), FakeJobs.running.append("Improve LOKI: " + task.splitlines()[0][:60]),
+                                "started job x")[-1]
+runtime.STATE["state"] = type("S2", (), {"jobs": FakeJobs(), "agent": fa, "loop": None})()
+u1 = owner_review.queue("upstream", "upstream", {"repo": "c/one", "prompt": "Upstream update: c/one has 2 new commits"}, str(ws))
+u2 = owner_review.queue("upstream", "upstream", {"repo": "c/two", "prompt": "Upstream update: c/two has 5 new commits"}, str(ws))
+owner_review.decide(u1["id"], "adopt")
+owner_review.decide(u2["id"], "adopt", note="only the crease fix")
+check("adopt: the first starts through improve_loki (LOKI's worktree)", improved == ["Upstream update: c/one has 2 new commits"])
+check("adopt: the second waits in the queue while one runs", [x["repo"] for x in upstream.adopt_queue()] == ["c/two"]
+      and "only the crease fix" in upstream.adopt_queue()[0]["prompt"])
+FakeJobs.running.clear()
+check("adopt: when it is done the next one starts", runtime.adopt_next()["started"] == "c/two" and len(improved) == 2
+      and not upstream.adopt_queue())
 pr = owner_review.queue("prompt", "make_image", {"prompt": "a dragon"}, str(ws), who="Concept Artist")
 check("For you: a prompt card can be parked (not now)", owner_review.decide(pr["id"], "park", note="later")["ok"]
       and any(p["request"] == "a dragon" for p in sendback.parked()))

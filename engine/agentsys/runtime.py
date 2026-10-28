@@ -349,8 +349,35 @@ def _decide_upstream(item: dict, action: str, data: dict) -> dict:
     prompt = str(args.get("prompt") or "")
     if data.get("note"):
         prompt += "\n\nThe owner adds: " + str(data["note"])[:800]
-    out = _start_job(prompt, "Upstream: adopt %s" % args.get("repo", ""))
-    return {"ok": bool(out.get("ok")), "status": "adopted", **out}
+    upstream.adopt_queue_add(args.get("repo", ""), prompt)
+    out = adopt_next()
+    return {"ok": True, "status": "adopted", "queued": True, **out}
+
+
+def _adopt_running(jobs) -> bool:
+    try:
+        return any(str(j.get("title") or "").startswith(("Improve LOKI: Upstream update", "Upstream: adopt"))
+                   and j.get("status") in ("queued", "starting", "working", "blocked") for j in jobs.store.all())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def adopt_next() -> dict:
+    """One adoption at a time, in LOKI's own worktree (improve_loki: its tests, ship.py, master) - never the Home
+    workspace, never eight agents side by side on the Mac (2026-10-28: the owner adopted 8 at once and each ran as a
+    plain job in Home, where LOKI's code is not)."""
+    agent, state = _agent(), STATE["state"]
+    jobs = getattr(state, "jobs", None) or getattr(agent, "JOBS", None)
+    if agent is None or jobs is None or _adopt_running(jobs):
+        return {"started": ""}
+    nxt = upstream.adopt_queue_pop()
+    if not nxt:
+        return {"started": ""}
+    res = agent.improve_loki(nxt["prompt"]) if hasattr(agent, "improve_loki") else "error: no improve_loki"
+    if str(res).startswith("error"):
+        upstream.adopt_queue_add(nxt["repo"], nxt["prompt"], front=True, error=str(res)[:200])
+        return {"started": "", "error": str(res)[:200]}
+    return {"started": nxt["repo"], "result": str(res)[:200]}
 
 
 def _team_choice(answers: Any) -> str:

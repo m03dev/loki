@@ -900,6 +900,13 @@ class Autopilot:
             from agentsys import runtime  # pylint: disable=import-outside-toplevel
         except Exception:  # noqa: BLE001
             return ""
+        if runtime.STATE.get("state") is not None:
+            try:   # the owner's adopted upstream changes, one at a time in LOKI's own worktree
+                started = runtime.adopt_next().get("started")
+                if started:
+                    self._log("upstream", "adopting %s now (the next one waits until it is done)" % started)
+            except Exception as exc:  # noqa: BLE001
+                self._log("upstream", "adopt failed to start: %s" % exc)
         ids = runtime.parked_orchestrations_ready() if runtime.STATE.get("state") is not None else []
         for rid in ids[:2]:
             runtime.resume_orchestration(rid)
