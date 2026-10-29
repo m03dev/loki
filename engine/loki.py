@@ -697,8 +697,8 @@ _ROUTING_CACHE = {"t": 0.0, "stats": {}}
 
 def provider_tier(name: str) -> str:
     cfg = MODELS.get(name)
-    if name in LOCAL_PROVIDERS or (cfg is not None and "11434" in cfg.base_url):
-        return "local"
+    if name in LOCAL_PROVIDERS or name == "pc-local" or (cfg is not None and "11434" in cfg.base_url):
+        return "local"   # pc-local is the linked PC's small model (engine/peer_llm.py) - small, whatever its address
     if cfg is not None and cfg.base_url.startswith(CLI_AGENT_PREFIX):
         return "subscription"
     if is_metered(name):
@@ -777,11 +777,15 @@ def latency_outlook() -> dict:
 
 
 def _forecast_order(order: list) -> list:
+    """Slow routes move back - but only among routes of the same strength (2026-10-28, owner: "loki feels a lot
+    weaker today"): next to the PC's 8B answering in 5 s every NVIDIA route looked 'slow', went behind it, and the
+    chat ran on the small model. A small route (the local model, pc-local) never jumps ahead of a capable one."""
     try:
         import forecast  # pylint: disable=import-outside-toplevel
-        return forecast.reorder(order, latency_outlook())
+        out = forecast.reorder(order, latency_outlook())
     except Exception:  # noqa: BLE001
         return list(order)
+    return _strong_first(out, list(order)[0] if order else "")
 
 
 def routing_order(order) -> list:
@@ -5096,7 +5100,10 @@ def loki_folder_note() -> str:
     return ("# LOKI's folder\n\"LOKI's folder\" means LOKI's own install: %s (its code is engine/, its Python is %s). "
             "A task that says \"in LOKI's folder\" runs its commands THERE (cd into it first), not in your workspace. "
             "Any engine/ or harness_data/ folder inside your workspace is an old copy - never run, edit or cite it as "
-            "proof." % (root.as_posix(), py.as_posix()))
+            "proof.\n\n# A tool that is not installed\nNeed a program or package that is missing? Call the `install` tool "
+            "(loki-make) with what and why - LOKI asks the owner and installs it itself. Never run pip / npm / winget "
+            "install yourself, and never install LOKI's own commands (manga, design, playbook are already there)."
+            % (root.as_posix(), py.as_posix()))
 
 
 def identity_section() -> str:
@@ -9317,6 +9324,31 @@ WEAK_FOR_JOBS = tuple(p.strip() for p in os.getenv("LOKI_WEAK_FOR_JOBS", "llm7,o
 NOT_CHAT_ROUTES = ("huggingface",)
 
 
+def _is_weak_route(name: str) -> bool:
+    """A small model: this computer's local ones, the linked PC's (pc-local) and the weak free routes. The chat and
+    the jobs both keep a capable route ahead of these (owner 2026-10-28: "it doesnt make sense to move the strongest
+    model to background jobs" / "loki feels a lot weaker today")."""
+    if not name:
+        return False
+    if name in LOCAL_PROVIDERS or name in WEAK_FOR_JOBS or name == "pc-local":
+        return True
+    try:
+        return name in MODELS and _cfg_is_local(MODELS[name])
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _strong_first(names: list, first: str = "") -> list:
+    """`names` with every small route after every capable one (order kept inside each group). When the owner picked
+    a small model himself (`first` is one) it stays first - his pick is his."""
+    names = list(names)
+    weak = [n for n in names if _is_weak_route(n)]
+    strong = [n for n in names if n not in weak]
+    if first and first in weak:
+        return [first] + strong + [n for n in weak if n != first]
+    return strong + weak
+
+
 JOB_TRY = 1   # set by run_job from the job's prompt
 
 
@@ -9359,11 +9391,15 @@ def _oc_providers(first: str) -> dict:
     try:   # crawling ones go last, ones that said they are out are left off (engine/provider_speed.py)
         import provider_speed  # pylint: disable=import-outside-toplevel
         names = provider_speed.order(DATA_DIR, list(out), keep=(local,))
+        # the chat as well as the jobs: a slow capable route stays ahead of every small one (2026-10-28: NVIDIA's
+        # 150-300 s free-tier steps benched it behind the PC's 8B and the chat got weak). Slow capable routes may
+        # still trade places among themselves.
+        names = _strong_first(names, first)
         if _job_process():
             # unattended work (2026-10-27, the PC overnight): NVIDIA took ~200 s a step, was benched as slow, and the
             # jobs ran on the 8B local model and a 20B free route that could not call tools - 60% failed. Nobody waits
             # on a job, so a slow capable route beats a quick weak one: the small models go after every cloud route.
-            weak = [n for n in names if n in LOCAL_PROVIDERS or n in WEAK_FOR_JOBS or n == "pc-local"]
+            weak = [n for n in names if _is_weak_route(n)]
             names = [n for n in names if n not in weak] + weak
             # the model the job was given goes first, not the quickest one: speed put Nemotron (the small Fast model)
             # in front of every job, and it looped on one broken command (2026-10-27, the PC)
@@ -9554,6 +9590,14 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         kind, part = ev.get("type"), ev.get("part") or {}
         if kind == "tool_use":
             name, status, shown, out = opencode_engine.tool_summary(part)
+            if status in ("completed", "error"):
+                try:   # the receipt: the WHOLE output, so a report can be checked against it (engine/receipts.py)
+                    import receipts  # pylint: disable=import-outside-toplevel
+                    _st = part.get("state") or {}
+                    receipts.record(name, shown, str(_st.get("output") or _st.get("error") or ""),
+                                    0 if status == "completed" else 1)
+                except Exception:  # noqa: BLE001
+                    pass
             _progress("tool", "%s %s" % (name, shown))
             _progress("tool_result" if status == "completed" else "error", ("%s: %s" % (name, out or status))[:400])
             guard = meter.get("guard")
@@ -10201,11 +10245,12 @@ def _slow_may_move(pname: str, rest: list, providers: dict) -> bool:
     """May a SLOW step move this turn to the next route? Not in a job when every route left is weaker (the local model,
     the weak free ones): nobody waits on a job, and a slow capable model beats a quick weak one (2026-10-28, the Mac:
     one 147 s NVIDIA step - normal for its free tier - handed a job to the 9B local model)."""
-    if not _job_process():
+    # the chat too (2026-10-28, owner: "loki feels a lot weaker today"): one slow NVIDIA step handed the chat to the
+    # PC's 8B - a slow capable answer beats a quick weak one there as well. A small route itself may always move on.
+    if _is_weak_route(pname):
         return True
     names = [next((n for n in providers if str(m).startswith(opencode_engine.provider_id(n) + "/")), "") for m in rest]
-    return any(n and n not in LOCAL_PROVIDERS and n not in WEAK_FOR_JOBS
-               and not (n in MODELS and _cfg_is_local(MODELS[n])) for n in names)
+    return any(n and not _is_weak_route(n) for n in names)
 
 
 def _turn_timeout() -> int:

@@ -47,9 +47,14 @@ const LokiHomeReview = (() => {
 
   /** The panel lives right under Home's header row; it builds itself once Home is there. */
   function mount() {
-    if (panel) return true;
     const hub = document.getElementById("home-hub");
     const head = hub && hub.querySelector(".home-head");
+    if (panel) {
+      // Home rebuilds its header (pages, tabs): the panel fell out of the page and For you was gone until a restart
+      // (owner 2026-10-28: "for u just bugs out sometimes") - put it back under the header it has now
+      if (!panel.isConnected && head) head.after(panel);
+      return panel.isConnected;
+    }
     if (!hub || !head) return false;
     panel = mk("section", "rv-panel"); panel.id = "home-review"; panel.hidden = true;
     panel.setAttribute("aria-label", "For you: prompts and hand-offs waiting for your OK");
@@ -268,13 +273,44 @@ const LokiHomeReview = (() => {
     return c;
   }
 
+  /** An agent needs a tool that is not installed (engine/installs.py; owner 2026-10-28: "they should install it or
+   *  prompt to install ive never been asked anything"): what, why, the exact command. Install / No / Not now. */
+  function installCard(it) {
+    const a = it.args || {};
+    const c = mk("div", "rv-card rv-install"); c.setAttribute("role", "listitem"); c.dataset.id = it.id;
+    const h = mk("div", "rv-head");
+    h.append(mk("span", "rv-who", it.who || "An agent"),
+      mk("span", "rv-what", it.status === "working" ? "is installing what you approved" : "needs a tool installed"),
+      mk("span", "rv-ago", ago(it.t)));
+    c.append(h);
+    const facts = mk("div", "rv-facts");
+    const row = (k, v) => { if (!v) return; const r = mk("div", "rv-fact"); r.append(mk("span", "rv-k", k), mk("span", "rv-v", v)); facts.append(r); };
+    row("Install", (a.names || []).join(", ") + (a.manager ? " (" + a.manager + ")" : ""));
+    row("Why", a.why);
+    row("Runs", (a.command || []).map((x) => String(x).split(/[\\/]/).pop()).join(" "));
+    if (it.answer) row("Result", it.answer);
+    c.append(facts);
+    const note = mk("input", "rv-note-in"); note.type = "text"; note.placeholder = "Note (optional)";
+    note.setAttribute("aria-label", "A note for the agent");
+    const acts = mk("div", "rv-acts");
+    acts.append(
+      iconBtn("rv-ok", ICON.adopt, "Install", "LOKI installs it now and tries the task that asked again.", () => decide(it, "approve", { note: note.value }, c)),
+      iconBtn("rv-no", ICON.no, "No", "Do not install it - the agent finds another way.", () => decide(it, "reject", { note: note.value }, c)),
+      iconBtn("rv-later", ICON.later, "Not now", "Park it for later.", () => decide(it, "park", { note: note.value }, c)));
+    c.append(mk("div", "rv-row", null)); c.lastChild.append(note, acts);
+    c.append(mk("div", "rv-err"));
+    if (it.status === "working") { acts.hidden = true; note.hidden = true; c.classList.add("working"); }
+    return c;
+  }
+
   /** What the owner said Not now to (engine/agentsys/sendback.py), under the cards. */
   async function parked() {
     if (!panel) return;
     let box = panel.querySelector(".rv-parked");
     const r = await call("/agentsys/parked").catch(() => null);
     const items = (r && r.ok && r.parked) || [];
-    if (!items.length) { if (box) box.remove(); return; }
+    S.parkedCount = items.length;
+    if (!items.length) { if (box) box.remove(); panel.hidden = !S.items.length; return; }
     if (!box) { box = mk("details", "rv-brief rv-parked"); panel.append(box); }
     // never rebuilt under the owner's fingers: a note being typed in a parked row stays
     if (box.contains(document.activeElement) || [...box.querySelectorAll("input")].some((i) => i.value)) return;
@@ -289,7 +325,7 @@ const LokiHomeReview = (() => {
   function render() {
     if (!mount()) return;
     const items = S.items;
-    panel.hidden = !items.length;
+    panel.hidden = !items.length && !S.parkedCount;   // parked cards keep it up (it blinked every 10 s before)
     const waiting = items.filter((x) => x.status === "waiting").length;
     count.textContent = waiting ? String(waiting) : "";
     count.dataset.tipName = "Waiting for you"; count.dataset.tipWhat = waiting + " card(s) need your OK";
@@ -302,7 +338,7 @@ const LokiHomeReview = (() => {
       const box = n && n.querySelector(".rv-words"), note = n && n.querySelector(".rv-note-in");
       const typing = n && ((box && (document.activeElement === box || box.value !== box.dataset.orig))
                            || (note && (document.activeElement === note || note.value)));
-      const build = { prompt: promptCard, question: questionCard, upstream: upstreamCard }[it.kind] || resultCard;
+      const build = { prompt: promptCard, question: questionCard, upstream: upstreamCard, install: installCard }[it.kind] || resultCard;
       if (!n || (n.dataset.key !== key && !typing)) { n = build(it); n.dataset.key = key; }
       order.push(n);
     }

@@ -101,6 +101,9 @@ def memory_gate(ram_gb=None, nvidia=None):
     return True, ""
 
 
+_SAID: dict = {}
+
+
 def zimage_status():
     """(ready, why not) for local Z-Image on this machine."""
     try:
@@ -109,7 +112,9 @@ def zimage_status():
             return False, "torch/diffusers are not installed (tools/setup_extras.py adds them)"
         fits, why = memory_gate()
         if not fits:
-            print("[imagegen] local Z-Image skipped: " + why, file=sys.stderr, flush=True)
+            if not _SAID.get("zimage"):   # once per process: it was printed on every status call and filled the
+                _SAID["zimage"] = True    # Mac's whole shared log (2026-10-28) - every real error was pushed out
+                print("[imagegen] local Z-Image skipped: " + why, file=sys.stderr, flush=True)
             return False, why
         try:
             record = json.loads(_plan_file().read_text(encoding="utf-8"))

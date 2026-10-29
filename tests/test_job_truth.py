@@ -150,7 +150,36 @@ check("a job never leaves a slow capable route for the local model only",
       not loki._slow_may_move("nvidia", ["%s/q" % _pid("local")], _prov)
       and loki._slow_may_move("nvidia", ["%s/q" % _pid("groq"), "%s/q" % _pid("local")], _prov))
 os.environ.pop("LOKI_JOB_ID")
-check("the chat may still move off a slow route", loki._slow_may_move("nvidia", ["%s/q" % _pid("local")], _prov))
+check("the chat never leaves a slow capable route for the local model only either (owner 2026-10-28: 'loki feels a "
+      "lot weaker today')", not loki._slow_may_move("nvidia", ["%s/q" % _pid("local")], _prov)
+      and loki._slow_may_move("nvidia", ["%s/q" % _pid("groq"), "%s/q" % _pid("local")], _prov))
+check("a small route may always move on", loki._slow_may_move("local", ["%s/q" % _pid("nvidia")], _prov))
+_prov_pc = dict(_prov, **{"pc-local": {"base_url": "http://127.0.0.1:9/v1"}})
+check("the PC's model (pc-local, not on Ollama's port) counts as a small route: a slow NVIDIA step is not handed to it",
+      not loki._slow_may_move("nvidia", ["%s/q" % _pid("pc-local")], _prov_pc) and loki.provider_tier("pc-local") == "local")
+check("capable routes before small ones; the owner's own small pick stays first",
+      loki._strong_first(["pc-local", "local", "nvidia", "groq"]) == ["nvidia", "groq", "pc-local", "local"]
+      and loki._strong_first(["nvidia", "local"], "local") == ["local", "nvidia"])
+import forecast  # noqa: E402
+_fc_on = forecast.enabled
+forecast.enabled = lambda: True
+_lo = loki.latency_outlook
+loki.latency_outlook = lambda: {"nvidia": {"p50_ms": 40000}, "nvidia-nemotron": {"p50_ms": 30000},
+                                "pc-local": {"p50_ms": 5000}, "local": {"p50_ms": 6000}}
+_fo = loki._forecast_order(["nvidia", "nvidia-nemotron", "pc-local", "local"])
+loki.latency_outlook = _lo; forecast.enabled = _fc_on
+check("the speed forecast never puts the 5 s 8B in front of a 40 s NVIDIA route (the chat went weak this way)",
+      _fo.index("nvidia") < _fo.index("pc-local") and _fo.index("nvidia-nemotron") < _fo.index("local"), _fo)
+_pc2, _orig2 = loki.provider_configured, dict(loki.MODELS)
+loki.MODELS["pc-local"] = loki.ModelConfig(base_url="http://127.0.0.1:9/v1", api_key="peer", model="pc-local")
+loki.MODELS["nvidia"] = loki.ModelConfig(base_url="https://integrate.api.nvidia.com/v1", api_key="x", model="m")
+loki.provider_configured = lambda n: n in ("pc-local", "local", "nvidia")
+import provider_speed  # noqa: E402
+provider_speed.record(loki.DATA_DIR, "nvidia", 300.0)          # one crawling NVIDIA step, as on the PC tonight
+_chat = list(loki._oc_providers("nvidia"))
+loki.provider_configured = _pc2; loki.MODELS.clear(); loki.MODELS.update(_orig2)
+check("the chat keeps NVIDIA first even after a 300 s step (it went behind pc-local and local)",
+      _chat and _chat[0] == "nvidia" and all(_chat.index("nvidia") < _chat.index(x) for x in ("pc-local", "local") if x in _chat), _chat)
 _ui = REPO / "app" / "ui"
 _lazy = [f.name for f in _ui.glob("*.js") if 'loading = "lazy"' in f.read_text(encoding="utf-8")]
 check("no lazy pictures in the window (WebKit, the Mac's window, never loads them inside a scrolling panel: blank "

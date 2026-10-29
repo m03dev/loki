@@ -71,6 +71,20 @@ def candidates(platform: str | None = None, home: Path | None = None) -> list:
     return out
 
 
+def addon_listening(host: str = "", port: int = 0, timeout: float = 0.5) -> bool:
+    """Blender is open with the MCP add-on serving (the 'blender' MCP server's 9 tools work only then). The PC
+    (2026-10-28): the add-on was not installed, the tools were offered anyway and every render step timed out.
+    LOKI's own `blender` tool (a background Blender) does not need this."""
+    import socket  # pylint: disable=import-outside-toplevel
+    host = host or os.getenv("BLENDER_HOST", "localhost")
+    port = int(port or os.getenv("BLENDER_PORT", "9876") or 9876)
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def find_blender() -> str:
     for c in candidates():
         if Path(c).is_file():

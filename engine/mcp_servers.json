@@ -157,7 +157,7 @@
         "mcp-for-blender"
       ],
       "requires_cmd": "uvx",
-      "requires_check": "blender_link.find_blender",
+      "requires_check": "blender_link.addon_listening",
       "env": {
         "DISABLE_TELEMETRY": "true",
         "BLENDER_HOST": "localhost",

@@ -191,7 +191,13 @@ def prove(entry: dict, team: dict, data_dir: Path, job_get: Callable[[str], Any]
     for role, job_id in (team.get("jobs") or {}).items():
         answers.append(_answer(job_id, Path(data_dir), job_get))
     try:
-        return proof.check(entry.get("text", ""), files, "\n".join(answers), ws)
+        import receipts  # pylint: disable=import-outside-toplevel
+        seen = receipts.corpus(list((team.get("jobs") or {}).values()) + ([entry["pre"]] if entry.get("pre") else []),
+                               data_dir)
+    except Exception:  # noqa: BLE001
+        seen = ""
+    try:
+        return proof.check(entry.get("text", ""), files, "\n".join(answers), ws, seen)
     except Exception as exc:  # noqa: BLE001 - a broken check never blocks the board; it says so
         return {"ok": True, "problems": [], "evidence": [], "error": "proof check failed: %s" % exc}
 

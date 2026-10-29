@@ -256,8 +256,9 @@ def claimed(answer: str) -> list:
     return out[:30]
 
 
-def check(text: str, files: list, answer: str, workspace) -> dict:
-    """Is this finished task proven? files = what appeared in the workspace during the run (relative paths)."""
+def check(text: str, files: list, answer: str, workspace, receipts_text: str = "") -> dict:
+    """Is this finished task proven? files = what appeared in the workspace during the run (relative paths).
+    receipts_text = everything the team's tools really printed (engine/receipts.py): a written report must match it."""
     ws = Path(workspace) if workspace else None
     want = expect(text)
     problems, evidence = [], []
@@ -287,6 +288,19 @@ def check(text: str, files: list, answer: str, workspace) -> dict:
             problems.append("%s was asked for and does not exist" % rel)
         elif ws:
             evidence.append(rel)
+    # a written report is checked against what the tools really printed (2026-10-28, the PC: qa/opencode-exe.md proved
+    # a fix against logs the agent wrote itself; qa/agent-system.md was the template {{status_data}})
+    try:
+        import receipts  # pylint: disable=import-outside-toplevel
+        reports = [r for r in dict.fromkeys(list(want["named"]) + [f for f in files or [] if kind_of(f) == "doc"])
+                   if str(r).replace("\\", "/").lower().startswith("qa/")]
+        for rel in reports:
+            if ws and (ws / rel).is_file():
+                for why in receipts.check_report(ws / rel, receipts_text):
+                    problems.append("%s: %s" % (rel, why))
+                    evidence[:] = [e for e in evidence if e != rel]
+    except Exception:  # noqa: BLE001
+        pass
     for rel in claimed(answer):
         if ws and not (ws / rel).exists() and not (Path(rel).is_absolute() and Path(rel).exists()):
             if kind_of(rel):

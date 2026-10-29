@@ -12,7 +12,27 @@ and all dated entries, with their full test lists) is kept verbatim in
 "Verified" below means seen on a real machine (the Mac mini or the PC); "cloud" means checked only on Claude's
 Linux box (headless Chromium, stubs, headless Godot).
 
-Last updated: 2026-10-28 22:30 (one core agent + the owner's playbooks and toolboxes); before that 2026-10-28 21:00 (Manga Studio, Design + phone testing); before that 2026-10-28 12:00 (the agent system, engine/agentsys/); before that 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
+Last updated: 2026-10-28 23:30 (chat keeps the strong model; receipts + LOKI runs the checks itself; install cards; For you stays mounted - see "2026-10-28 night" below); before that 2026-10-28 22:30 (one core agent + the owner's playbooks and toolboxes); before that 2026-10-28 21:00 (Manga Studio, Design + phone testing); before that 2026-10-28 12:00 (the agent system, engine/agentsys/); before that 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
+
+## 2026-10-28 night - why LOKI felt weaker, and fake proofs (Claude, read on the PC)
+
+- **Chat on the small model.** Every "capable route before the 8B" rule was jobs-only; pc-local (the PC's 8B over
+  the peer link) was not even counted as small (not on Ollama's port), and the speed forecast moved every 20-40 s
+  NVIDIA route behind the 5 s 8B. Now `_is_weak_route` / `_strong_first` (engine/loki.py) apply to chat AND jobs;
+  pc-local is tier "local". tests/test_job_truth.py.
+- **Fake proofs counted as done.** qa/opencode-exe.md (fake job logs + a fake python.exe it "created" in Home),
+  qa/agent-system.md (`{{status_data}}`), qa/for-you.md (`<concept-prompt>`, port 3003) all passed proof.py.
+  engine/receipts.py records every tool's FULL output (OpenCode, the local agent, the proof runner); proof.py checks
+  qa/ reports against it. engine/proof_runner.py: before a team starts a [loki] request, LOKI runs the request's own
+  read-only commands in LOKI's real folder and writes qa/<name>.loki-ran.md. Home may no longer get engine/,
+  harness_data/ or tests/ written by agents (live_guard). tests/test_receipts.py (uses the PC's real fakes).
+- **Install or ask.** engine/installs.py + loki-make `install` tool + For you install card: LOKI checks the package is
+  real (manga/design/playbook are LOKI's own - never installed), asks, installs on yes, retries the task. Raw
+  pip/npm -g/winget install is denied in OpenCode. tests/test_installs.py.
+- For you: re-mounts when Home rebuilds its header (it vanished until a restart) and no longer blinks with only
+  parked cards. Blender MCP's 9 tools start only when the add-on answers on :9876. The Z-Image "skipped" line is said
+  once per process (it filled the Mac's whole shared log).
+- Owner-side: DeepSeek's own API says "Insufficient Balance"; nvidia-pro (Max) 404s on this key.
 
 ## The machines
 

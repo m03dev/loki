@@ -250,6 +250,12 @@ def output_cap(base_url: str) -> int:
     return int(os.environ.get("LOKI_OC_MAX_OUTPUT", "8192") or 8192)
 
 
+# installs go through LOKI's `install` tool (engine/installs.py): checked, asked in For you, installed by LOKI - a raw
+# `pip install manga` looped four times on the PC (2026-10-28) and nobody was ever asked
+INSTALL_RULES = {pat: "deny" for pat in ("*pip install *", "*pip3 install *", "*npm install -g*", "*npm i -g*",
+                                         "*winget install*", "*brew install*", "*uv tool install*", "*choco install*")}
+
+
 def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny: Iterable[str] = (),
                  make_tools: bool = True, workspace: str = "") -> dict:
     """providers: name -> {"base_url", "model", "key"}; returns OpenCode's config (keys referenced by env, not inlined)."""
@@ -273,7 +279,8 @@ def build_config(providers: dict, codegraph: str = "", plan: bool = False, deny:
                  "permission": {"edit": "deny" if plan else live_guard.edit_rules(workspace),
                                 "read": "allow", "glob": "allow", "grep": "allow",
                                 "list": "allow", "webfetch": "allow", "todowrite": "allow",
-                                "bash": "deny" if plan else {**deny_rules(deny), **live_guard.bash_rules(workspace)},
+                                "bash": "deny" if plan else {**deny_rules(deny), **INSTALL_RULES,
+                                                             **live_guard.bash_rules(workspace)},
                                 "external_directory": external_rules(plan)},
                  "autoupdate": False, "share": "disabled"}
     mcp: dict = {}

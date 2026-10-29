@@ -34,7 +34,8 @@ from typing import Any, Callable
 GATED_TOOLS = ("make_image", "make_turnaround", "make_sprite", "manga")   # every picture an agent makes (owner's choice)
 MARK = "WAITING FOR THE OWNER"
 OWNER_OK = "_owner_ok"           # set by LOKI after the owner approved: the call goes through
-KINDS = ("prompt", "result", "question", "upstream")
+KINDS = ("prompt", "result", "question", "upstream", "install")
+# install   an agent needs a tool that is not installed (engine/installs.py): install / no / not now
 # question  the interview for work nobody watches (engine/agentsys/interview.py): answer / go as written / not now
 # upstream  an open-source project LOKI uses changed (engine/agentsys/upstream.py): adopt / skip / not now
 # Their decisions go to the handler engine/agentsys/runtime.py registers here (HANDLERS[kind](item, action, data)).
@@ -185,12 +186,14 @@ def decide(item_id: str, action: str, prompt: str = "", note: str = "", ws=None,
             return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
         if out.get("ok"):
             fresh = get(item_id) or it
-            fresh.update(status=out.get("status") or "done", decided=time.time(), note=note[:800],
-                         answer=out.get("answer") or fresh.get("answer"))
-            _save(fresh)
+            if not (out.get("status") == "working" and fresh.get("status") not in OPEN):
+                # (a background handler that already finished keeps its result - never back to "working")
+                fresh.update(status=out.get("status") or "done", decided=time.time(), note=note[:800],
+                             answer=out.get("answer") or fresh.get("answer"))
+                _save(fresh)
             out["item"] = fresh
         return out
-    if it["kind"] in ("question", "upstream"):
+    if it["kind"] in ("question", "upstream", "install"):
         return {"ok": False, "error": "LOKI's agent system is not running in this process"}
     if action == "park":
         try:

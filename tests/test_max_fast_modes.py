@@ -110,7 +110,7 @@ menu = loki_bridge.model_menu(_Agent())
 names = [e["name"] for e in menu["entries"]]
 check("the model menu offers Max and Fast with Smart", names[:4] == ["smart", "online", "max", "fast"], names[:5])
 mx = next(e for e in menu["entries"] if e["name"] == "max")
-check("... Max says what it is using now", mx["using"] and "V4 Pro" in mx["using"], mx)
+check("... Max says what it is using now", mx["using"] and any(k in mx["using"] for k in ("V4 Pro", "GLM", "Kimi")), mx)
 check("... and the modes are not listed again as providers", names.count("max") == 1 and names.count("fast") == 1)
 import nim_models  # noqa: E402
 PC_KEY = ["deepseek-ai/deepseek-v4.1-flash", "moonshotai/kimi-k2.6", "z-ai/glm-5.3", "nvidia/nemotron-3-ultra-550b-a55b"]

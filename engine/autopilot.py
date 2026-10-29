@@ -359,6 +359,19 @@ class Autopilot:
         return ""
 
     def _start(self, key: str, text: str, kind: str, extra: dict | None = None) -> str:
+        if kind == "inbox":
+            # LOKI runs the request's own check commands itself, in its real folder, and records what they printed -
+            # the team copies real output instead of rebuilding a fake LOKI in the project (engine/proof_runner.py)
+            try:
+                import proof_runner  # pylint: disable=import-outside-toplevel
+                ws = getattr(self.agent, "WORKSPACE", "") or ""
+                note = proof_runner.run(text, key, self._data_dir(), ws) if ws else ""
+                if note:
+                    text = text + "\n\n" + note
+                    extra = dict(extra or {}, pre="pre-" + key)
+                    self._log("inbox", "Ran the request's checks myself first: " + text[:120], request=key)
+            except Exception as exc:  # noqa: BLE001
+                self._log("inbox", "could not run the request's checks first: %s" % exc, request=key)
         reply = str(self.start_team(text) or "")
         match = re.search(r"started team (\S+)", reply)
         self.data["started"][key] = dict({"text": text[:4000], "t": self.clock(), "team": match.group(1) if match else "",

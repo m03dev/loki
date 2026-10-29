@@ -361,6 +361,25 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
                                                                      "(the chats). Use `loki chats list` / `loki chats "
                                                                      "delete` instead.")})
             continue
+        try:   # an install: LOKI checks it is real and asks the owner in For you - never a blind loop (engine/installs.py)
+            import installs  # pylint: disable=import-outside-toplevel
+            want = installs.parse(cmd)
+        except Exception:  # noqa: BLE001
+            want = None
+        if want:
+            res = installs.ask(want["manager"], want["names"], (thought or "")[:600], str(cwd))
+            say("error" if not res.get("waiting_for_owner") else "tool_result", res.get("error", "")[:400])
+            try:
+                import receipts  # pylint: disable=import-outside-toplevel
+                receipts.record("install", cmd, res.get("error", ""), 1)
+            except Exception:  # noqa: BLE001
+                pass
+            if res.get("waiting_for_owner"):
+                last_thought = "BLOCKED: waiting for the owner to approve installing %s (Home > For you)." % ", ".join(want["names"])
+                exit_reason = "owner"
+                break
+            msgs.append({"role": "user", "content": observation(1, res.get("error", ""))})
+            continue
         if needs_ok(cmd):
             # removes or overwrites something: the owner sees what and why, and says yes first (owner 2026-10-25:
             # "i asked it to remove chats ... it didn't prompt me anything and just said it deleted stuff")
@@ -386,6 +405,11 @@ def run(task: str, workspace: str | Path, base_url: str, model: str, *, key: str
         say("tool", "$ " + cmd[:400])
         code, out = (builtins(cmd) if builtins and re.match(r"^\s*loki\s+chats\b", cmd) else None) or execute(cmd)
         ran.append((cmd, code))
+        try:   # the receipt (engine/receipts.py): what really ran and what it really printed
+            import receipts  # pylint: disable=import-outside-toplevel
+            receipts.record("shell", cmd, out, code)
+        except Exception:  # noqa: BLE001
+            pass
         fails.append(_failure_key(code, out))
         if len(fails) >= 3 and fails[-1] and fails[-1] == fails[-2] == fails[-3]:
             # the same failure three times in a row: stop and say what is wrong instead of burning steps (owner's Mac
@@ -478,7 +502,7 @@ def verify(task: str, ws: Path, chs: list, thought: str, exit_reason: str, ran: 
     if exit_reason != "done" or (wants_change and not chs and not pushed_ok):
         why = {"steps": "it ran out of steps", "time": "it ran out of time", "format": "the model stopped giving "
                "commands", "cancelled": "you stopped it", "done": "it said done but nothing changed in the folder"}
-        if exit_reason in ("question", "stuck"):     # a question for the owner / a clear blocker: said as it is
+        if exit_reason in ("question", "stuck", "owner"):   # a question for the owner / a clear blocker / waits for his OK
             return "\n\n".join(lines).strip()
         lines.insert(0, "NOT DONE - %s (%d commands run)." % (why.get(exit_reason, exit_reason), len(ran)))
     if wants_change and re.search(r"\bgit\b", task, re.I) and re.search(r"\b(repo|repository|init|commit)\b", task, re.I) \

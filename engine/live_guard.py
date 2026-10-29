@@ -88,7 +88,21 @@ def edit_rules(workspace="", root: Path | None = None, env: dict | None = None):
         for v in _variants(Path(workspace)):
             sep = "\\" if "\\" in v else "/"
             rules[v + sep + "*"] = "allow"
+            if is_home_library(workspace):
+                # no look-alike LOKI in the owner's library: on the PC agents built Home/engine/*.py,
+                # Home/harness_data/.venv and fake job logs there and "proved" fixes against them (2026-10-27/28)
+                for fake in ("engine", "harness_data", "tests"):
+                    rules[v + sep + fake + sep + "*"] = "deny"
     return rules
+
+
+def is_home_library(workspace) -> bool:
+    """The owner's picture/model library (~/LOKI Projects/Home) - not a code project, never a copy of LOKI."""
+    try:
+        p = Path(workspace)
+        return p.name.lower() == "home" and p.parent.name.lower() == "loki projects"
+    except TypeError:
+        return False
 
 
 def bash_rules(workspace="", root: Path | None = None, env: dict | None = None) -> dict:

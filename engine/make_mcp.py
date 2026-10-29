@@ -90,6 +90,18 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {
          "prompt": {"type": "string"}, "seconds": {"type": "number"}, "image": {"type": "string"}},
          "required": ["prompt"]}},
+    {"name": "install",
+     "description": "A program or package this job needs is not installed: ask for it here, never with pip / npm / "
+                    "winget yourself. LOKI checks the package really exists (LOKI's own commands like manga, design, "
+                    "playbook are never installed - they are already there), puts the install in front of the owner "
+                    "in Home > For you with your reason, and installs it itself when he says yes; your task runs "
+                    "again then. manager: pip (into LOKI's Python) | npm (global) | winget | brew | uv-tool. After "
+                    "calling it, stop and say BLOCKED: waiting for the owner.",
+     "inputSchema": {"type": "object", "properties": {
+         "manager": {"type": "string", "enum": ["pip", "npm", "winget", "brew", "uv-tool"]},
+         "names": {"type": "array", "items": {"type": "string"}},
+         "why": {"type": "string", "description": "one sentence: what you need it for"}},
+         "required": ["manager", "names", "why"]}},
 ]
 
 
@@ -410,7 +422,10 @@ def call(name: str, args: dict, cwd: Path) -> dict:
         args = {k: v for k, v in (args or {}).items() if k != owner_review.OWNER_OK}
     except ImportError:
         pass
-    fn = {"make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
+    fn = {"install": lambda a, cwd: __import__("installs").ask(str((a or {}).get("manager") or "pip"),
+                                                                [str(x) for x in ((a or {}).get("names") or [])][:6],
+                                                                str((a or {}).get("why") or ""), str(cwd)),
+          "make_image": make_image, "make_3d": make_3d, "make_video": make_video, "upscale_image": upscale_image,
           "pixelize": pixelize, "voice": voice, "toolshelf": toolshelf_call,
           "make_music": make_music, "make_sprite": make_sprite,
           "make_turnaround": lambda a, cwd: __import__("turnaround").make_turnaround(a or {}, cwd, make_image),

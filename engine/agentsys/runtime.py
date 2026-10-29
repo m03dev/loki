@@ -288,10 +288,30 @@ def attach(state: Any) -> None:
         owner_review.HANDLERS["upstream"] = _decide_upstream
     except Exception:  # noqa: BLE001
         pass
+    try:   # install cards: the owner says yes -> LOKI installs it and the task that asked runs again (engine/installs.py)
+        import installs  # pylint: disable=import-outside-toplevel
+        installs.register(on_done=_install_done)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         trace.prune()
     except Exception:  # noqa: BLE001
         pass
+
+
+def _install_done(item: dict, result: dict) -> None:
+    """After an approved install: the LOKI_TASKS request whose team asked is tried again now (it waited, not failed)."""
+    if not result.get("ok"):
+        return
+    ap = getattr(STATE["state"], "autopilot", None)
+    job = str(item.get("job") or "")
+    if ap is None or not job:
+        return
+    for key, entry in list((ap.data.get("started") or {}).items()):
+        team = ap._teams_get(entry.get("team", "")) if entry.get("team") else None   # pylint: disable=protected-access
+        if team and job in (team.get("jobs") or {}).values():
+            ap.retry(key)
+            return
 
 
 def _start_job(prompt: str, title: str, cid: str = "", profile: dict | None = None) -> dict:
