@@ -186,7 +186,11 @@ const LokiHomeReview = (() => {
     c.append(box); const fx = facts(it); if (fx) c.append(fx); if (agentWords) c.append(agentWords); if (b) c.append(b);
     c.append(mk("div", "rv-row", null)); c.lastChild.append(note, acts);
     c.append(mk("div", "rv-err"));
-    if (it.status === "working") { box.disabled = true; acts.hidden = true; note.hidden = true; c.classList.add("working"); }
+    if (it.error) c.querySelector(".rv-err").textContent = it.error;
+    if (it.status === "working") {   // always something to click: a hung drawing can be stopped (2026-10-29, the PC)
+      box.disabled = true; note.hidden = true; c.classList.add("working");
+      acts.replaceChildren(iconBtn("rv-no", ICON.no, "Stop", "Stop this drawing - the card comes back to you to approve again, say no or park.", () => decide(it, "stop", {}, c)));
+    }
     return c;
   }
 

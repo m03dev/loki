@@ -79,11 +79,36 @@ def get(item_id: str) -> dict | None:
         return None
 
 
+def _draw_stale_s() -> float:
+    try:
+        return max(120.0, float(os.environ.get("LOKI_REVIEW_DRAW_STALE_S", "1800") or 1800))
+    except ValueError:
+        return 1800.0
+
+
+def _unstick(it: dict) -> dict:
+    """A card "being drawn" for too long goes back to the owner with why, so there is always something to click.
+    2026-10-29, the PC: an approved moss-golem prompt sat at "is drawing what you approved" for a day with no buttons -
+    LOKI restarted (an update) while it drew in a background thread, and nothing ever finished the card."""
+    if it.get("status") != "working" or it.get("kind") != "prompt":
+        return it
+    since = float(it.get("decided") or it.get("t") or 0)
+    if time.time() - since < _draw_stale_s():
+        return it
+    it.update(status="waiting", error="LOKI stopped while drawing this (it restarted or the drawing hung) - "
+                                      "approve to draw it again, or No / Not now", unstuck=time.time())
+    try:
+        _save(it)
+    except (OSError, ValueError):
+        pass
+    return it
+
+
 def items(status: tuple | None = None, limit: int = 200) -> list:
     out = []
     for p in folder().glob("*.json"):
         try:
-            it = json.loads(p.read_text(encoding="utf-8"))
+            it = _unstick(json.loads(p.read_text(encoding="utf-8")))
         except (OSError, ValueError):
             continue
         if status is None or it.get("status") in status:
@@ -176,6 +201,7 @@ def decide(item_id: str, action: str, prompt: str = "", note: str = "", ws=None,
     it = get(item_id)
     if it is None:
         return {"ok": False, "error": "that card is gone"}
+    it = _unstick(it)
     if it["status"] not in OPEN:
         return {"ok": False, "error": "already %s" % it["status"], "item": it}
     action = str(action or "").lower()
@@ -211,6 +237,11 @@ def decide(item_id: str, action: str, prompt: str = "", note: str = "", ws=None,
                     if it["kind"] == "prompt" else None
             except Exception:  # noqa: BLE001
                 pass
+        return {"ok": True, "item": it}
+    if it["kind"] == "prompt" and action == "stop":
+        # the owner stops a drawing that hangs: the card is his again (approve / no / not now)
+        it.update(status="waiting", error="stopped by you - approve to draw it again", decided=time.time())
+        _save(it)
         return {"ok": True, "item": it}
     if it["kind"] == "prompt":
         if action not in ("approve", "reject"):

@@ -8,7 +8,18 @@ The same signed peer link as memory (engine/peers.py, HMAC-signed, replay-guarde
     POST /peer/library {op: "list"}            ->   {files: [{rel, size, t}]}   (its library, newest first)
     POST /peer/library {op: "read", rel, offset} -> {data: <base64 chunk>, size} (4 MB at a time)
 
-Rules - additive only, nothing is ever deleted or overwritten:
+Deletions follow too (owner 2026-10-29: "when i removed those on mac the windows should have removed - there should be
+a folder check to sync"). Nothing is ever hard-deleted: a removed file goes to this machine's trash
+(`<workspace>/trash/<kind>/`), where the owner can bring it back.
+  - put in the trash there (LOKI's delete): the other machine lists its trash; the same file here (same name and
+    size) goes to the trash here
+  - gone there by hand (Finder / Explorer): a file the other machine listed last round, that is missing from its
+    complete listing now and is not in its trash, goes to the trash here
+  - the guard: if a round would trash more than LOKI_LIBRARY_SYNC_MAX_REMOVE (25) files, or more than a third of
+    a folder, nothing is removed and the reason is recorded (an unplugged drive or an emptied folder is not the owner
+    deleting pictures); playbooks are never removed this way
+
+Rules for copying - nothing is ever overwritten:
   - a file this machine already has under that name is left alone (the two copies may differ; both are kept)
   - a file this machine put in its trash (`<workspace>/trash/<kind>/`) is never pulled back
   - the owner's playbooks (`playbooks/<job>.md`, engine/agentsys/playbooks.py) are replaced by a NEWER copy, so an
@@ -125,6 +136,119 @@ def trashed(workspace: Path, rel: str) -> bool:
     return any(folder.glob("%s-[0-9]*%s" % (glob_escape(stem), glob_escape(ext))))
 
 
+_STAMP = re.compile(r"^(?P<stem>.+)-\d{9,11}(?P<ext>\.[^.]*)?$")
+
+
+def trash_listing(workspace: Path) -> list:
+    """What the owner threw away here: [{rel, size}] under the names they had in the library."""
+    out = []
+    for kind in KINDS:
+        if kind in NEWER_WINS:
+            continue
+        folder = Path(workspace) / TRASH / kind
+        if not folder.is_dir():
+            continue
+        try:
+            entries = list(folder.iterdir())
+        except OSError:
+            continue
+        for p in entries:
+            if p.name.startswith(".") or not p.is_file():
+                continue
+            try:
+                size = p.stat().st_size
+            except OSError:
+                continue
+            m = _STAMP.match(p.name)
+            names = {p.name} | ({m.group("stem") + (m.group("ext") or "")} if m else set())
+            out.extend({"rel": kind + "/" + n, "size": size} for n in names)
+    return out[:LIST_MAX]
+
+
+def _throw_away(workspace: Path, rel: str) -> bool:
+    try:
+        import creations  # pylint: disable=import-outside-toplevel
+        return bool(creations.delete_creation(Path(workspace), rel).get("ok"))
+    except Exception:  # noqa: BLE001 - kept here; the next round tries again
+        return False
+
+
+def _max_remove() -> int:
+    try:
+        return max(1, int(os.environ.get("LOKI_LIBRARY_SYNC_MAX_REMOVE", "25") or 25))
+    except ValueError:
+        return 25
+
+
+def removals(workspace: Path, reply: dict, seen_before: dict | None) -> tuple:
+    """(rels to trash here, why none were) from the other machine's list reply and what it listed last round."""
+    files = [f for f in (reply.get("files") or []) if isinstance(f, dict)]
+    there = {f.get("rel") for f in files}
+    gone: dict = {}
+    for t in reply.get("trashed") or []:
+        rel = str((t or {}).get("rel") or "")
+        p = safe_rel(workspace, rel)
+        if p is None or rel.count("/") != 1 or rel.split("/")[0] in NEWER_WINS or rel in there:
+            continue
+        try:
+            if p.is_file() and p.stat().st_size == int(t.get("size") or -1):
+                gone[rel] = "trashed there"
+        except (OSError, ValueError):
+            continue
+    if seen_before and reply.get("complete"):
+        kinds_there = {str(f.get("rel", "")).split("/")[0] for f in files}
+        for rel, size in seen_before.items():
+            if rel in there or rel in gone or rel.count("/") != 1 or rel.split("/")[0] in NEWER_WINS:
+                continue
+            if rel.split("/")[0] not in kinds_there:      # the whole folder is missing there: not a deletion
+                continue
+            p = safe_rel(workspace, rel)
+            try:      # the same file (same size) only: a different picture under that name here is ours
+                if p is not None and p.is_file() and p.stat().st_size == int(size):
+                    gone[rel] = "removed there"
+            except (OSError, ValueError, TypeError):
+                continue
+    if not gone:
+        return [], ""
+    if len(gone) > _max_remove():
+        return [], "held back: %d removals at once looks like a missing folder, not deletions (limit %d)" % (
+            len(gone), _max_remove())
+    per_kind: dict = {}
+    for rel in gone:
+        per_kind[rel.split("/")[0]] = per_kind.get(rel.split("/")[0], 0) + 1
+    for kind, n in per_kind.items():
+        have = sum(1 for _ in (Path(workspace) / kind).glob("*")) if (Path(workspace) / kind).is_dir() else 0
+        if n > 3 and n * 3 > have:
+            return [], "held back: %d of %d %s at once - more than a third of the folder" % (n, have, kind)
+    return sorted(gone), ""
+
+
+def _seen_file(data_dir: Path | None, name: str) -> Path | None:
+    if not data_dir:
+        return None
+    return Path(data_dir) / "library_seen" / (re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:80] + ".json")
+
+
+def _load_seen(data_dir, name) -> dict:
+    f = _seen_file(data_dir, name)
+    try:
+        data = json.loads(f.read_text(encoding="utf-8")) if f and f.is_file() else {}
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_seen(data_dir, name, rels: dict) -> None:
+    f = _seen_file(data_dir, name)
+    if f is None:
+        return
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(rels), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def glob_escape(text: str) -> str:
     return re.sub(r"([\[\]*?])", r"[\1]", text)
 
@@ -136,7 +260,9 @@ def serve(workspace: Path, data: dict) -> tuple:
         return 404, {"ok": False, "error": "library sync is off on this machine"}
     op = str((data or {}).get("op") or "")
     if op == "list":
-        return 200, {"ok": True, "files": listing(workspace)}
+        files = listing(workspace)
+        return 200, {"ok": True, "files": files, "trashed": trash_listing(workspace),
+                     "complete": len(files) < LIST_MAX}
     if op == "read":
         p = safe_rel(workspace, str(data.get("rel") or ""))
         if p is None or not p.is_file():
@@ -228,10 +354,17 @@ def pull(peer: dict, workspace: Path, call=None, data_dir: Path | None = None, b
         import peers  # pylint: disable=import-outside-toplevel
         call = peers.call
     name = peer.get("name") or "peer"
-    out = {"peer": name, "pulled": 0, "bytes": 0, "skipped": 0, "error": ""}
+    out = {"peer": name, "pulled": 0, "bytes": 0, "skipped": 0, "error": "", "removed": 0, "held": ""}
     with _LOCK:
         try:
-            files = call(peer, "POST", "/peer/library", {"op": "list"}, timeout=60).get("files") or []
+            reply = call(peer, "POST", "/peer/library", {"op": "list"}, timeout=60) or {}
+            files = reply.get("files") or []
+            gone, out["held"] = removals(workspace, reply, _load_seen(data_dir, name))
+            for rel in gone:
+                out["removed"] += 1 if _throw_away(workspace, rel) else 0
+            if reply.get("complete"):
+                _save_seen(data_dir, name, {f["rel"]: int(f.get("size") or 0) for f in files if isinstance(f, dict)
+                                            and str(f.get("rel", "")).count("/") == 1})
             want = [f for f in files if isinstance(f, dict) and not _want(workspace, f)]
             out["skipped"] = len(files) - len(want)
             # pictures before their sidecars, so the wall never shows a prompt without its picture
@@ -254,7 +387,8 @@ def pull(peer: dict, workspace: Path, call=None, data_dir: Path | None = None, b
                     out["bytes"] += n
         except Exception as exc:  # noqa: BLE001 - record why; the next round tries again
             out["error"] = str(exc)[:200]
-    _record(data_dir, name, t=time.time(), pulled=out["pulled"], bytes=out["bytes"], error=out["error"])
+    _record(data_dir, name, t=time.time(), pulled=out["pulled"], bytes=out["bytes"], error=out["error"],
+            removed=out["removed"], held=out["held"])
     return out
 
 

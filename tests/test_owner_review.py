@@ -303,6 +303,24 @@ try:
     except ImportError as exc:   # the engine's dependencies are missing in a bare checkout
         print("SKIP loki: %s" % exc)
 
+    # ------------------------------------------------------------------ a drawing that never finishes (2026-10-29, the PC)
+    import time as _t
+    stuck = orv.queue("prompt", "make_image", {"prompt": "moss golem guardian"}, str(WS), who="Agent: Builder")
+    stuck.update(status="working", decided=_t.time() - 86400)
+    orv._save(stuck)
+    back = orv.get(stuck["id"]) and [i for i in orv.waiting() if i["id"] == stuck["id"]]
+    check("a card 'being drawn' for a day comes back to the owner with buttons and why",
+          back and back[0]["status"] == "waiting" and "LOKI stopped" in back[0].get("error", ""), back)
+    fresh = orv.queue("prompt", "make_image", {"prompt": "a fresh one"}, str(WS), who="Agent: Builder")
+    fresh.update(status="working", decided=_t.time())
+    orv._save(fresh)
+    check("a drawing in progress stays as it is", orv.get(fresh["id"])["status"] == "working"
+          and [i for i in orv.waiting() if i["id"] == fresh["id"]][0]["status"] == "working")
+    st = orv.decide(fresh["id"], "stop")
+    check("the owner can stop a drawing: the card is his again", st.get("ok") and st["item"]["status"] == "waiting", st)
+    check("the window shows a Stop button on a card being drawn",
+          '"stop"' in (REPO / "app" / "ui" / "home_review.js").read_text(encoding="utf-8"))
+
     # ------------------------------------------------------------------ off switch and the standing goals
     os.environ["LOKI_OWNER_REVIEW"] = "off"
     os.environ["LOKI_JOB_ID"] = "job43"
