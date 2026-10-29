@@ -91,10 +91,36 @@ def settings_yaml(provider: dict) -> str:
             "      models:\n        - id: %s\n          name: %s\n" % (clean(model), clean(base), clean(model), clean(model)))
 
 
+def patch_yaml(settings: str) -> str:
+    """The same settings as dsh's own profile patch (profiles/headless/cordis.patch.yml), in the form dsh writes it when
+    it imports settings.yaml: one entry per section, the section's lines under `config:`."""
+    out, body = [], []
+
+    def flush(sec):
+        if sec:
+            out.append('- id: %s\n  name: "@deepseek-ai/dsh-%s"\n  config:\n%s' % (sec, sec, "".join("  " + ln + "\n" for ln in body)))
+    sec = ""
+    for ln in settings.splitlines():
+        if ln and not ln.startswith(" ") and ln.endswith(":"):
+            flush(sec)
+            sec, body = ln[:-1], []
+        elif ln.strip():
+            body.append(ln)
+    flush(sec)
+    return "".join(out)
+
+
 def prepare_home(home: Path, provider: dict) -> Path:
     home = Path(home)
     home.mkdir(parents=True, exist_ok=True)
-    (home / "settings.yaml").write_text(settings_yaml(provider), encoding="utf-8")
+    text = settings_yaml(provider)
+    (home / "settings.yaml").write_text(text, encoding="utf-8")
+    # dsh imports settings.yaml only after it has read its profile, so every run used the PREVIOUS run's model - the
+    # requested model was never in the provider list (UNKNOWN_MODEL on the Mac, run after run). The profile is written
+    # directly too, so this run's model is the one dsh starts with.
+    prof = home / "profiles" / "headless"
+    prof.mkdir(parents=True, exist_ok=True)
+    (prof / "cordis.patch.yml").write_text(patch_yaml(text), encoding="utf-8")
     return home
 
 
@@ -157,7 +183,7 @@ def changes(before: dict, after: dict) -> list:
 
 
 STALL_S = float(os.getenv("LOKI_DSH_STALL_S", "900") or 900)
-MODEL_NAME_FIX_T = 1793229300.0     # 2026-10-28: dsh got slash-free model names from here on
+MODEL_NAME_FIX_T = 1793240484.0     # 2026-10-29: dsh starts with this run's model (profile written directly) from here on
 BENCH_S = float(os.getenv("LOKI_DSH_BENCH_S", "86400") or 86400)
 
 

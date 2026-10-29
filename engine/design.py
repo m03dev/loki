@@ -299,6 +299,14 @@ def tool(args: dict, ws, runner=subprocess.run) -> dict:
                     "app_running": app_running()}
         if act == "tools":
             return tools(runner)
+        if act == "describe" or (act == "call" and str(a.get("tool") or "") in ("describe", "list")):
+            # what one core tool takes (2026-10-29, the Mac: an agent called the tool "describe" through call and got
+            # "Invalid key: Expected never but received tool")
+            what = str(a.get("tool") or "") if act == "describe" else str((a.get("args") or {}).get("tool") or a.get("name") or "")
+            if not what or what in ("describe", "list"):
+                return tools(runner)
+            code, out = _run(["tool", "describe", what, "--json"], Path.home(), runner=runner)
+            return {"ok": code == 0, "tool": what, "describe": _json_out(out) or out[-4000:]}
         if not name:
             return {"ok": False, "error": "name= the design (designs/<name>.fig)"}
         if act == "new":
@@ -335,12 +343,12 @@ TOOL_SCHEMA = {
     "description": ("UI / app / web / poster DESIGN as real layered design files (OpenPencil, Figma-compatible .fig) in "
                     "designs/. action: new (name, optional html+css or tailwind = import a mock-up as layers) | render "
                     "(name, jsx: <Frame name w h bg rounded flex gap p> <Text size color weight> <Rectangle> <svg> ...) | "
-                    "call (name, tool, args: any OpenPencil core tool - action=tools lists them) | eval (name, code: "
+                    "call (name, tool, args: any OpenPencil core tool - action=tools lists them, action=describe tool=<name> shows its args) | eval (name, code: "
                     "Figma Plugin API, write=true saves) | export (name, format png/svg/jsx/tailwind-jsx/html/pptx, "
                     "scale) | lint (name, preset recommended/strict/accessibility) | tree | open (desktop app) | list. "
                     "Every change writes designs/<name>.png - look at it before saying done."),
     "inputSchema": {"type": "object", "properties": {
-        "action": {"type": "string", "enum": ["list", "tools", "new", "render", "call", "eval", "export", "lint", "tree",
+        "action": {"type": "string", "enum": ["list", "tools", "describe", "new", "render", "call", "eval", "export", "lint", "tree",
                                               "preview", "open"]},
         "name": {"type": "string"}, "html": {"type": "string"}, "css": {"type": "string"},
         "tailwind": {"type": "string"}, "jsx": {"type": "string"}, "parent": {"type": "string"},

@@ -184,7 +184,16 @@ def outside_dirs() -> list:
     data = os.getenv("LOKI_DATA", "").strip()
     if data:
         dirs.append(Path(data))
+    if os.name != "nt":   # the shell's /tmp is not Python's temp folder on a Mac (/var/folders/...): an agent that wrote
+        dirs += [Path("/tmp")]   # /tmp/out.json could not read it back (2026-10-28, the Mac, job 09a081f5 - stuck)
     dirs += [Path(p) for p in os.getenv("LOKI_OC_ALLOW_DIRS", "").split(os.pathsep) if p.strip()]
+    for d in list(dirs):  # and the real path behind a link (/tmp -> /private/tmp, /var -> /private/var)
+        try:
+            r = d.resolve()
+            if r != d:
+                dirs.append(r)
+        except OSError:
+            pass
     out, seen = [], set()
     for d in dirs:
         key = str(d).replace("\\", "/").rstrip("/")

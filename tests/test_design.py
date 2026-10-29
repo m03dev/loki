@@ -102,6 +102,9 @@ def engine_checks():
     check("export writes into designs/exports", r.get("ok") and r["file"] == "designs/exports/login-screen.jsx", r)
     r = design.tool({"action": "export", "name": "login-screen", "format": "png", "scale": 3}, ws, runner=fake)
     check("a picture export carries its scale", r.get("ok") and r["file"].endswith("@3x.png") and "-s" in fake.calls[-1]["cmd"], r)
+    design.tool({"action": "call", "name": "login-screen", "tool": "describe", "args": {"tool": "set_fill"}}, ws, runner=fake)
+    check("an agent asking what a core tool takes (call tool=describe) gets 'tool describe <name>', not an error",
+          fake.calls[-1]["cmd"][-4:] == ["tool", "describe", "set_fill", "--json"], fake.calls[-1]["cmd"])
     r = design.tool({"action": "export", "name": "login-screen", "format": "pdf"}, ws, runner=fake)
     check("PDF is refused with the reason (broken in 0.16.0)", not r["ok"] and "svg" in r["error"])
     r = design.tool({"action": "lint", "name": "login-screen"}, ws, runner=fake)

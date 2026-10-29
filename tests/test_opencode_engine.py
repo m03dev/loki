@@ -81,6 +81,8 @@ _repo = str(REPO).replace("\\", "/")
 check("outside the workspace: LOKI's own folder and LOKI Projects are allowed, everything else denied",
       _allow["*"] == "deny" and _allow.get(_repo + "/*") == "allow"
       and any(k.endswith("LOKI Projects/*") for k in _allow) and oe.external_rules(plan=True) == "deny", _allow)
+check("an unattended job may read back what it wrote to /tmp (the Mac's shell /tmp is not Python's temp folder)",
+      os.name == "nt" or _allow.get("/tmp/*") == "allow", _allow)
 plan = oe.build_config({}, plan=True)
 check("plan mode: no edits, no bash", plan["permission"]["edit"] == "deny" and plan["permission"]["bash"] == "deny")
 env = oe.env_for({"groq": {"key": "SECRET123"}}, base={"PATH": "/bin"})

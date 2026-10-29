@@ -188,10 +188,29 @@ check("through LOKI's proxy dsh gets a slash-free model name", "/" not in _alias
 _ur.urlopen(_ur.Request(_purl + "/chat/completions", data=_json.dumps({"model": _alias, "messages": []}).encode(),
                         headers={"Content-Type": "application/json"}), timeout=10).read()
 check("... and the proxy sends the real name upstream", _got and _got[-1]["model"] == "deepseek-ai/deepseek-v4.1-flash", _got)
+_home = Path(tempfile.mkdtemp()) / "dsh"
+dsh_engine.prepare_home(_home, {"base_url": _purl, "model": "deepseek-ai/deepseek-v4.1-flash"})
+_patch = (_home / "profiles" / "headless" / "cordis.patch.yml").read_text()
+check("dsh's profile is written directly, so this run starts with this run's model (dsh imports settings.yaml only "
+      "after it read the profile: every run used the previous run's model)",
+      "- id: agent-default-model" in _patch and "    model: %s" % _alias in _patch and "          - id: %s" % _alias in _patch
+      and "        baseURL: %s" % _purl in _patch, _patch)
 dsh_engine.record(_hd, "nvidia", False, 'dsh exited 1: dsh: UNKNOWN_MODEL: pi-ai provider "loki-deepseek" has no configured model "x"')
 _h = _json.loads((Path(_hd) / "health.json").read_text()); _h["nvidia"]["t"] = 1793211679.0
 (Path(_hd) / "health.json").write_text(_json.dumps(_h))
 check("a bench from that old model-name bug is lifted (dsh is tried again)", not dsh_engine.benched(_hd, "nvidia"))
+_tries = []
+
+
+def _flaky(req):
+    _tries.append(1)
+    if len(_tries) == 1:
+        raise _ur.URLError(ConnectionResetError(54, "Connection reset by peer"))
+    return "answer"
+
+
+check("LOKI's proxy tries a dropped connection once more (one reset moved a Mac job off NVIDIA for good)",
+      dsml_proxy._open("r", _flaky, wait_s=0) == "answer" and len(_tries) == 2)
 check("this suite stays under 60 s", time.time() - t0 < 60, round(time.time() - t0, 1))
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

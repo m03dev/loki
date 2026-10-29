@@ -363,7 +363,7 @@ class _Proxy:
                     self._early_stream(req, request_tools(body))
                     return
                 try:
-                    resp = urllib.request.urlopen(req, timeout=600)  # noqa: S310 - the provider's own URL
+                    resp = _open(req)
                 except urllib.error.HTTPError as exc:
                     resp = exc
                     _penalize(url, exc)
@@ -402,7 +402,7 @@ class _Proxy:
 
                 def fetch() -> None:
                     try:
-                        box["resp"] = urllib.request.urlopen(req, timeout=600)  # noqa: S310
+                        box["resp"] = _open(req)
                     except urllib.error.HTTPError as exc:
                         box["resp"] = exc
                         _penalize(req.full_url, exc)
@@ -517,6 +517,25 @@ class _Proxy:
             k = str(len(self.upstreams) + 1)
             self.upstreams[k] = base
             return "http://127.0.0.1:%d/u/%s" % (self.port, k)
+
+
+def _open(req, opener=None, wait_s: float = 2.0):
+    """The provider's answer; a dropped connection (reset, closed before an answer) is tried once more - 2026-10-29, the
+    Mac: one 'Connection reset by peer' from NVIDIA moved a job off its model for good. Timeouts are not retried."""
+    import http.client  # pylint: disable=import-outside-toplevel
+    import time as _t  # pylint: disable=import-outside-toplevel
+    opener = opener or (lambda r: urllib.request.urlopen(r, timeout=600))  # noqa: S310 - the provider's own URL
+    try:
+        return opener(req)
+    except urllib.error.HTTPError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        reason = getattr(exc, "reason", exc)
+        if not isinstance(reason, (ConnectionResetError, ConnectionAbortedError, http.client.RemoteDisconnected,
+                                   BrokenPipeError)):
+            raise
+        _t.sleep(wait_s)
+        return opener(req)
 
 
 _PROXY: dict = {}
