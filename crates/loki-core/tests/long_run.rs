@@ -97,3 +97,16 @@ fn pool_rolls_over_and_respects_daily_caps() {
     assert!(pool.next_ready(Role::Brain).is_some());
     assert!(pool.pick(Role::Vision, &[]).is_none(), "no vision model configured");
 }
+
+#[test]
+fn local_models_follow_what_the_machine_has() {
+    let mut o = provider("ollama", "http://x", 90);
+    o.models.insert(Role::Fast, "qwen3:4b".into());
+    let mut pool = ModelPool::new(vec![o]);
+    let have = vec!["loki-huihui_ai-qwen3-abliterated-8b:latest".to_string(), "llama3:8b".to_string()];
+    let changes = pool.fit_local("ollama", &have, None);
+    assert_eq!(changes.len(), 2, "{changes:?}");
+    assert!(pool.providers()[0].models.values().all(|m| m == "loki-huihui_ai-qwen3-abliterated-8b:latest"));
+    let changes = pool.fit_local("ollama", &have, Some("llama3:8b"));
+    assert!(pool.providers()[0].models.values().all(|m| m == "llama3:8b"), "{changes:?}");
+}

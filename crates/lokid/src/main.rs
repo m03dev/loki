@@ -265,7 +265,8 @@ struct ProbeRow {
 
 /// Ask every configured provider/model for a one-word answer, all at once.
 async fn probe_all(home: &Path) -> anyhow::Result<Vec<ProbeRow>> {
-    let pool = load_pool(home)?;
+    let mut pool = load_pool(home)?;
+    fit_local_models(&mut pool).await;
     let http = reqwest::Client::builder().timeout(std::time::Duration::from_secs(40)).build()?;
     let mut jobs = Vec::new();
     for p in pool.providers().iter().cloned() {
@@ -346,8 +347,27 @@ async fn status(State(app): State<App>) -> Json<Value> {
     }))
 }
 
+/// Ask the local Ollama which models it has, so the offline fallback uses a real one.
+async fn fit_local_models(pool: &mut ModelPool) {
+    let url = std::env::var("OLLAMA_HOST").map(|h| format!("{}/api/tags", h.trim_end_matches('/'))).unwrap_or_else(|_| "http://127.0.0.1:11434/api/tags".into());
+    let url = if url.starts_with("http") { url } else { format!("http://{url}") };
+    let Ok(client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(3)).build() else { return };
+    let names: Vec<String> = match client.get(&url).send().await {
+        Ok(r) => r.json::<Value>().await.ok()
+            .and_then(|v| v["models"].as_array().map(|a| a.iter().filter_map(|m| m["name"].as_str().map(String::from)).collect()))
+            .unwrap_or_default(),
+        Err(_) => return,
+    };
+    let pinned = std::env::var("LOKI_LOCAL_MODEL").ok();
+    for c in pool.fit_local("ollama", &names, pinned.as_deref()) {
+        tracing::info!("local model: {c}");
+    }
+}
+
 async fn serve(home: PathBuf) -> anyhow::Result<()> {
-    let pool = Arc::new(Mutex::new(load_pool(&home)?));
+    let mut pool = load_pool(&home)?;
+    fit_local_models(&mut pool).await;
+    let pool = Arc::new(Mutex::new(pool));
     let app = App { home: home.clone(), driver: Arc::new(Driver::new(pool)), live: Arc::new(Mutex::new(HashMap::new())) };
     let router = Router::new()
         .route("/", get(|| async { Html(UI) }))

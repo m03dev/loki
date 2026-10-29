@@ -99,6 +99,29 @@ impl ModelPool {
         &self.providers
     }
 
+    /// Point local providers at the models this machine really has (Ollama names vary per machine).
+    /// `available` = model names the local server lists; `pinned` = the owner's chosen local model.
+    pub fn fit_local(&mut self, provider: &str, available: &[String], pinned: Option<&str>) -> Vec<String> {
+        let mut changes = Vec::new();
+        let Some(p) = self.providers.iter_mut().find(|p| p.name == provider) else { return changes };
+        let pick = pinned
+            .filter(|m| !m.trim().is_empty())
+            .map(|m| m.trim().to_string())
+            .or_else(|| available.iter().find(|m| m.contains("qwen")).cloned())
+            .or_else(|| available.first().cloned());
+        let Some(pick) = pick else { return changes };
+        for (role, model) in p.models.iter_mut() {
+            let missing = !available.iter().any(|a| a == model || a.trim_end_matches(":latest") == model);
+            if missing || pinned.is_some_and(|m| !m.trim().is_empty()) {
+                if *model != pick {
+                    changes.push(format!("{provider} {role:?}: {model} -> {pick}"));
+                    *model = pick.clone();
+                }
+            }
+        }
+        changes
+    }
+
     fn usage(&mut self, name: &str, now: DateTime<Utc>) -> &mut Usage {
         let day = now.format("%Y-%m-%d").to_string();
         let u = self.state.usage.entry(name.to_string()).or_default();
