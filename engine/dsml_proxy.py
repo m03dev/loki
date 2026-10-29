@@ -356,6 +356,8 @@ class _Proxy:
                            if k.lower() not in ("host", "content-length", "connection", "accept-encoding")}
                 if body and "chat/completions" in url and MODEL_ALIASES:
                     body = _unalias(body)
+                if body and "chat/completions" in url:
+                    body = trim_body(body)
                 req = urllib.request.Request(url, data=body, method=method, headers=headers)
                 if "chat/completions" in url:
                     _pace(url)
@@ -564,6 +566,85 @@ def _unalias(body: bytes) -> bytes:
     if not real:
         return body
     data["model"] = real
+    return json.dumps(data).encode()
+
+
+# ------------------------------------------------------------------ context trim (observation masking)
+# Seen in the Mac's real jobs (2026-10-29): an OpenCode job sends its WHOLE history every step - 19.6k tokens at step 1,
+# ~25k more each step (old file reads and command dumps), 535k in all by step 16; on NVIDIA's free tier a step then
+# took 200-900 s and the job hit its hour. Old tool output is what grows it, and the agent has already used it.
+# Research (JetBrains, "The Complexity Trap", 2025): masking old observations roughly halves cost with the same
+# solve rate. So when a request is big, every tool result but the newest few is cut to its first lines with a note
+# that it was trimmed. Masking happens in one go when the size passes the mark, so the history stays the same
+# between trims (hosts that cache a prompt's start keep their cache). LOKI_CONTEXT_TRIM=off turns it off.
+import os as _os  # noqa: E402
+
+
+def _trim_conf() -> tuple:
+    env = _os.environ
+    on = str(env.get("LOKI_CONTEXT_TRIM", "on")).strip().lower() not in ("0", "off", "no", "false")
+    try:
+        at = int(env.get("LOKI_CONTEXT_TRIM_AT", "60000"))       # characters (~15k tokens) before trimming starts
+        keep = int(env.get("LOKI_CONTEXT_KEEP", "4"))            # newest tool results always kept whole
+    except ValueError:
+        at, keep = 60000, 4
+    return on, max(8000, at), max(1, keep)
+
+
+_TRIM_NOTE = "\n[... LOKI trimmed this older tool output (%d characters) to keep the context small - run it again if you need it]"
+_HEAD = 400            # characters of an old tool result that stay
+_ONE_MAX = 24000       # no single tool result is sent bigger than this (head and tail kept)
+
+
+def _text_of(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
+    return ""
+
+
+def _set_text(msg: dict, text: str) -> None:
+    msg["content"] = text if not isinstance(msg.get("content"), list) else [{"type": "text", "text": text}]
+
+
+def trim_messages(messages: list, at: int, keep: int) -> int:
+    """Trim `messages` in place; returns how many characters were removed."""
+    saved = 0
+    for msg in messages:                                    # one huge result: keep its start and end
+        if isinstance(msg, dict) and msg.get("role") == "tool":
+            text = _text_of(msg.get("content"))
+            if len(text) > _ONE_MAX:
+                cut = text[:_ONE_MAX // 2] + (_TRIM_NOTE % (len(text) - _ONE_MAX)) + text[-_ONE_MAX // 2:]
+                saved += len(text) - len(cut)
+                _set_text(msg, cut)
+    total = sum(len(_text_of(m.get("content"))) for m in messages if isinstance(m, dict))
+    if total <= at:
+        return saved
+    tools = [i for i, m in enumerate(messages) if isinstance(m, dict) and m.get("role") == "tool"]
+    for i in tools[:-keep]:
+        text = _text_of(messages[i].get("content"))
+        if len(text) <= _HEAD + 200 or "LOKI trimmed this older tool output" in text:
+            continue
+        cut = text[:_HEAD] + (_TRIM_NOTE % (len(text) - _HEAD))
+        saved += len(text) - len(cut)
+        _set_text(messages[i], cut)
+    return saved
+
+
+def trim_body(body: bytes) -> bytes:
+    on, at, keep = _trim_conf()
+    if not on or not body or len(body) < at:
+        return body
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return body
+    messages = data.get("messages") if isinstance(data, dict) else None
+    if not isinstance(messages, list):
+        return body
+    if not trim_messages(messages, at, keep):
+        return body
     return json.dumps(data).encode()
 
 
