@@ -1,0 +1,102 @@
+# LOKI free-model pool. Free routes only - no paid providers.
+# The driver tries lower `priority` first, skips providers whose key isn't set
+# on this machine, and rolls over when one hits its free cap.
+# Run `lokid probe` on each machine to see which of these really answer.
+# Limits are the published/observed free-tier numbers (Oct 2026); providers change them.
+
+[[provider]]
+name = "nvidia"
+base_url = "https://integrate.api.nvidia.com/v1"
+key_env = "NVIDIA_API_KEY"
+rpm = 40          # account-wide across all NIM models
+rpd = 10000
+priority = 10
+[provider.models]
+# Measured on the owner's PC key (2026-10-29): Ultra and Lightning answer; DeepSeek Flash took ~280 s a step.
+brain = "nvidia/nemotron-3-ultra-550b-a55b"
+vision = "google/gemma-4-31b-it"
+fast = "nvidia/nemotron-3.5-lightning-30b-a3b"
+
+[[provider]]
+name = "nvidia-deepseek"
+base_url = "https://integrate.api.nvidia.com/v1"
+key_env = "NVIDIA_API_KEY"
+rpm = 40
+rpd = 10000
+priority = 15
+[provider.models]
+brain = "deepseek-ai/deepseek-v4.1-flash"
+
+[[provider]]
+name = "groq"
+base_url = "https://api.groq.com/openai/v1"
+key_env = "GROQ_API_KEY"
+rpm = 30
+rpd = 1000
+priority = 20
+[provider.models]
+brain = "openai/gpt-oss-120b"
+fast = "openai/gpt-oss-20b"
+
+[[provider]]
+name = "openrouter-free"
+base_url = "https://openrouter.ai/api/v1"
+key_env = "OPENROUTER_API_KEY"
+rpm = 20
+rpd = 50          # 1000/day once the account has ever bought $10 of credit
+priority = 30
+[provider.models]
+brain = "nvidia/nemotron-3-ultra-550b-a55b:free"
+vision = "google/gemma-4-31b-it:free"
+
+[[provider]]
+name = "mistral"
+base_url = "https://api.mistral.ai/v1"
+key_env = "MISTRAL_API_KEY"   # free "Experiment" plan; prompts may be used for training
+rpm = 50
+priority = 40
+[provider.models]
+brain = "mistral-medium-latest"
+fast = "mistral-small-latest"
+
+[[provider]]
+name = "kilo-free"
+base_url = "https://api.kilo.ai/api/gateway"
+key_env = ""      # no key; ~200 requests/hour per IP
+rpm = 3
+priority = 50
+[provider.models]
+brain = "nvidia/nemotron-3-super-120b-a12b:free"
+
+[[provider]]
+name = "ovh-anon"
+base_url = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1"
+key_env = ""      # anonymous, 2 requests/min per model
+rpm = 2
+priority = 60
+[provider.models]
+brain = "gpt-oss-120b"
+
+# Local models: never capped, never leave the machine. Last resort for the
+# brain, first choice for cheap compaction work.
+[[provider]]
+name = "ollama"
+base_url = "http://127.0.0.1:11434/v1"
+key_env = ""
+local = true
+rpm = 600
+priority = 90
+[provider.models]
+brain = "qwen3.5:9b"
+fast = "qwen3:4b"
+
+[[provider]]
+name = "llamacpp"
+base_url = "http://127.0.0.1:8080/v1"
+key_env = ""
+local = true
+rpm = 600
+priority = 95
+[provider.models]
+brain = "local"
+fast = "local"

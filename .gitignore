@@ -1,70 +1,7 @@
-# Everything Loki writes at runtime lives in harness_data/ (or LOKI_DATA) - never commit it.
+# Everything LOKI writes at runtime: runs, builds, toolchain, keys
 harness_data/
-
-# Per-workspace chat state, if Loki is pointed at this checkout
-.loki/
-
-# Python
+target/
 __pycache__/
 *.pyc
 .venv/
-
-# Local secrets & runtime
-*.token
 *.log
-cloud/.env
-cloud/sessions.json
-
-# Generated Godot API dump (optional game capability)
-engine/extension_api.json
-
-# Laya (npm @receptron/laya), if installed next to the engine
-engine/node_modules/
-engine/package.json
-engine/package-lock.json
-
-# Leftovers from the old Godot-addon layout and stray agent output
-.godot/
-/addons/
-/scenes/
-/scripts/
-/plugins/
-project.godot
-.git-rewrite/
-
-# Packaged builds and models
-build/
-# vendored libraries keep their own build/ source folders (three-mesh-bvh/core/build was silently left out)
-!app/ui/vendor/**/build/
-dist/
-*.gguf
-*.safetensors
-
-# A test suite cleans up its own temp dirs; a killed run must never be committed.
-/loki-auto-*/
-/loki-role-*/
-/loki-systems-*/
-/loki-tests-*/
-/tmp*/
-
-# Any test-suite temp dir in the repo root (covers future prefixes too).
-/loki-*/
-
-# test-suite temp dirs (underscore form: loki_eval_* etc.)
-/loki_*/
-.claude/worktrees/
-
-# The Rust launcher (packaging/launcher) builds here
-packaging/launcher/target/
-
-# Update leftovers: updater._move_aside_untracked keeps old untracked files aside
-*.before-update
-
-# LOKI World leftovers: the game project stays on disk (test_godot_world uses it) but is 1.5 GB of CEF binaries -
-# Chromium, ICU, swiftshader - that must never enter the repo. Without this, ship.py's `git add -A` sweeps them in and
-# GitHub rejects the push (a 259 MB libcef.so). The in-tab Godot web export that used to sit at app/ui/world_godot/
-# (test_portal requires that path to be empty) moved to harness_data/attic/world_godot/ - nothing deleted.
-/game/
-
-# Agent worktrees (Claude Code helpers) - never committed
-.claude/

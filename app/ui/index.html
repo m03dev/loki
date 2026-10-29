@@ -2,411 +2,165 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Loki</title>
-<script src="/ui/boot.js"></script>
-<script src="/ui/place.js"></script>
-<link rel="stylesheet" href="/ui/app.css">
-<link rel="stylesheet" href="/ui/glass.css">
-<link rel="stylesheet" href="/ui/automations.css">
-<link rel="stylesheet" href="/ui/research3.css">
-<link rel="stylesheet" href="/ui/apps.css">
-<script src="/ui/app.js" defer></script>
-<script src="/ui/setup.js" defer></script>
-<script src="/ui/machines.js" defer></script>
-<script src="/ui/settings.js" defer></script>
-<script src="/ui/crm.js" defer></script>
-<script src="/ui/lab.js" defer></script>
-<script src="/ui/bench.js" defer></script>
-<script src="/ui/memory_panel.js" defer></script>
-<script src="/ui/tools_panel.js" defer></script>
-<script src="/ui/play_panel.js" defer></script>
-<script src="/ui/creations.js" defer></script>
-<script src="/ui/icons.js" defer></script>
-<script src="/ui/clipboard.js" defer></script>
-<script src="/ui/brain.js" defer></script>
-<script src="/ui/workbench.js" defer></script>
-<script src="/ui/sketch.js" defer></script>
-<script src="/ui/voice.js" defer></script>
-<script src="/ui/channels.js" defer></script>
-<script src="/ui/automations.js" defer></script>
-<script src="/ui/studio_link.js" defer></script>
-<script src="/ui/modebar.js" defer></script>
-<link rel="stylesheet" href="/ui/home.css">
-<link rel="stylesheet" href="/ui/home_review.css">
-<link rel="stylesheet" href="/ui/agentsys.css">
-<script src="/ui/model_preview.js" defer></script>
-<script src="/ui/home.js" defer></script>
-<script src="/ui/chat_view.js" defer></script>
-<script src="/ui/agent_engine.js" defer></script>
-<script src="/ui/artifacts.js" defer></script>
-<script src="/ui/chat_plus.js" defer></script>
-<script src="/ui/data_panel.js" defer></script>
-<!-- session 29, LOKI for anyone: languages, accessibility, welcome tour, examples, help -->
-<link rel="stylesheet" href="/ui/usability.css">
-<script src="/ui/a11y.js"></script>
-<script src="/ui/i18n.js" defer></script>
-<script src="/ui/gallery.js" defer></script>
-<script src="/ui/onboarding.js" defer></script>
-<!-- session 30, one-click install: the tour's three ways + background download, Send feedback -->
-<link rel="stylesheet" href="/ui/firstrun.css">
-<script src="/ui/feedback.js" defer></script>
-<link rel="stylesheet" href="/ui/files.css">
-<script src="/ui/files.js" defer></script>
-<link rel="stylesheet" href="/ui/forge.css">
-<link rel="stylesheet" href="/ui/forge_manga.css">
-<script src="/ui/forge_mm.js" defer></script>
-<script src="/ui/forge_materials.js" defer></script>
-<script src="/ui/forge.js" defer></script>
-<script src="/ui/forge_poly.js" defer></script>
-<script src="/ui/forge_polyops.js" defer></script>
-<script src="/ui/forge_model.js" defer></script>
-<script src="/ui/forge_edit.js" defer></script>
-<script src="/ui/forge_maya_layout.js" defer></script>
-<script src="/ui/forge_pro.js" defer></script>
-<script src="/ui/forge_file.js" defer></script>
-  <script src="/ui/forge_sets.js" defer></script>
-<script src="/ui/forge_keys.js" defer></script>
-<script src="/ui/forge_toolkit.js" defer></script>
-<script src="/ui/forge_boolean.js" defer></script>
-<script src="/ui/forge_scene.js" defer></script>
-<script src="/ui/forge_split.js" defer></script>
-<script src="/ui/forge_imageplane.js" defer></script>
-<script src="/ui/forge_geom.js" defer></script>
-<script src="/ui/forge_uv.js" defer></script>
-<script src="/ui/forge_uvgami.js" defer></script>
-<script src="/ui/forge_uv_editor.js" defer></script>
-<script src="/ui/forge_retopo.js" defer></script>
-<script src="/ui/forge_bake.js" defer></script>
-<script src="/ui/forge_level_core.js" defer></script>
-<script src="/ui/forge_level.js" defer></script>
-<script src="/ui/forge_manga.js" defer></script>
-<script src="/ui/forge_design.js" defer></script>
-<script src="/ui/forge_anim.js" defer></script>
-<script src="/ui/forge_graph.js" defer></script>
-<script src="/ui/forge_preview.js" defer></script>
-<script src="/ui/forge_multicut.js" defer></script>
-<script src="/ui/forge_normals.js" defer></script>
-<script src="/ui/forge_options.js" defer></script>
-<script src="/ui/forge_chrome.js" defer></script>
-<script src="/ui/forge_dock.js" defer></script>
-<script src="/ui/forge_menus.js" defer></script>
-<script src="/ui/forge_settings.js" defer></script>
-<script src="/ui/forge_sculpt.js" defer></script>
-<script src="/ui/forge_sculpt_mask.js" defer></script>
-<script src="/ui/forge_sculpt_ui.js" defer></script>
-<script src="/ui/forge_render.js" defer></script>
-<!-- Render Studio, the Render tab: Forge's control passes + the AI Renderer (ComfyUI) - docs/AI_RENDERER.md -->
-<link rel="stylesheet" href="/ui/render_studio.css">
-<script src="/ui/forge_passes.js" defer></script>
-<script src="/ui/render_studio.js" defer></script>
-<!-- Studio's render farm manager (the Farm view; engine/render_farm.py) -->
-<link rel="stylesheet" href="/ui/studio_farm.css">
-<link rel="stylesheet" href="/ui/studio_agents.css">
-<script src="/ui/studio_agents.js" defer></script>
-<script src="/ui/home_live.js" defer></script>
-<script src="/ui/home_review.js" defer></script>
-<script src="/ui/agentsys.js" defer></script>
-<script src="/ui/video_cmd.js" defer></script>
-<!-- the picture viewer: ‹ › through pictures, select an area to focus / crop / edit only it (Cropper.js, MIT) -->
-<link rel="stylesheet" href="/ui/vendor/cropper/cropper.min.css">
-<link rel="stylesheet" href="/ui/image_viewer.css">
-<script src="/ui/vendor/cropper/cropper.min.js" defer></script>
-<script src="/ui/image_viewer.js" defer></script>
-<script src="/ui/chat_media.js" defer></script>
-<script src="/ui/local_models.js" defer></script>
-<script src="/ui/toolshelf.js" defer></script>
-<script src="/ui/harness_menu.js" defer></script>
-<script src="/ui/live_meter.js" defer></script>
-<script src="/ui/task_board.js" defer></script>
-<script src="/ui/storage_view.js" defer></script>
-<script src="/ui/studio_farm.js" defer></script>
-<script src="/ui/apps.js" defer></script>
-<script src="/ui/modes.js" defer></script>
-<link rel="stylesheet" href="/ui/qol.css">
-<script src="/ui/qol.js" defer></script>
-<link rel="stylesheet" href="/ui/ui_tidy.css">
-<!-- Forge: one modern look for every menu (loaded last so it wins) -->
-<link rel="stylesheet" href="/ui/forge_theme.css">
-<link rel="stylesheet" href="/ui/home_layout.css">
-<script src="/ui/ui_tidy.js" defer></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LOKI</title>
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--panel2:#1e222b;--line:#2a2f3a;--ink:#e8eaf0;--quiet:#9aa3b2;--accent:#7c9cff;--good:#4cc38a;--warn:#e6b34d;--bad:#ef6b6b;--r:10px;--gap:1.2%}
+@media (prefers-color-scheme: light){:root{--bg:#f5f6f8;--panel:#fff;--panel2:#f0f2f6;--line:#dfe3ea;--ink:#171a21;--quiet:#5c6575}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+button{font:inherit;color:inherit}
+.top{display:flex;align-items:center;gap:12px;height:6vh;min-height:44px;padding:0 1.5%;border-bottom:1px solid var(--line)}
+.brand{font-weight:700;letter-spacing:.12em}
+.sp{flex:1}
+.ib{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.ib:hover{border-color:var(--accent)}
+.ib svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ib[data-tip]:hover::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);right:0;white-space:pre;z-index:9;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:6px 8px;border-radius:6px;font-size:12px;line-height:1.35;width:max-content;max-width:260px;white-space:normal}
+.main{display:grid;grid-template-columns:30% 1fr;gap:var(--gap);padding:var(--gap);height:94vh}
+@media (max-width:820px),(orientation:portrait){.main{grid-template-columns:1fr;height:auto}}
+.col{display:flex;flex-direction:column;gap:12px;min-height:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.card h3{margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--quiet)}
+textarea{width:100%;min-height:90px;resize:vertical;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}
+textarea:focus{outline:none;border-color:var(--accent)}
+.row{display:flex;gap:8px;align-items:center}
+.btn{padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#0b0d12;font-weight:600}
+.btn.good{border-color:var(--good)}.btn.bad{border-color:var(--bad)}
+.runs{overflow:auto;flex:1;display:flex;flex-direction:column;gap:6px}
+.run{padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);cursor:pointer}
+.run.sel{border-color:var(--accent)}
+.run .g{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);color:var(--quiet)}
+.chip.running,.chip.planning{color:var(--accent);border-color:var(--accent)}
+.chip.waiting{color:var(--warn);border-color:var(--warn)}
+.chip.done{color:var(--good);border-color:var(--good)}
+.chip.failed,.chip.stopped{color:var(--bad);border-color:var(--bad)}
+.chip.resting{color:var(--quiet)}
+.meta{font-size:12px;color:var(--quiet)}
+.detail{overflow:auto;min-height:0}
+.foryou{border-color:var(--warn)}
+.tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.tasks li{display:flex;gap:8px;align-items:flex-start}
+.mark{width:18px;flex:none;text-align:center}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(22%,1fr));gap:8px}
+.gallery a{display:block;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--panel2)}
+.gallery img{display:block;width:100%;aspect-ratio:1;object-fit:cover}
+.files{display:flex;flex-wrap:wrap;gap:6px}
+pre.log{margin:0;white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--quiet);max-height:40vh;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+.ok{color:var(--good)}.no{color:var(--bad)}
+.hidden{display:none}
+.empty{color:var(--quiet);padding:20px 4px;text-align:center}
+</style>
 </head>
 <body>
-<div class="shell">
-  <aside class="sidebar" aria-label="Conversations">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 12 12" width="20" height="20" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="2" height="3" fill="#ED782B"/><rect x="7" y="2" width="2" height="3" fill="#ED782B"/><rect x="2" y="5" width="8" height="3" fill="#ED782B"/><rect x="1" y="8" width="10" height="2" fill="#ED782B"/><rect x="2" y="10" width="8" height="1" fill="#FAEDD6"/><rect x="4" y="7" width="1" height="1" fill="#38241F"/><rect x="7" y="7" width="1" height="1" fill="#38241F"/><rect x="5" y="9" width="2" height="1" fill="#FAEDD6"/><rect x="5" y="10" width="2" height="1" fill="#38241F"/></svg></span>
-      <span class="brand-name">Loki</span>
-    </div>
-    <button type="button" id="new-chat" class="new-chat">New chat</button>
-    <button type="button" id="open-apps" class="quiet" data-icon="grid" data-tip-name="Apps" data-tip-what="Small apps LOKI builds for you (budget, habits, study cards...), modes and extensions.">Apps</button>
-    <button type="button" id="open-forge" class="quiet" data-icon="cube" data-tip-name="Forge" data-tip-what="Make 3D things: draw, add a picture or describe it, then turn, sculpt and export the model.">Forge</button>
-    <nav id="conversations" class="conversations" aria-label="Chats"></nav>
-    <div class="sidebar-foot">
-      <div id="workspace" class="workspace" title="Workspace folder"></div>
-      <div id="version" class="workspace version"></div>
-      <div class="foot-row">
-        <button type="button" id="open-files" class="quiet" data-icon="folder" data-tip-name="Files" data-tip-what="Your workspace: drop files in, preview PDFs, pictures and spreadsheets, ask LOKI about one, chat with a folder of documents.">Files</button>
-        <button type="button" id="open-settings" class="quiet">Settings</button>
-        <button type="button" id="check-everything" class="link" title="Prove every part of LOKI works together on this computer">Check everything</button>
-        <button type="button" id="quit-loki" class="link" data-icon="power" data-tip-name="Quit LOKI" data-tip-what="Stop LOKI completely. Closing the window keeps it working in the background (Settings > General).">Quit LOKI</button>
-      </div>
-    </div>
-  </aside>
-
-  <main class="main" id="main">
-    <div id="update-banner" class="update-banner" hidden role="status">
-      <span id="update-banner-text"></span>
-      <button type="button" id="update-banner-go" class="send small">Update everything</button>
-      <button type="button" id="update-banner-later" class="quiet small">Later</button>
-    </div>
-    <div id="changed-banner" class="update-banner" hidden role="status">
-      <span id="changed-banner-text"></span>
-      <button type="button" id="changed-banner-go" class="send small">Review and turn back on</button>
-      <button type="button" id="changed-banner-later" class="quiet small">Later</button>
-    </div>
-    <header class="topbar">
-      <h1 id="chat-title" class="chat-title">Loki</h1>
-      <div class="topbar-right">
-        <div class="model-picker">
-          <button type="button" id="model-button" class="model-button" aria-haspopup="menu" aria-expanded="false" title="Which model answers">
-            <span id="model-button-text">Smart</span><span class="caret" aria-hidden="true">▾</span>
-          </button>
-          <div id="model-menu" class="model-menu" role="menu" hidden></div>
-        </div>
-        <button type="button" id="usage-pill" class="usage-pill" title="What your messages cost - open Usage">—</button>
-        <span id="status" class="status" role="status" aria-live="polite">Connecting…</span>
-      </div>
-    </header>
-
-    <div id="loki-split" class="loki-split">
-    <!-- the Home hub (home.js) goes here, left; the chat column is always beside it (owner 2026-10-25: "the chat is
-         buggy, the display is sometimes hidden ... no scroll bar ... reimagine the entire thing") -->
-    <div id="chat-col" class="chat-col">
-    <button type="button" id="summon" class="summon" aria-label="Talk to Loki" title="Talk to Loki">
-      <span class="summon-word">Loki</span>
-      <span id="summon-version" class="summon-version"></span>
-    </button>
-    <section id="welcome" class="welcome" hidden aria-label="Welcome">
-      <div class="welcome-inner">
-        <div class="welcome-mark" aria-hidden="true"><svg viewBox="0 0 12 12" width="46" height="46" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="2" width="2" height="3" fill="#ED782B"/><rect x="7" y="2" width="2" height="3" fill="#ED782B"/><rect x="2" y="5" width="8" height="3" fill="#ED782B"/><rect x="1" y="8" width="10" height="2" fill="#ED782B"/><rect x="2" y="10" width="8" height="1" fill="#FAEDD6"/><rect x="4" y="7" width="1" height="1" fill="#38241F"/><rect x="7" y="7" width="1" height="1" fill="#38241F"/><rect x="5" y="9" width="2" height="1" fill="#FAEDD6"/><rect x="5" y="10" width="2" height="1" fill="#38241F"/></svg></div>
-        <h2 class="welcome-title">What should Loki work on?</h2>
-        <p class="welcome-sub">Ask a question, plan a change, or switch to Build and let Loki edit, run and verify its own work — asking you before anything risky.</p>
-        <div class="welcome-chips">
-          <button type="button" class="chip" data-prompt="Explain what this project does and how it is organised.">Explain this project</button>
-          <button type="button" class="chip" data-prompt="Look for bugs and risky code in this project and tell me what to fix first.">Review my code</button>
-          <button type="button" class="chip" data-prompt="Plan the next change as a short, numbered plan.">Plan a change</button>
-        </div>
-      </div>
-    </section>
-    <section id="transcript" class="transcript" aria-live="polite" aria-label="Conversation"></section>
-    <button type="button" id="jump-latest" class="jump-latest" hidden aria-label="Jump to the latest message" title="Jump to the latest message">↓ Latest</button>
-
-    <section id="work" class="work" hidden aria-label="Work in progress">
-      <div class="work-head">
-        <button type="button" id="work-toggle" class="work-toggle" aria-expanded="true"><span id="work-summary">Working</span></button>
-        <button type="button" id="clear-jobs" class="quiet small">Clear finished</button>
-      </div>
-      <div id="job-list" class="job-list"></div>
-    </section>
-
-    <form id="composer" class="composer" autocomplete="off">
-      <div class="composer-box">
-        <textarea id="prompt" rows="1" placeholder="Message Loki" aria-label="Message Loki" autocorrect="off" autocapitalize="off" autocomplete="off" spellcheck="false" writingsuggestions="false"></textarea>
-        <div class="composer-row">
-          <div class="modes" role="radiogroup" aria-label="Mode">
-            <button type="button" role="radio" data-mode="ask" aria-checked="false" title="Answer questions; change nothing">Ask</button>
-            <button type="button" role="radio" data-mode="plan" aria-checked="false" title="Read, ask, then write a plan; change nothing">Plan</button>
-            <button type="button" role="radio" data-mode="build" aria-checked="false" title="Edit, run and verify">Build</button>
-          </div>
-          <label class="check bg-toggle" title="Hand this to a background agent and keep chatting"><input type="checkbox" id="in-background"> Run in background</label>
-          <span id="elapsed" class="elapsed"></span>
-          <button type="button" id="stop" class="stop" hidden>Stop</button>
-          <button type="submit" id="send" class="send">Send</button>
-        </div>
-      </div>
-    </form>
-    </div>
-    </div>
-  </main>
+<div class="top">
+  <span class="brand">LOKI</span>
+  <span class="meta" id="ver"></span>
+  <span class="sp"></span>
+  <button class="ib" id="bModels" data-tip="Models — which free models answer on this machine"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg></button>
+  <button class="ib" id="bUpdate" data-tip="Update everything — pull master and restart LOKI on this machine"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button>
 </div>
-
-<div id="settings" class="sheet" hidden>
-  <div class="sheet-panel settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <button type="button" id="settings-x" class="settings-x" data-icon="close" data-tip-name="Close" data-tip-what="Close Settings (Esc)" aria-label="Close settings">✕</button>
-    <nav class="settings-nav" aria-label="Settings sections">
-      <h2 id="settings-title">Settings</h2>
-      <input id="settings-search" class="settings-search" type="search" placeholder="Search settings" aria-label="Search settings">
-      <div class="tabs" role="tablist" aria-orientation="vertical">
-        <button type="button" role="tab" data-tab="system" aria-selected="false"><span class="ico" aria-hidden="true">✓</span>System check<span id="system-dot" class="dot" hidden></span></button>
-        <button type="button" role="tab" data-tab="general" aria-selected="false"><span class="ico" aria-hidden="true">◎</span>General</button>
-        <button type="button" role="tab" data-tab="connections" aria-selected="true"><span class="ico" aria-hidden="true">⚡</span>Connections<span id="conn-count" class="count"></span></button>
-        <button type="button" role="tab" data-tab="agents" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Agents</button>
-        <button type="button" role="tab" data-tab="machines" aria-selected="false"><span class="ico" aria-hidden="true">⇄</span>Machines &amp; updates<span id="update-dot" class="dot" hidden></span></button>
-        <button type="button" role="tab" data-tab="models" aria-selected="false"><span class="ico" aria-hidden="true">▣</span>Local models</button>
-        <button type="button" role="tab" data-tab="capabilities" aria-selected="false"><span class="ico" aria-hidden="true">✚</span>Add-ons</button>
-        <button type="button" role="tab" data-tab="creations" aria-selected="false"><span class="ico" aria-hidden="true">✿</span>Creations</button>
-        <button type="button" role="tab" data-tab="brain" aria-selected="false"><span class="ico" aria-hidden="true">✺</span>Brain</button>
-        <button type="button" role="tab" data-tab="play" aria-selected="false"><span class="ico" aria-hidden="true">▶</span>Play</button>
-        <button type="button" role="tab" data-tab="lab" aria-selected="false"><span class="ico" aria-hidden="true">✦</span>Lab</button>
-        <button type="button" role="tab" data-tab="crm" aria-selected="false"><span class="ico" aria-hidden="true">☷</span>CRM</button>
-        <button type="button" role="tab" data-tab="automations" aria-selected="false"><span class="ico" aria-hidden="true">⚡</span>Automations</button>
-        <button type="button" role="tab" data-tab="tools" aria-selected="false"><span class="ico" aria-hidden="true">⚙</span>Tools</button>
-        <button type="button" role="tab" data-tab="memory" aria-selected="false"><span class="ico" aria-hidden="true">✎</span>Memory</button>
-        <button type="button" role="tab" data-tab="usage" aria-selected="false"><span class="ico" aria-hidden="true">$</span>Usage</button>
-        <button type="button" role="tab" data-tab="data" aria-selected="false"><span class="ico" aria-hidden="true">▤</span>Your data</button>
+<div class="main">
+  <div class="col">
+    <div class="card">
+      <h3>New job</h3>
+      <textarea id="goal" placeholder="Describe what to make. One prompt; LOKI plans it and works until it's done."></textarea>
+      <div class="row" style="margin-top:8px">
+        <span class="meta" id="hint">Runs in the background — closing this window doesn't stop it.</span><span class="sp"></span>
+        <button class="btn primary" id="bStart" title="Start this job">Start</button>
       </div>
-      <button type="button" id="close-settings" class="quiet close-settings" aria-label="Close settings">Close</button>
-    </nav>
-    <div class="tab-body">
-      <section data-panel="system" hidden>
-        <header class="panel-head"><h3>System check</h3><p class="note">One click proves LOKI's parts work together on this computer: a model answers through the smart route and uses a tool, a background agent runs and shows up in the live view, a team plans, the safety rules hold. Anything that does not work says exactly what to do. It never spends money unless you allow paid providers.</p></header>
-        <div id="system-panel" class="sc"></div>
-      </section>
-      <section data-panel="general" hidden>
-        <header class="panel-head"><h3>General</h3><p class="note">How LOKI behaves on this computer. Saved in harness_data/.env, live at once.</p></header>
-        <div id="general-panel" class="cards"></div>
-      </section>
-      <section data-panel="connections">
-        <header class="panel-head">
-          <h3>Connections</h3>
-          <p class="note">Connect model providers. Sign in, paste a key, or scan a QR code with your phone. Switch any of them off and LOKI will not route to it. Keys stay on this computer and are never shown.</p>
-          <div class="portal-tools">
-            <input id="portal-filter" type="search" placeholder="Filter providers" aria-label="Filter providers">
-            <label class="check"><input type="checkbox" id="portal-free"> Free only</label>
-            <label class="check"><input type="checkbox" id="portal-connected"> Connected only</label>
-            <button type="button" id="routing-doctor" class="small" title="Which model LOKI picks for each kind of task, what is skipped and why (/models doctor)">Explain routing</button>
-            <button type="button" id="routing-recheck" class="small quiet" title="Check every connected provider again now (free model-list calls, nothing is bought)">Re-check</button>
-          </div>
-        </header>
-        <pre id="routing-report" class="routing-report" hidden></pre>
-        <div id="portal" class="portal"></div>
-        <details class="caps-raw"><summary>Other tools LOKI can see</summary><div id="providers" class="rows"></div></details>
-      </section>
-      <section data-panel="agents" hidden>
-        <header class="panel-head"><h3>Agents</h3><p class="note">Build agents you want to keep: a role, skills, tools, a model, a harness and the machine they live on. Teams still assemble themselves; these are your regulars.</p></header>
-        <div id="agents-panel"></div>
-      </section>
-      <section data-panel="automations" hidden>
-        <header class="panel-head"><h3>Automations</h3><p class="note">LOKI does things by itself: on a schedule, when a file lands in a folder, a new email, before a meeting, a webhook, a word on Telegram, a job ending or a machine coming online. Say it in one sentence; you see the card and turn it on. Anything that touches your accounts asks first unless you pre-approve that exact automation.</p></header>
-        <div id="automations-panel" class="automations"></div>
-      </section>
-      <section data-panel="tools" hidden>
-        <header class="panel-head"><h3>Tools</h3><p class="note">Everything LOKI's agents can touch: does it work, what is missing, and the fix. Tools that cannot work right now are hidden from the model. Risky actions still ask before they run.</p></header>
-        <div id="tools-health" class="tools-health"></div>
-        <h4 class="th-sub">Connect your apps</h4>
-        <div id="connector-cards" class="conn-cards"></div>
-        <h4 class="th-sub">Tool groups</h4>
-        <div id="categories" class="rows"></div>
-        <div id="user-tools" class="lab"></div>
-      </section>
-      <section data-panel="memory" hidden>
-        <header class="panel-head"><h3>Memory</h3><p class="note">What LOKI remembers about you, your projects, people, preferences, decisions and past work - the same on every linked machine. Check what it learned, undo what it got wrong.</p></header>
-        <div id="memory-core" class="lab"></div>
-        <details class="mem-notes">
-          <summary title="Your own notes, always included in every request (and synced to your other machines)">Your notes for LOKI (always included)</summary>
-          <textarea id="memory-text" class="memory" rows="8" aria-label="Your notes for LOKI"></textarea>
-          <div class="right"><button type="button" id="save-memory">Save memory</button></div>
-        </details>
-      </section>
-      <section data-panel="models" hidden>
-        <header class="panel-head"><h3>Local models</h3><p class="note">Models that run on this computer, with no internet.</p></header>
-        <div id="models-panel"></div>
-      </section>
-      <section data-panel="usage" hidden>
-        <header class="panel-head"><h3>Usage</h3><p class="note">Every model call, counted. Local models and free tiers cost nothing; paid providers use list prices (override them in harness_data/prices.json).</p></header>
-        <div id="usage-panel"></div>
-        <div class="right"><button type="button" id="usage-reset" class="quiet">Reset usage</button></div>
-      </section>
-      <section data-panel="data" hidden>
-        <header class="panel-head"><h3>Your data</h3><p class="note">What LOKI keeps on this computer and where, which model providers got your messages, backups you can restore, and clearing what you do not want kept.</p></header>
-        <div id="data-panel" class="data-panel"></div>
-      </section>
-      <section data-panel="machines" hidden>
-        <header class="panel-head"><h3>Machines &amp; updates</h3><p class="note">Your computers running LOKI. They always run the same version: one click updates all of them.</p></header>
-        <div id="update-panel" class="update-panel"></div>
-        <div id="machines-panel"></div>
-      </section>
-      <section data-panel="creations" hidden>
-        <header class="panel-head"><h3>Creations</h3><p class="note">Everything LOKI made for you - pictures, videos, sketches, music, voice and games - newest first. Ask for the next one here, in a style; LOKI makes it in the background, on this computer once local-image is installed (Add-ons), else with the free online maker. Star your favourites: the daily picture learns from them.</p></header>
-        <div id="creations-panel" class="creations"></div>
-      </section>
-      <section data-panel="brain" hidden>
-        <header class="panel-head"><h3>Brain</h3><p class="note">Everything LOKI knows, as one map: LOKI and its specialists, their tools, memory, skills, recent jobs, your project's docs and your Obsidian vault (read only), joined by their links and #tags.</p></header>
-        <div id="brain-panel" class="brain"></div>
-      </section>
-      <section data-panel="play" hidden>
-        <header class="panel-head"><h3>Play</h3><p class="note">Games made with LOKI's own Pixel Engine, in a pixel cel-shaded look. Ask LOKI to make one ("make a game where the fox...") and it appears here. Games run sealed off from LOKI: they cannot see your files or keys.</p></header>
-        <div id="play-panel" class="play"></div>
-      </section>
-      <section data-panel="lab" hidden>
-        <header class="panel-head"><h3>Lab - LOKI grows itself</h3><p class="note">LOKI builds its own personal-agent core here, one change at a time, when it is idle: your ideas first, then the roadmap in docs/EVOLVE.md. Each change is made in its own copy of the code, tested on every suite and shipped only if all pass; what worked and what did not is kept and used for the next try.</p></header>
-        <div id="lab-panel" class="lab"></div>
-        <div id="bench-panel" class="lab bench"></div>
-      </section>
-      <section data-panel="crm" hidden>
-        <header class="panel-head"><h3>CRM</h3><p class="note">Your contacts, companies, deals and tasks, kept on this computer (harness_data/crm.sqlite3). LOKI can read and update them too: ask it to log a call, move a deal or show the pipeline.</p></header>
-        <div id="crm-panel" class="crm"></div>
-      </section>
-      <section data-panel="capabilities" hidden>
-        <header class="panel-head"><h3>Add-ons</h3><p class="note">Add-ons are off until you turn them on. Turning one on grants the permissions listed under it; if its manifest changes later it switches off until you approve it again. Install the optional ones with tools/setup_extras.py.</p></header>
-        <div id="manifests" class="rows"></div>
-        <details class="caps-raw"><summary>Everything Loki knows about</summary>
-        <pre id="capabilities" class="caps"></pre></details>
-      </section>
+    </div>
+    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:30vh">
+      <h3>Jobs</h3>
+      <div class="runs" id="runs"><div class="empty">No jobs yet.</div></div>
     </div>
   </div>
-</div>
-<div id="files" class="sheet" hidden>
-  <div class="sheet-panel files-panel" role="dialog" aria-modal="true" aria-labelledby="files-title">
-    <header class="sheet-head">
-      <h2 id="files-title">Files</h2>
-      <button type="button" id="close-files" class="quiet" data-icon="close" data-tip-name="Close" data-tip-what="Close Files (Esc).">Close</button>
-    </header>
-    <div class="files-body">
-      <div class="files-side">
-        <div class="files-bar">
-          <button type="button" id="files-up" class="mini icon-mini" data-icon="up" data-tip-name="Up" data-tip-what="Go to the folder above.">Up</button>
-          <nav id="files-crumbs" class="files-crumbs" aria-label="Folder"></nav>
-          <button type="button" id="files-upload" class="mini icon-mini" data-icon="upload" data-tip-name="Add files" data-tip-what="Copy files from this computer into the folder shown.">Add files</button>
-          <button type="button" id="files-refresh" class="mini icon-mini" data-icon="refresh" data-tip-name="Refresh" data-tip-what="Show what is in the folder now.">Refresh</button>
-          <input type="file" id="files-pick" multiple hidden>
-        </div>
-        <div id="files-list" class="files-list" aria-label="Files in this folder"></div>
-        <div id="files-drop" class="files-drop">Drop files here - they are copied into the workspace</div>
-        <div class="files-sub">Recent</div>
-        <div id="files-recent" class="files-chips"></div>
-        <div class="files-sub">Places and document collections</div>
-        <div id="files-collections" class="files-chips"></div>
-      </div>
-      <section id="files-preview" class="files-preview" aria-live="polite"><p class="note">Pick a file to see it here.</p></section>
-    </div>
-    <p id="files-note" class="files-note" role="status"></p>
+  <div class="col detail" id="detail">
+    <div class="card empty" id="nosel">Pick a job, or start one.</div>
   </div>
 </div>
-<div id="qr-modal" class="sheet modal" hidden>
-  <div class="sheet-panel qr-panel" role="dialog" aria-modal="true" aria-labelledby="qr-title">
-    <header class="sheet-head"><h2 id="qr-title">Scan with your phone</h2>
-      <button type="button" id="qr-close" class="quiet" aria-label="Close">Close</button></header>
-    <div class="qr-body">
-      <div id="qr-image" class="qr-image"></div>
-      <div class="qr-side">
-        <p id="qr-text" class="qr-text"></p>
-        <div id="qr-steps" class="qr-steps"></div>
-        <div id="qr-actions" class="qr-actions"></div>
-        <p id="qr-status" class="note" role="status" aria-live="polite"></p>
-      </div>
-    </div>
-  </div>
-</div>
-<div id="setup" class="sheet" hidden>
-  <div class="sheet-panel wide" role="dialog" aria-modal="true" aria-labelledby="setup-title">
-    <header class="sheet-head">
-      <h2 id="setup-title">Get Loki running on this computer</h2>
-      <button type="button" id="close-setup" class="quiet" aria-label="Close setup">Later</button>
-    </header>
-    <div class="tab-body"><div id="setup-body"></div></div>
-  </div>
-</div>
+<div class="hidden" id="modelsTpl"></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let sel = null, view = 'run';
+try { sel = localStorage.getItem('loki.sel'); } catch (e) {}
+const api = async (path, opts) => { const r = await fetch(path, opts); if (!r.ok) throw new Error(r.status); const t = await r.text(); return t ? JSON.parse(t) : null; };
+const post = (path, body) => api(path, {method:'POST', headers:{'content-type':'application/json'}, body: body ? JSON.stringify(body) : undefined});
+const ago = t => { const s = (Date.now() - Date.parse(t)) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.round(s/60)+' min ago' : s < 86400 ? Math.round(s/3600)+' h ago' : Math.round(s/86400)+' d ago'; };
+const IMG = /\.(png|jpe?g|webp|gif|svg)$/i;
+
+async function refreshRuns() {
+  let runs = [];
+  try { runs = await api('/runs'); } catch (e) { $('#runs').innerHTML = '<div class="empty">Driver not answering…</div>'; return; }
+  if (!runs.length) { $('#runs').innerHTML = '<div class="empty">No jobs yet.</div>'; return; }
+  $('#runs').innerHTML = runs.map(r => `<div class="run ${r.id === sel ? 'sel' : ''}" data-id="${esc(r.id)}">
+    <div class="g">${esc(r.goal)}</div>
+    <div class="row meta" style="margin-top:4px"><span class="chip ${esc(r.status)}">${esc(r.status)}</span><span>${r.steps} steps</span><span class="sp"></span><span>${ago(r.updated)}</span></div></div>`).join('');
+  document.querySelectorAll('.run').forEach(el => el.onclick = () => { sel = el.dataset.id; view = 'run'; try { localStorage.setItem('loki.sel', sel); } catch (e) {} tick(); });
+}
+
+async function refreshDetail() {
+  if (view === 'models') return;
+  if (!sel) { $('#detail').innerHTML = '<div class="card empty">Pick a job, or start one.</div>'; return; }
+  let d; try { d = await api('/runs/' + encodeURIComponent(sel)); } catch (e) { return; }
+  const r = d.run, tasks = d.tasks || [], files = d.files || [];
+  const imgs = files.filter(f => IMG.test(f.path)), other = files.filter(f => !IMG.test(f.path));
+  const fileUrl = p => `/runs/${encodeURIComponent(r.id)}/file?path=${encodeURIComponent(p)}&t=${Date.now() >> 12}`;
+  const done = tasks.filter(t => t.state === 'passed').length;
+  let html = `<div class="card"><div class="row"><span class="chip ${esc(r.status)}">${esc(r.status)}</span><span class="meta">${r.steps} steps · ${done}/${tasks.length} tasks</span><span class="sp"></span>
+    ${['running','planning','resting'].includes(r.status) ? `<button class="ib" id="bStop" data-tip="Stop — pause this job; resume any time"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>` : ''}
+    ${['stopped','failed'].includes(r.status) ? `<button class="ib" id="bResume" data-tip="Resume — carry on from where it stopped"><svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg></button>` : ''}
+    </div><div style="margin-top:8px">${esc(r.goal)}</div>${r.last_error ? `<div class="meta no" style="margin-top:6px">${esc(r.last_error)}</div>` : ''}</div>`;
+  if (r.status === 'waiting') html += `<div class="card foryou"><h3>For you</h3><div>${esc(r.waiting_for)}</div>
+    <input id="note" placeholder="Optional note or answer" style="width:100%;margin-top:10px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font:inherit">
+    <div class="row" style="margin-top:10px"><span class="sp"></span><button class="btn bad" id="bNo">Decline</button><button class="btn good primary" id="bYes">Approve</button></div></div>`;
+  if (imgs.length) html += `<div class="card"><h3>Results</h3><div class="gallery">${imgs.map(f => `<a href="${fileUrl(f.path)}" target="_blank" title="${esc(f.path)}"><img loading="lazy" src="${fileUrl(f.path)}" alt="${esc(f.path)}"></a>`).join('')}</div></div>`;
+  html += `<div class="card"><h3>Checklist</h3>${tasks.length ? `<ul class="tasks">${tasks.map(t => `<li><span class="mark ${t.state === 'passed' ? 'ok' : t.state === 'blocked' ? 'no' : ''}">${t.state === 'passed' ? '✓' : t.state === 'blocked' ? '!' : '○'}</span><span>${esc(t.title)}<div class="meta">${esc(t.state === 'todo' ? 'check: ' + t.check : t.evidence)}</div></span></li>`).join('')}</ul>` : '<div class="meta">Planning…</div>'}</div>`;
+  if (other.length) html += `<div class="card"><h3>Files</h3><div class="files">${other.slice(0, 60).map(f => `<a class="chip" href="${fileUrl(f.path)}" target="_blank">${esc(f.path)}</a>`).join('')}</div></div>`;
+  html += `<div class="card"><h3>Log</h3><pre class="log">${esc(d.progress || '…')}</pre></div>`;
+  const keep = $('#note') ? $('#note').value : '';
+  $('#detail').innerHTML = html;
+  if ($('#note')) $('#note').value = keep;
+  const id = r.id;
+  if ($('#bStop')) $('#bStop').onclick = () => post(`/runs/${id}/stop`).then(tick);
+  if ($('#bResume')) $('#bResume').onclick = () => post(`/runs/${id}/resume`).then(tick);
+  if ($('#bYes')) $('#bYes').onclick = () => post(`/runs/${id}/reply`, {approve: true, note: $('#note').value}).then(tick);
+  if ($('#bNo')) $('#bNo').onclick = () => post(`/runs/${id}/reply`, {approve: false, note: $('#note').value}).then(tick);
+}
+
+async function showModels(refresh) {
+  view = 'models';
+  $('#detail').innerHTML = `<div class="card"><h3>Free models on this machine</h3><div class="meta">${refresh ? 'Asking every model for a one-word answer…' : 'Loading…'}</div></div>`;
+  let rows = [];
+  try { rows = await api('/models' + (refresh ? '?refresh=1' : '')); } catch (e) {}
+  if (!Array.isArray(rows)) rows = [];
+  $('#detail').innerHTML = `<div class="card"><div class="row"><h3 style="margin:0">Free models on this machine</h3><span class="sp"></span>
+    <button class="ib" id="bProbe" data-tip="Check again — ask every model for a one-word answer"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button>
+    <button class="ib" id="bBack" data-tip="Back to jobs"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button></div>
+    <table style="margin-top:10px"><tr><th>Provider</th><th>Role</th><th>Model</th><th>Result</th></tr>
+    ${rows.map(r => `<tr><td>${esc(r.provider)}</td><td>${esc(r.role)}</td><td>${esc(r.model)}</td><td class="${r.ok ? 'ok' : 'no'}">${r.ok ? 'OK ' + r.ms + ' ms' : esc(r.note)}</td></tr>`).join('')}</table>
+    <div class="meta" style="margin-top:10px">Keys live in harness_data/.env. Free signups that add capacity: GROQ_API_KEY, OPENROUTER_API_KEY, MISTRAL_API_KEY.</div></div>`;
+  $('#bProbe').onclick = () => showModels(true);
+  $('#bBack').onclick = () => { view = 'run'; tick(); };
+}
+
+$('#bModels').onclick = () => showModels(false);
+$('#bUpdate').onclick = async () => { try { await post('/update'); $('#hint').textContent = 'Updating… LOKI restarts in a moment; jobs carry on.'; } catch (e) { $('#hint').textContent = 'Update request failed.'; } };
+$('#bStart').onclick = async () => {
+  const goal = $('#goal').value.trim(); if (!goal) return;
+  $('#bStart').disabled = true;
+  try { const r = await post('/runs', {goal}); sel = r.id; view = 'run'; $('#goal').value = ''; try { localStorage.setItem('loki.sel', sel); } catch (e) {} }
+  catch (e) { $('#hint').textContent = 'Could not start the job.'; }
+  $('#bStart').disabled = false; tick();
+};
+api('/status').then(s => { $('#ver').textContent = 'v' + s.version; }).catch(() => {});
+async function tick() { await refreshRuns(); await refreshDetail(); }
+tick(); setInterval(tick, 2500);
+</script>
 </body>
 </html>

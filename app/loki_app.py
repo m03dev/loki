@@ -1,1214 +1,572 @@
-"""Loki - the standalone desktop app.
+"""LOKI launcher (Mac + Windows). Standard library only.
 
-Starts the Loki engine (engine/loki_bridge.py) on 127.0.0.1:8767 and opens the Loki
-window on it. Godot is an optional capability for game projects: it is handed to the
-engine only when one is found, so the game tools can light up.
+The window and the driver are separate. This file:
+  1. builds the driver `lokid` (Rust) on this machine, installing Rust first if needed,
+  2. starts it in the background (it keeps working when the window closes),
+  3. opens the window (pywebview if present, else the browser),
+  4. keeps this machine on `master`: checks every 10 minutes and on "Update everything",
+     swaps code only after the new version builds and its driver answers, and rolls back otherwise.
 
-    python app/loki_app.py                 # the window (pywebview), or a browser fallback
-    python app/loki_app.py --workspace DIR # work in DIR instead of ~/LOKI Projects/Home
-    python app/loki_app.py --print-url     # start the engine and print the window URL
-
-Standard library only, apart from the optional `pywebview` window.
+It keeps the old app's entry point (`app/loki_app.py`, `--self-test`, `--background`) so machines
+running the previous LOKI move to this one through their old updater.
 """
 from __future__ import annotations
 
-import argparse
+import hashlib
 import json
 import os
-try:   # no console windows on Windows for anything started from here (engine/no_console.py)
-    sys_path_engine = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "engine")
-    import sys as _sys
-    if sys_path_engine not in _sys.path:
-        _sys.path.append(sys_path_engine)
-    import no_console  # noqa: F401
-except Exception:  # noqa: BLE001
-    pass
+import platform
 import shutil
 import signal
-import threading
 import subprocess
 import sys
+import threading
 import time
-import traceback
-import urllib.error
 import urllib.request
-import webbrowser
 from pathlib import Path
 
-T_START = time.monotonic()   # docs/SPEED.md: "window shown after", "engine ready after" in loki_app.log
-
-# Packaged builds (PyInstaller, see packaging/loki.spec) carry the repo tree inside the
-# bundle and keep user data in a per-user folder, because the install folder may be
-# read-only. FROZEN is True there.
-FROZEN = bool(getattr(sys, "frozen", False))
-if FROZEN:
-    REPO = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)).resolve()
-    APP_DIR = REPO / "app"
-else:
-    APP_DIR = Path(__file__).resolve().parent
-    REPO = APP_DIR.parent
-HARNESS = REPO / "engine"
-ENGINE = REPO / "engine" / "loki_bridge.py"
-UI_DIR = APP_DIR / "ui"
-
-
-def default_data_dir() -> Path:
-    if not FROZEN:
-        return REPO / "harness_data"
-    if sys.platform == "win32":
-        return Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "Loki"
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Loki"
-    return Path.home() / ".local" / "share" / "loki"
+REPO = Path(__file__).resolve().parents[1]
+DATA = Path(os.environ.get("LOKI_DATA") or REPO / "harness_data")
+HOME = Path(os.environ.get("LOKI_HOME") or DATA / "home")
+PORT = int(os.environ.get("LOKI_DRIVER_PORT") or 7717)
+URL = f"http://127.0.0.1:{PORT}/"
+WIN = sys.platform == "win32"
+MAC = sys.platform == "darwin"
+EXE = ".exe" if WIN else ""
+UPDATE_EVERY_S = int(os.environ.get("LOKI_UPDATE_EVERY_S") or 600)
+LOG = HOME / "launcher.log"
+STATUS = HOME / "launcher_status.json"
+SOURCES = ("Cargo.toml", "Cargo.lock", "crates", "app/ui/index.html")
+NO_WINDOW = 0x08000000 if WIN else 0   # CREATE_NO_WINDOW: no console flashes for git/cargo
+STATE: dict = {"window": None, "phase": "starting"}
 
 
-DATA = Path(os.environ.get("LOKI_DATA") or default_data_dir())
-STATE = DATA / "app"
-TOKEN_FILE = STATE / "engine.token"
-SETTINGS_FILE = STATE / "settings.json"
-LOG_FILE = STATE / "loki_app.log"
-# The app's engine port (the engine's own default, 8766, is left free for a CLI run).
-HOST, PORT = "127.0.0.1", int(os.environ.get("LOKI_APP_PORT", "8767") or 8767)
-BASE = f"http://{HOST}:{PORT}"
-ENGINE_START_TIMEOUT_S = 180
-
-
-def log(message: str) -> None:
-    line = time.strftime("%Y-%m-%d %H:%M:%S ") + message
-    print("[loki-app] " + message, file=sys.stderr, flush=True)
+def log(msg: str) -> None:
+    HOME.mkdir(parents=True, exist_ok=True)
+    line = time.strftime("%Y-%m-%d %H:%M:%S ") + msg
     try:
-        STATE.mkdir(parents=True, exist_ok=True)
-        with LOG_FILE.open("a", encoding="utf-8") as handle:
-            handle.write(line + "\n")
+        with open(LOG, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
+    if sys.stdout and not WIN:
+        print(line, flush=True)
+
+
+def status(**kv) -> None:
+    STATE.update(kv)
+    data = {k: v for k, v in STATE.items() if k != "window"}
+    data["t"] = time.time()
+    try:
+        HOME.mkdir(parents=True, exist_ok=True)
+        tmp = STATUS.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
+        os.replace(tmp, STATUS)
     except OSError:
         pass
 
 
-# --------------------------------------------------------------------- settings
-def load_settings() -> dict:
+def run(cmd: list, timeout: float = 120, **kw) -> tuple[int, str]:
     try:
-        value = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=NO_WINDOW, **kw)
+        return p.returncode, (p.stdout or "") + (p.stderr or "")
+    except subprocess.TimeoutExpired:
+        return 124, "timed out after %ds" % timeout
+    except OSError as e:
+        return 127, str(e)
 
 
-def save_settings(settings: dict) -> None:
+def git(*args: str, timeout: float = 120) -> tuple[int, str]:
+    return run(["git", "-C", str(REPO), *args], timeout=timeout)
+
+
+# ---------------------------------------------------------------- environment
+
+def load_env_file(path: Path, env: dict) -> None:
     try:
-        STATE.mkdir(parents=True, exist_ok=True)
-        SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
-        pass
+        return
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.replace("export ", "").strip()
+        if k and k not in env:
+            env[k] = v.strip().strip('"').strip("'")
 
 
-def choose_workspace(cli_value: str = "", settings: dict | None = None, env: dict | None = None) -> Path:
-    """--workspace, else the remembered one, else $LOKI_WORKSPACE, else ~/LOKI Projects/Home.
-
-    Never ~/Loki: a folder named after the app is easily mistaken for the app itself
-    (that is how a game project ended up looking like Loki)."""
-    settings = settings if settings is not None else {}
-    env = env if env is not None else os.environ
-    for candidate in (cli_value, settings.get("workspace", ""), env.get("LOKI_WORKSPACE", "")):
-        if str(candidate or "").strip():
-            return Path(str(candidate)).expanduser().resolve()
-    return (Path.home() / "LOKI Projects" / "Home").resolve()
-
-
-def auto_update() -> dict:
-    """Bring this checkout up to GitHub before the engine starts (engine/updater.py).
-
-    Every machine runs the same LOKI this way: the Mac and the PC both follow `master`.
-    Fast-forward only; local work is never overwritten. Skipped in packaged builds."""
-    if FROZEN:
-        return {}
-    try:
-        sys.path.insert(0, str(HARNESS))
-        import updater  # pylint: disable=import-outside-toplevel
-        if not updater.enabled():
-            return {}
-        if RELEASE_MODE and os.environ.get("LOKI_UPDATE_AT_START", "") != "1":
-            # An installed LOKI never waits for the network before its window (session 30, docs/SPEED.md):
-            # the engine downloads and pre-flights a new release in the background
-            # (release_update.prepare); here we only switch to one that is already checked.
-            import release_update  # pylint: disable=import-outside-toplevel
-            result = release_update.apply_ready()
-            if result.get("updated"):
-                log("update: " + result.get("note", ""))
-            return result
-        python = engine_python()
-        if python is not None:   # the update's pre-flight runs the new version with the engine's Python
-            os.environ["LOKI_ENGINE_PYTHON"] = str(python)
-        result = updater.update(REPO, timeout=float(os.environ.get("LOKI_UPDATE_TIMEOUT", "25") or 25))
-        log("update: " + (result.get("note") or "") + ((" - " + result["error"]) if result.get("error") else ""))
-        return result
-    except Exception as exc:  # noqa: BLE001 - an update problem must never stop LOKI from opening
-        log("update skipped: %s" % exc)
-        return {}
-
-
-def adopt_old_chats(workspace: Path, home: Path | None = None) -> list[str]:
-    """Bring chats from the old default workspace (~/Loki/.godot) into <workspace>/.loki.
-
-    Copies only when the new place has none yet; the old files are never touched."""
-    old_dir = (home or Path.home()) / "Loki" / ".godot"
-    copied = []
-    for name in ("loki_conversations.json", "loki_history.json"):
-        old, new = old_dir / name, workspace / ".loki" / name
-        if old.is_file() and not new.exists():
-            try:
-                new.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(old, new)
-                copied.append(name)
-            except OSError:
-                pass
-    return copied
-
-
-# --------------------------------------------------------------------- discovery
-def engine_python() -> Path | None:
-    """The interpreter of Loki's private environment (setup.sh / setup.bat make it).
-    A packaged build is its own interpreter: it runs the engine as `Loki --engine`."""
-    if FROZEN:
-        return Path(sys.executable)
-    for candidate in (DATA / ".venv" / "bin" / "python3", DATA / ".venv" / "bin" / "python",
-                      DATA / ".venv" / "Scripts" / "python.exe"):
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def find_godot(env: dict | None = None) -> str:
-    """Optional. A Godot binary for the game tools, or "" when there is none."""
-    env = env if env is not None else os.environ
-    explicit = env.get("LOKI_GODOT", "") or env.get("GODOT_EXE", "")
-    if explicit:
-        return explicit if Path(explicit).is_file() else ""
-    if sys.platform == "darwin":
-        for root in (Path("/Applications"), Path.home() / "Applications"):
-            for app in sorted(root.glob("Godot*.app"), reverse=True):
-                binary = app / "Contents" / "MacOS" / "Godot"
-                if binary.is_file():
-                    return str(binary)
-    return shutil.which("godot") or shutil.which("godot4") or ""
-
-
-# --------------------------------------------------------------------- engine
-def read_token() -> str:
-    try:
-        return TOKEN_FILE.read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
-
-
-def probe(token: str, timeout: float = 1.5) -> int:
-    """HTTP status of GET /health with `token`; 0 when nothing answers."""
-    request = urllib.request.Request(BASE + "/health", headers={"Authorization": "Bearer " + token})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.status
-    except urllib.error.HTTPError as exc:
-        return exc.code
-    except (urllib.error.URLError, OSError):
-        return 0
-
-
-def engine_command(python: Path, workspace: Path, godot: str) -> list[str]:
-    command = [str(python), "--engine"] if FROZEN else [str(python), str(ENGINE)]
-    command += [
-               "--loki-root", str(HARNESS),
-               "--project-dir", str(workspace),
-               "--secret-file", str(TOKEN_FILE),
-               "--state-dir", str(STATE),
-               "--ui-dir", str(UI_DIR)]
-    if godot:
-        command += ["--godot-exe", godot]
-    return command
-
-
-def popen_options(platform: str | None = None) -> dict:
-    """How to detach the engine: its own session on macOS/Linux, no console on Windows."""
-    platform = platform or sys.platform
-    if platform == "win32":
-        # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP: no black console window, and the
-        # engine can be stopped on its own.
-        return {"creationflags": 0x08000000 | 0x00000200}
-    return {"start_new_session": True}
-
-
-def start_engine(python: Path, workspace: Path, godot: str) -> subprocess.Popen:
-    STATE.mkdir(parents=True, exist_ok=True)
-    workspace.mkdir(parents=True, exist_ok=True)
-    try:
-        TOKEN_FILE.unlink()
-    except OSError:
-        pass
-    # LOKI_SUPERVISED: the engine exits with RESTART_EXIT_CODE to be restarted on new code.
-    # LOKI_APP_PID: this window's process - computer use never clicks or types into it (engine/computer_use.py).
-    env = dict(os.environ, LOKI_DATA=str(DATA), PYTHONUNBUFFERED="1", LOKI_PORT=str(PORT),
-               LOKI_SUPERVISED="1", LOKI_APP_PID=str(os.getpid()))
-    output = open(STATE / "engine.out", "a", encoding="utf-8")
-    log(f"starting the engine for {workspace}" + (f" (Godot: {godot})" if godot else " (no Godot)"))
-    return subprocess.Popen(engine_command(python, workspace, godot), cwd=str(REPO), env=env,
-                            stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
-                            **popen_options())
-
-
-def wait_for_engine(process: subprocess.Popen | None, timeout: float = ENGINE_START_TIMEOUT_S) -> str:
-    """The engine's token once it answers, or "" if it died or timed out."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if process is not None and process.poll() is not None:
-            return ""
-        token = read_token()
-        if token and probe(token) == 200:
-            return token
-        time.sleep(0.5)
+def find_blender() -> str:
+    found = [os.environ.get("LOKI_BLENDER", "")]
+    if MAC:
+        import glob
+        for base in ["/Applications", str(Path.home() / "Applications")] + [str(p / "Applications") for p in Path("/Volumes").glob("*")]:
+            found += sorted(glob.glob(base + "/Blender*.app/Contents/MacOS/Blender"), reverse=True)
+    elif WIN:
+        import glob
+        for base in (os.environ.get("ProgramFiles", r"C:\Program Files"), os.environ.get("ProgramFiles(x86)", ""),
+                     str(Path.home() / "AppData" / "Local" / "Programs")):
+            if base:
+                found += sorted(glob.glob(os.path.join(base, "Blender Foundation", "Blender*", "blender.exe")), reverse=True)
+        found += [r"D:\Blender\blender.exe", r"C:\Blender\blender.exe"]
+    found.append(shutil.which("blender") or "")
+    for f in found:
+        if f and Path(f).is_file():
+            return f
     return ""
 
 
-ALREADY_RUNNING_EXIT_CODE = 73   # engine/loki_bridge.py: another engine already serves the port
+def driver_env() -> dict:
+    env = dict(os.environ)
+    load_env_file(DATA / ".env", env)       # the old app's keys (NVIDIA_API_KEY ...) keep working
+    load_env_file(HOME / ".env", env)
+    env["LOKI_HOME"] = str(HOME)
+    env["LOKI_DRIVER_PORT"] = str(PORT)
+    extra = [str(Path(sys.executable).parent)]  # `python` for the driver = this machine's LOKI python
+    blender = find_blender()
+    if blender:
+        env["LOKI_BLENDER"] = blender
+        extra.append(str(Path(blender).parent))
+    extra.append(str(cargo_home() / "bin"))
+    env["PATH"] = os.pathsep.join(extra + [env.get("PATH", "")])
+    return env
 
 
-def port_open(timeout: float = 0.5) -> bool:
-    """Something is LISTENING on the engine port (it may be too busy to answer /health in time)."""
-    import socket  # pylint: disable=import-outside-toplevel
-    try:
-        with socket.create_connection((HOST, PORT), timeout=timeout):
-            return True
-    except OSError:
-        return False
+# ---------------------------------------------------------------- building the driver
+
+def source_hash() -> str:
+    """Hash of everything the driver binary is built from (works with or without git)."""
+    h = hashlib.sha256()
+    for name in SOURCES:
+        p = REPO / name
+        files = sorted(x for x in p.rglob("*") if x.is_file() and "target" not in x.parts) if p.is_dir() else [p]
+        for f in files:
+            try:
+                h.update(str(f.relative_to(REPO)).replace("\\", "/").encode())
+                h.update(f.read_bytes())
+            except OSError:
+                pass
+    return h.hexdigest()[:12]
 
 
-def answer_slowly(token: str, wait_s: float = 25.0) -> int:
-    """A busy engine (a Blender job from the Mac, 2026-10-28) can take more than 1.5 s to answer /health: keep asking
-    while the port is open instead of deciding nothing runs and starting a second engine."""
-    end = time.monotonic() + wait_s
-    status = 0
-    while time.monotonic() < end and port_open():
-        status = probe(token, timeout=5.0)
-        if status:
-            return status
-        time.sleep(0.5)
-    return status
+def binary_path(tag: str) -> Path:
+    return HOME / "bin" / f"lokid-{tag}{EXE}"
 
 
-def take_over(token: str) -> str:
-    """An engine already runs here (started by another LOKI window, or left behind). Use it when it runs the code on
-    disk; when it runs older code, ask it to quit so a fresh one starts on the new code. Returns "attach" or "start"."""
-    if token and stale_engine(token):
-        log("an engine from another LOKI window runs an older version: asking it to quit, then starting the new one")
-        stop_running_engine(token, wait_s=20.0)
-        return "start" if not port_open() else "attach"
-    return "attach"
+def cargo_home() -> Path:
+    own = DATA / "toolchain" / "cargo"
+    if own.is_dir():
+        return own
+    return Path(os.environ.get("CARGO_HOME") or Path.home() / ".cargo")
 
 
-def stop_engine(process: subprocess.Popen | None) -> None:
-    if process is None or process.poll() is not None:
-        return
-    log("stopping the engine")
-    try:
-        if hasattr(os, "killpg"):
-            os.killpg(process.pid, signal.SIGTERM)
-        else:  # Windows
-            process.terminate()
-        process.wait(timeout=8)
-    except Exception:
-        process.kill()
+def find_cargo() -> str:
+    for c in (cargo_home() / "bin" / f"cargo{EXE}", Path.home() / ".cargo" / "bin" / f"cargo{EXE}"):
+        if c.is_file():
+            return str(c)
+    return shutil.which("cargo") or ""
 
 
-# --------------------------------------------------------------------- restarts
-RESTART_EXIT_CODE = 75          # engine/updater.py: "restart me on the new code"
-# An installed LOKI (session 29): packaging/installer/loki_launch.py sets LOKI_RELEASE_ROOT and starts
-# <root>/<current>/app/loki_app.py; this exit code asks it to start the (new) current version.
-RELEASE_MODE = bool(os.environ.get("LOKI_RELEASE_ROOT", "").strip())
-RELAUNCH_EXIT_CODE = 76         # engine/release_update.py
-WINDOW: dict = {"window": None, "browser": False}
-
-
-def rollback_update() -> dict:
-    """The updated engine did not start: go back to the version that last worked here."""
-    try:
-        sys.path.insert(0, str(HARNESS))
-        import updater  # pylint: disable=import-outside-toplevel
-        result = updater.rollback(REPO)
-        log("rollback: " + (("%s -> %s" % (result.get("from"), result.get("to"))) if result.get("ok")
-                            else result.get("error", "")))
-        return result
-    except Exception as exc:  # noqa: BLE001
-        log("rollback failed: %s" % exc)
-        return {"ok": False, "error": str(exc)}
-
-
-def show_url(url: str) -> None:
-    window = WINDOW.get("window")
-    if window is not None:
-        try:
-            window.load_url(url)
-            return
-        except Exception:  # noqa: BLE001
-            log("could not reload the window:\n" + traceback.format_exc())
-    if WINDOW.get("browser"):
-        webbrowser.open(url)
-
-
-def log_tail(path: Path, lines: int = 40) -> str:
-    try:
-        return "\n".join(path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
-    except OSError:
-        return "(no log)"
-
-
-def show_problem(title: str, detail: str) -> None:
-    """Never leave the window blank (white): say what happened, with the log, in the window."""
-    window = WINDOW.get("window")
-    if window is not None:
-        try:
-            window.load_html(problem_page(title, detail))
-            return
-        except Exception:  # noqa: BLE001
-            log("could not show the problem page:\n" + traceback.format_exc())
-    log("%s: %s" % (title, detail[:400]))
-
-
-def start_and_wait(python: Path, workspace: Path, godot: str) -> tuple:
-    """Start the engine; if a fresh update keeps it from starting, roll back once and retry."""
-    process = start_engine(python, workspace, godot)
-    token = wait_for_engine(process)
-    if token:
-        return process, token
-    stop_engine(process)
-    back = rollback_update()
-    if back.get("ok") and RELEASE_MODE:
-        log("went back to %s; the launcher starts it" % back.get("to"))
-        os._exit(RELAUNCH_EXIT_CODE)   # the previous version is another folder: the launcher starts it
-    if back.get("ok"):
-        log("starting the previous version again")
-        process = start_engine(python, workspace, godot)
-        token = wait_for_engine(process)
-        if token:
-            return process, token
-        stop_engine(process)
-    return None, ""
-
-
-def supervise(holder: dict, python: Path, workspace: Path, godot: str, stop) -> None:
-    """Restart the engine when it asks to (after Update everything), and reload the window."""
-    while not stop.is_set():
-        process = holder.get("process")
-        if process is None:
-            return
-        code = process.poll()
-        if code is None:
-            stop.wait(1.0)
-            continue
-        if stop.is_set():
-            return
-        if code == QUIT_EXIT_CODE:
-            log("LOKI was asked to quit")
-            stop.set()
-            leave_soon(0, 5.0)           # the window normally closes first; this makes sure the app is gone
-            close_window()
-            return
-        if code == ALREADY_RUNNING_EXIT_CODE:
-            # not a crash: another engine holds the port (a second LOKI window, or one left behind). Attach to it, or
-            # when it runs older code, make it quit and start ours on the new code.
-            token = read_token()
-            if answer_slowly(token) == 200 and take_over(token) == "attach":
-                log("attached to the engine that was already running")
-                holder["process"] = None
-                show_url(window_url(token))
-                return
-            new_process, token = start_and_wait(python, workspace, godot)
-            holder["process"] = new_process
-            if token:
-                show_url(window_url(token))
-            continue
-        if code != RESTART_EXIT_CODE:
-            # The engine died on its own (a crash, or killed for memory). Before, the window then
-            # sat there dead until LOKI was quit - all night once. Start it again, a few times,
-            # with a growing pause, and reload the window; give up only if it keeps dying.
-            now = time.time()
-            crashes = [c for c in holder.get("crashes", []) if now - c < 600] + [now]
-            holder["crashes"] = crashes
-            log("the engine stopped (exit %s)%s" % (code, "; starting it again" if len(crashes) <= 5 else ""))
-            if len(crashes) > 5:
-                log("the engine crashed 5 times in 10 minutes; not restarting it again")
-                return
-            stop.wait(min(30.0, 2.0 * len(crashes)))
-            new_process, token = start_and_wait(python, workspace, godot)
-            holder["process"] = new_process
-            if not token:
-                log("the engine did not come back")
-                show_problem("LOKI's engine stopped and did not start again",
-                             "Quit LOKI and open it again. The last lines of its log (%s):\n\n%s"
-                             % (STATE / "engine.out", log_tail(STATE / "engine.out")))
-                return
-            show_url(window_url(token))
-            continue
-        log("the engine is restarting on the updated code")
-        if RELEASE_MODE:
-            # an installed LOKI: the launcher (packaging/installer/loki_launch.py) starts the version
-            # that is current now - the new one, or the last good one after a rollback
-            stop.set()
-            leave_soon(RELAUNCH_EXIT_CODE)
-            close_window()
-            return
-        if relaunch_app():
-            # Update everything restarts the WHOLE client, not only the engine: the window and
-            # this app process run the new code too. The new app waits for this one to exit.
-            stop.set()
-            leave_soon(0)
-            close_window()
-            return
-        new_process, token = start_and_wait(python, workspace, godot)
-        holder["process"] = new_process
-        if not token:
-            log("the engine did not come back after the update")
-            show_problem("LOKI's engine did not come back after the update",
-                         "It was rolled back if it could be. Quit LOKI and open it again. The last lines of "
-                         "its log (%s):\n\n%s" % (STATE / "engine.out", log_tail(STATE / "engine.out")))
-            return
-        show_url(window_url(token))
-
-
-# --------------------------------------------------------------------- background + start at login
-QUIT_EXIT_CODE = 76   # the engine asks the app to quit for good (Settings > Quit LOKI)
-
-
-def env_setting(name: str, default: str = "") -> str:
-    """A setting from the process environment or LOKI's .env (read here, never logged)."""
-    if os.environ.get(name):
-        return os.environ[name].strip()
-    try:
-        for raw in (DATA / ".env").read_text(encoding="utf-8", errors="replace").splitlines():
-            line = raw.strip()
-            if line.startswith(name + "="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    except OSError:
-        pass
-    return default
-
-
-def background_on() -> bool:
-    """LOKI_BACKGROUND auto|on|off: when the window closes, LOKI keeps working (its jobs, automations,
-    self-improvement) and opening LOKI again brings the window back. auto = on on Windows."""
-    value = env_setting("LOKI_BACKGROUND", "auto").lower()
-    if value in ("1", "on", "true", "yes"):
-        return True
-    if value in ("0", "off", "false", "no"):
-        return False
-    return sys.platform == "win32"
-
-
-def start_at_login_on() -> bool:
-    """LOKI_START_AT_LOGIN auto|on|off. auto = on on Windows (the PC that works for you 24/7)."""
-    value = env_setting("LOKI_START_AT_LOGIN", "auto").lower()
-    if value in ("1", "on", "true", "yes"):
-        return True
-    if value in ("0", "off", "false", "no"):
-        return False
-    return sys.platform == "win32"
-
-
-def login_item_path() -> Path:
-    if sys.platform == "win32":
-        return (Path(os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming")))
-                / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "LOKI.vbs")
-    return Path.home() / "Library" / "LaunchAgents" / "com.m03dev.loki.plist"
-
-
-def login_item_text() -> str:
-    """Starts LOKI in the background at login: no window, no console."""
-    if getattr(sys, "frozen", False):
-        cmd = [sys.executable, "--background"]
+def install_rust() -> str:
+    """Rust into harness_data/toolchain (on the Mac that is the external drive, never the internal disk)."""
+    tc = DATA / "toolchain"
+    tc.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, RUSTUP_HOME=str(tc / "rustup"), CARGO_HOME=str(tc / "cargo"))
+    status(phase="installing Rust (first start only)")
+    log("installing Rust into %s" % tc)
+    if WIN:
+        exe = tc / "rustup-init.exe"
+        urllib.request.urlretrieve("https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe", exe)
+        code, out = run([str(exe), "-y", "--no-modify-path", "--profile", "minimal"], timeout=1800, env=env)
     else:
-        python = Path(sys.executable)
-        if sys.platform == "win32" and (python.parent / "pythonw.exe").is_file():
-            python = python.parent / "pythonw.exe"
-        cmd = [str(python), str(Path(__file__).resolve()), "--background"]
-    if sys.platform == "win32":
-        quoted = " ".join('""%s""' % c for c in cmd)
-        return ('\' LOKI: start in the background at login (Settings > General > Start LOKI when I log in)\r\n'
-                'CreateObject("WScript.Shell").Run "%s", 0, False\r\n' % quoted)
-    args = "".join("    <string>%s</string>\n" % c.replace("&", "&amp;").replace("<", "&lt;") for c in cmd)
-    return ('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
-            '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n'
-            '  <key>Label</key><string>com.m03dev.loki</string>\n  <key>ProgramArguments</key><array>\n' + args +
-            '  </array>\n  <key>RunAtLoad</key><true/>\n</dict></plist>\n')
+        script = tc / "rustup.sh"
+        urllib.request.urlretrieve("https://sh.rustup.rs", script)
+        code, out = run(["sh", str(script), "-y", "--no-modify-path", "--profile", "minimal"], timeout=1800, env=env)
+    log("rustup exit %s: %s" % (code, out[-600:]))
+    cargo = tc / "cargo" / "bin" / f"cargo{EXE}"
+    return str(cargo) if cargo.is_file() else ""
 
 
-def retire_console_launchers(folder: Path | None = None) -> list[str]:
-    """Remove LOKI's own console-showing launchers from the Startup folder.
-
-    A batch file (.cmd/.bat) opens a black console window, and so does a shortcut that starts python.exe
-    instead of pythonw.exe: the owner reported "the terminal keeps popping up on my screen". An old setup
-    left Startup/Loki.lnk pointing at the repo's Loki.cmd, so every logon flashed a console before LOKI
-    came up. LOKI's own login item (LOKI.vbs -> pythonw, hidden) is never touched, and neither is any other
-    program's Startup entry. Only plainly-LOKI entries that would show a console are removed."""
-    if folder is None:
-        if sys.platform != "win32":
-            return []
-        folder = login_item_path().parent
-    if not folder.is_dir():
-        return []
-    removed: list[str] = []
-    for entry in sorted(folder.iterdir()):
-        if entry.suffix.lower() not in (".lnk", ".cmd", ".bat") or entry.name.lower() == "loki.vbs":
-            continue
+def build_driver(tree: Path, tag: str) -> Path | None:
+    """Build lokid from `tree` into the versioned binary; None (with the reason logged) on failure."""
+    out = binary_path(tag)
+    if out.is_file():
+        return out
+    cargo = find_cargo() or install_rust()
+    if not cargo:
+        log("no Rust toolchain and it could not be installed")
+        status(phase="error: Rust could not be installed (see launcher.log)")
+        return None
+    env = dict(os.environ)
+    if (DATA / "toolchain" / "rustup").is_dir():
+        env.update(RUSTUP_HOME=str(DATA / "toolchain" / "rustup"), CARGO_HOME=str(DATA / "toolchain" / "cargo"))
+    env["CARGO_TARGET_DIR"] = str(DATA / "build")            # big build cache stays next to the checkout
+    cmd = [cargo, "build", "--release", "-p", "lokid"]
+    if MAC:
+        cmd += ["-j", "2"]                                   # the Mac is not the powerhouse: gentle on memory
+    status(phase="building the driver (first start takes a few minutes)")
+    log("building lokid %s: %s" % (tag, " ".join(cmd)))
+    t = time.time()
+    code, text = run(cmd, timeout=3600, cwd=str(tree), env=env)
+    (HOME / "build.log").write_text(text[-20000:], encoding="utf-8", errors="replace")
+    if code != 0:
+        log("build failed (exit %s) after %ds: %s" % (code, time.time() - t, text[-800:]))
+        status(phase="error: the driver did not build (see build.log)")
+        return None
+    built = DATA / "build" / "release" / f"lokid{EXE}"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(built, out)
+    log("built lokid %s in %ds" % (tag, time.time() - t))
+    for old in sorted(out.parent.glob("lokid-*"), key=lambda p: p.stat().st_mtime)[:-3]:
         try:
-            raw = entry.read_bytes()
-        except OSError:
-            continue
-        # a .lnk keeps its target as a path in the file, sometimes UTF-16; read both ways
-        blob = (raw.decode("utf-16-le", "ignore") + raw.decode("latin-1", "ignore")).lower()
-        console_launcher = ("loki.cmd" in blob or "loki.bat" in blob
-                            or (entry.suffix.lower() in (".cmd", ".bat") and "loki" in entry.name.lower())
-                            or ("python.exe" in blob and "pythonw" not in blob and "loki" in blob))
-        if not console_launcher:
-            continue
-        try:
-            entry.unlink()
-            removed.append(entry.name)
+            old.unlink()   # keep the 3 newest builds for rollback
         except OSError:
             pass
-    return removed
+    return out
 
 
-def sync_login_item() -> str:
-    """Make the login item match the setting (written or removed; never anything else)."""
-    if sys.platform not in ("win32", "darwin"):
-        return ""
-    retired = retire_console_launchers()
-    path = login_item_path()
-    note = ""
+# ---------------------------------------------------------------- running the driver
+
+def health(timeout: float = 1.5) -> dict | None:
     try:
-        if start_at_login_on():
-            text = login_item_text()
-            if not path.is_file() or path.read_text(encoding="utf-8", errors="replace") != text:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(text, encoding="utf-8")
-                note = "LOKI now starts in the background when you log in"
-        elif path.is_file():
-            path.unlink()
-            note = "LOKI no longer starts at login"
-    except OSError as exc:
-        return "could not update the login item: %s" % exc
-    if retired:
-        log("removed a LOKI login launcher that opened a console window: " + ", ".join(retired))
-        extra = "removed %s (it opened a console window at logon)" % ", ".join(retired)
-        note = (note + " - " + extra) if note else extra
-    return note
-
-
-# --------------------------------------------------------------------- full restart
-def relaunch_command() -> list:
-    """How this app was started, to start it again (a packaged build is its own executable). With
-    no window open (LOKI working in the background) the new copy starts in the background too."""
-    cmd = [sys.executable, *sys.argv[1:]] if getattr(sys, "frozen", False) else [sys.executable, *sys.argv]
-    if WINDOW.get("window") is None and "--background" not in cmd:
-        cmd.append("--background")
-    elif WINDOW.get("window") is not None and "--background" in cmd:
-        cmd.remove("--background")
-    return cmd
-
-
-def relaunch_app() -> bool:
-    """Start a fresh copy of the app (it waits until this one has exited). LOKI_APP_NO_RELAUNCH=1
-    keeps the old engine-only restart."""
-    if os.environ.get("LOKI_APP_NO_RELAUNCH", "") == "1":
-        return False
-    env = dict(os.environ, LOKI_APP_WAIT_PID=str(os.getpid()))
-    kwargs: dict = {"env": env, "cwd": str(REPO), "stdin": subprocess.DEVNULL,
-                    "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
-    if sys.platform == "win32":
-        kwargs["creationflags"] = (getattr(subprocess, "DETACHED_PROCESS", 0x8)
-                                   | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200))
-    else:
-        kwargs["start_new_session"] = True
-    try:
-        subprocess.Popen(relaunch_command(), **kwargs)  # noqa: S603 - our own command line
+        with urllib.request.urlopen(URL + "health", timeout=timeout) as r:
+            return json.loads(r.read().decode())
     except Exception:  # noqa: BLE001
-        log("could not start a fresh copy of the app:\n" + traceback.format_exc())
-        return False
-    log("restarting the whole app on the updated code")
-    return True
-
-
-def wait_for_old_app(timeout: float = 30.0) -> None:
-    """A relaunched app: wait for the copy that started it to be gone (it frees the port)."""
-    pid = os.environ.pop("LOKI_APP_WAIT_PID", "")
-    if not pid.isdigit():
-        return
-    end = time.time() + timeout
-    while time.time() < end and pid_alive(int(pid)):
-        time.sleep(0.25)
+        return None
 
 
 def pid_alive(pid: int) -> bool:
-    if sys.platform == "win32":
-        import ctypes  # pylint: disable=import-outside-toplevel
-        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
-        if not handle:
+    if pid <= 0:
+        return False
+    if WIN:
+        import ctypes
+        h = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+        if not h:
             return False
         code = ctypes.c_ulong()
-        ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
-        ctypes.windll.kernel32.CloseHandle(handle)
-        return code.value == 259   # STILL_ACTIVE
+        ctypes.windll.kernel32.GetExitCodeProcess(h, ctypes.byref(code))
+        ctypes.windll.kernel32.CloseHandle(h)
+        return code.value == 259
     try:
         os.kill(pid, 0)
+        return True
     except OSError:
         return False
-    return True
 
 
-def leave_soon(code: int, after: float = 2.0) -> None:
-    """Exit this copy of the app for sure, `after` seconds from now. Started BEFORE the window is closed:
-    closing it from a worker thread can hang on macOS (Cocoa wants the main thread) - when the exit timer was
-    started after it, it sometimes never ran and the old window stayed open next to the new one
-    (owner 2026-10-25: "update ... sometimes it closes, sometimes it doesn't")."""
-    if os.environ.get("LOKI_APP_TEST", "") == "1":
+def kill(pid: int) -> None:
+    if not pid_alive(pid):
         return
-    t = threading.Timer(after, os._exit, [code])
-    t.daemon = True
-    t.start()
-
-
-def close_window() -> None:
-    window = WINDOW.get("window")
-    if window is not None:
-        try:
-            window.destroy()
-        except Exception:  # noqa: BLE001
-            log("could not close the window:\n" + traceback.format_exc())
-
-
-# --------------------------------------------------------------------- window
-def problem_page(title: str, detail: str) -> str:
-    """A self-contained page for when the engine cannot start."""
-    def esc(text: str) -> str:
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return ("<!doctype html><meta charset=utf-8><title>Loki</title>"
-            "<body style=\"background:#1f1f24;color:#e6e9ee;font:15px -apple-system,system-ui,sans-serif;"
-            "padding:48px;max-width:640px\"><h2 style=\"font-weight:600\">" + esc(title) + "</h2>"
-            "<p style=\"color:#9aa0aa;white-space:pre-wrap\">" + esc(detail) + "</p></body>")
-
-
-def name_the_app() -> None:
-    """On macOS the window belongs to the Python process; call it Loki in the menu bar."""
-    if sys.platform != "darwin":
-        return
-    try:
-        from Foundation import NSBundle  # type: ignore  # pyobjc, installed with pywebview
-        info = NSBundle.mainBundle().infoDictionary()
-        if info is not None:
-            info["CFBundleName"] = "Loki"
-    except Exception:
-        pass
-
-
-# The title bar (owner, 2026-10-17: the mode tabs belong IN the window's title bar, not in a floating pill).
-# macOS: the native traffic lights stay, the page draws under a transparent title bar (full-size content view) and
-#   LOKI's 38 px strip (app/ui/titlebar.js) holds the tabs, starting after the traffic lights; the rest of the strip
-#   drags the window (pywebview's .pywebview-drag-region).
-# Windows (owner, 2026-10-18: "the tabs are floating here" - the strip sat UNDER the native frame): the window is
-#   frameless too and LOKI's strip IS the title bar - tabs centred, LOKI's own minimise / maximise / close on the
-#   right. A frameless WinForms window has no native edges, so the strip's empty parts and thin edge handles hand the
-#   press to Windows itself (WM_NCLBUTTONDOWN with HTCAPTION / HTLEFT...): real dragging, Aero snap, real resizing.
-# LOKI_TITLEBAR=native (Settings > General) leaves the macOS title bar alone too.
-TITLEBAR = {"mac": False, "win": False}
-
-
-def titlebar_mode() -> str:
-    return "native" if env_setting("LOKI_TITLEBAR", "custom").lower() == "native" else "custom"
-
-
-def window_url(token: str) -> str:
-    """LOKI's page in the window; `titlebar=mac` tells it the page is drawn under the macOS title bar
-    (`titlebar=win`: the frameless Windows window, the strip is its title bar)."""
-    if TITLEBAR["mac"] or mac_custom_titlebar():
-        return f"{BASE}/#token={token}&titlebar=mac"
-    if TITLEBAR["win"] or win_custom_titlebar():
-        return f"{BASE}/#token={token}&titlebar=win"
-    return f"{BASE}/#token={token}"
-
-
-def mac_custom_titlebar() -> bool:
-    """macOS with LOKI's own title strip: the window is created FRAMELESS (pywebview then makes the content full
-    size and the title bar transparent at creation - patching a live window afterwards left the old bar on the
-    owner's Mac), and mac_buttons() puts the three traffic lights back before it is shown."""
-    return sys.platform == "darwin" and titlebar_mode() == "custom"
-
-
-def win_custom_titlebar() -> bool:
-    """Windows with LOKI's own title strip: a frameless window whose strip is the title bar (WindowApi moves,
-    resizes, minimises, maximises and closes it)."""
-    return sys.platform == "win32" and titlebar_mode() == "custom"
-
-
-# Win32 hit-test codes for WM_NCLBUTTONDOWN: the strip / an edge handle hands the press to Windows' own move/size loop
-HIT = {"move": 2, "w": 10, "e": 11, "n": 12, "nw": 13, "ne": 14, "s": 15, "sw": 16, "se": 17}
-
-
-def win_hit(window, edge: str, user32=None) -> bool:
-    """Windows: let Windows move ('move') or resize (n/s/e/w/ne/nw/se/sw) the frameless window, exactly like a
-    native title bar or border - on the window's own UI thread (the mouse capture lives there)."""
-    code = HIT.get(edge)
-    if code is None or window is None:
-        return False
-    form = getattr(window, "native", None)
-    if form is None:
-        return False
-    if user32 is None:
-        import ctypes  # pylint: disable=import-outside-toplevel
-        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
-
-    def go() -> None:
-        hwnd = int(form.Handle.ToInt64()) if hasattr(form.Handle, "ToInt64") else int(form.Handle)
-        user32.ReleaseCapture()
-        user32.SendMessageW(hwnd, 0x00A1, code, 0)   # WM_NCLBUTTONDOWN
-
-    try:
-        if getattr(form, "InvokeRequired", False):
-            from System import Action  # type: ignore  # pythonnet, there with pywebview's WinForms backend
-            form.Invoke(Action(go))
-        else:
-            go()
-        return True
-    except Exception:  # noqa: BLE001
-        log("could not hand the title strip press to Windows:\n" + traceback.format_exc())
-        return False
-
-
-def win_fit_maximized(window) -> None:
-    """A frameless WinForms window maximises over the taskbar unless told the working area first."""
-    try:
-        form = window.native
-        from System.Windows.Forms import Screen  # type: ignore  # pylint: disable=import-outside-toplevel
-        form.MaximizedBounds = Screen.FromHandle(form.Handle).WorkingArea
-    except Exception:  # noqa: BLE001 - not WinForms: nothing to fit
-        pass
-
-
-def mac_buttons(window) -> None:
-    """before_show (pywebview runs it on the main thread, before the window appears): the traffic lights back,
-    the title hidden. Any failure: logged, and the window still opens."""
-    try:
-        import AppKit  # type: ignore  # pyobjc, installed with pywebview on macOS
-        ns = window.native
-        for button in (AppKit.NSWindowCloseButton, AppKit.NSWindowMiniaturizeButton, AppKit.NSWindowZoomButton):
-            ns.standardWindowButton_(button).setHidden_(False)
-        ns.setTitlebarAppearsTransparent_(True)
-        ns.setTitleVisibility_(getattr(AppKit, "NSWindowTitleHidden", 1))
-    except Exception:  # noqa: BLE001
-        log("could not show the macOS window buttons:\n" + traceback.format_exc())
-
-
-class WindowApi:
-    """The only Python the page may call (pywebview js_api): the title strip's window controls - double-click =
-    zoom everywhere; on Windows (frameless) also drag, edge resize, minimise and close."""
-
-    def __init__(self) -> None:
-        self._max = False
-
-    def toggle_maximize(self) -> bool:
-        window = WINDOW.get("window")
-        if window is None:
-            return False
-        try:
-            if not self._max and sys.platform == "win32":
-                win_fit_maximized(window)
-            (window.restore if self._max else window.maximize)()
-            self._max = not self._max
-        except Exception:  # noqa: BLE001
-            return False
-        return self._max
-
-    def minimize(self) -> bool:
-        window = WINDOW.get("window")
-        try:
-            window.minimize()
-            return True
-        except Exception:  # noqa: BLE001
-            return False
-
-    def close(self) -> bool:
-        window = WINDOW.get("window")
-        try:
-            window.destroy()     # same as the frame's X: LOKI keeps working in the background when that is on
-            return True
-        except Exception:  # noqa: BLE001
-            return False
-
-    def grab(self, edge: str = "move") -> bool:
-        """Windows: a press on the strip's empty part ('move') or an edge handle - Windows does the rest."""
-        if sys.platform != "win32":
-            return False
-        if edge == "move" and self._max:
-            self._max = False      # dragging a maximised window restores it (Windows does that itself)
-        return win_hit(WINDOW.get("window"), str(edge))
-
-
-def open_window(url: str = "", html: str = "", main: bool = False, then=None) -> bool:
-    """Show Loki in a native window. False when pywebview is not installed.
-    main=True with html: LOKI's own window showing `html` first (the start screen); `then` runs in a
-    thread once the window is up (pywebview's start(func)) and later loads LOKI into it (show_url)."""
-    try:
-        import webview  # type: ignore
-    except ImportError:
-        return False
-    name_the_app()
-    try:   # only the bare strip drags the window - a tab inside it never does (the tabs "ran away" on the Mac)
-        webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
-    except Exception:  # noqa: BLE001 - an older pywebview
-        pass
-    mac_strip = bool(main or not html) and mac_custom_titlebar()
-    win_strip = bool(main or not html) and win_custom_titlebar()
-    TITLEBAR["mac"], TITLEBAR["win"] = mac_strip, win_strip
-    # frameless on macOS = full-size content + transparent title bar; on Windows LOKI's strip is the whole title
-    # bar. easy_drag off, or ANY drag moves the window.
-    frame = {"frameless": True, "easy_drag": False} if (mac_strip or win_strip) else {}
-    if html and not main:
-        webview.create_window("Loki", html=html, width=720, height=360)
-    elif html:
-        WINDOW["window"] = webview.create_window("Loki", html=html, width=1240, height=820, min_size=(760, 520),
-                                                 background_color="#1f1f24", js_api=WindowApi(), **frame)
+    if WIN:
+        run(["taskkill", "/PID", str(pid), "/T", "/F"], timeout=30)
     else:
-        WINDOW["window"] = webview.create_window("Loki", url, width=1240, height=820, min_size=(760, 520), text_select=True,
-                                                 background_color="#1f1f24", js_api=WindowApi(), **frame)
-    if WINDOW.get("window") is not None and mac_strip:
-        win = WINDOW["window"]
         try:
-            win.events.before_show += lambda: mac_buttons(win)
-        except Exception:  # noqa: BLE001 - an older pywebview: no traffic lights event; still frameless
-            log("this pywebview has no before_show event; the window buttons may be hidden")
-    log("opening the Loki window")
-    try:
-        webview.start(then, debug=os.environ.get("LOKI_APP_DEBUG", "") == "1",
-                      private_mode=False, storage_path=str(STATE / "webview"))
-    except Exception:
-        log("the window backend raised:")
-        log(traceback.format_exc())
-        raise
-    log("the Loki window closed")
-    return True
-
-
-def tell(title: str, detail: str) -> int:
-    log(f"{title}: {detail}")
-    if not open_window(html=problem_page(title, detail)):
-        print(f"{title}\n{detail}", file=sys.stderr)
-    return 1
-
-
-# --------------------------------------------------------------------- main
-def run_engine(args: list[str]) -> int:
-    """`Loki --engine ...`: run the engine (loki_bridge.py) inside this interpreter."""
-    import runpy
-    sys.path[:0] = [str(HARNESS), str(ENGINE.parent)]
-    sys.argv = [str(ENGINE), *args]
-    runpy.run_path(str(ENGINE), run_name="__main__")
-    return 0
-
-
-def run_agent_job(args: list[str]) -> int:
-    """`Loki --agent-job JOB.json`: a packaged build runs a built-in background agent."""
-    import asyncio
-    if not args:
-        return 2
-    sys.path[:0] = [str(HARNESS), str(ENGINE.parent)]
-    import loki  # type: ignore
-    return int(asyncio.run(loki.run_job(args[0])) or 0)
-
-
-def run_script(args: list[str]) -> int:
-    """`Loki --run-script SCRIPT`: a packaged build's stand-in for `python -I SCRIPT` (the
-    conductor's runners). Only scripts that ship inside the bundle may run."""
-    import runpy
-    if not args:
-        return 2
-    script = Path(args[0]).resolve()
-    runners = (HARNESS / "runners").resolve()
-    if script.parent != runners or script.suffix != ".py":
-        print("refused: only Loki's bundled runners can be run", file=sys.stderr)
-        return 2
-    sys.argv = [str(script), *args[1:]]
-    runpy.run_path(str(script), run_name="__main__")
-    return 0
-
-
-def self_test() -> int:
-    """`Loki --self-test`: import the engine and its modules and report. Used by CI."""
-    import atexit
-    import shutil
-    import tempfile
-    _selftest_data = tempfile.mkdtemp(prefix="loki-selftest-")
-    # remove it when this process exits: before, every --self-test (each ship and every CI run)
-    # left a %TEMP%/loki-selftest-* dir behind (2026-10-18).
-    atexit.register(shutil.rmtree, _selftest_data, True)
-    os.environ.setdefault("LOKI_DATA", _selftest_data)
-    sys.path[:0] = [str(HARNESS), str(ENGINE.parent)]
-    problems = []
-    for name in ("loki_bridge", "workers", "policy", "manifests", "conductor", "brain", "safe_exec",
-                 "model_setup", "usage", "agents",
-                 "knowledge", "federation", "skill_scan", "loki", "providers_catalog", "portal_api",
-                 "signin", "qr", "tool_harness", "update_all", "system_check",
-                 "ratelimit", "loki_mcp", "studio_api", "qol"):   # session 29: the main driver's pacing, the MCP API, Studio's door
-        try:
-            __import__(name)
-        except Exception as exc:  # noqa: BLE001
-            problems.append("%s: %s: %s" % (name, type(exc).__name__, exc))
-    for path in (UI_DIR / "index.html", UI_DIR / "app.js", REPO / "capabilities", REPO / "skills"):
-        if not path.exists():
-            problems.append("missing " + str(path))
-    print("Loki self-test: " + ("OK" if not problems else "FAILED\n  " + "\n  ".join(problems)), flush=True)
-    return 0 if not problems else 1
-
-
-def health_json(token: str, timeout: float = 2.0) -> dict:
-    request = urllib.request.Request(BASE + "/health", headers={"Authorization": "Bearer " + token})
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8", "replace") or "{}")
-    except (urllib.error.URLError, OSError, ValueError):
-        return {}
-
-
-def stale_engine(token: str) -> bool:
-    """True when the engine that answers started on another commit than the one on disk now."""
-    if FROZEN:
-        return False
-    try:
-        sys.path.insert(0, str(HARNESS))
-        import updater  # pylint: disable=import-outside-toplevel
-        disk = (updater.version(REPO).get("commit") or "")[:12]
-    except Exception:  # noqa: BLE001 - never block the window on this
-        return False
-    running = str((health_json(token).get("update") or {}).get("running") or "")[:12]
-    return bool(disk and running and disk != running)
-
-
-def stop_running_engine(token: str, wait_s: float = 12.0) -> None:
-    """Ask a running engine to quit (POST /quit) and wait until nothing answers on the port."""
-    request = urllib.request.Request(BASE + "/quit", data=b"{}", method="POST",
-                                     headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
-    try:
-        urllib.request.urlopen(request, timeout=3).read()
-    except (urllib.error.URLError, OSError):
-        pass
-    end = time.monotonic() + wait_s
-    while time.monotonic() < end and probe(token, timeout=0.5) != 0:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    for _ in range(40):
+        if not pid_alive(pid):
+            return
         time.sleep(0.25)
 
 
-def bring_up_engine(workspace: Path, holder: dict, stopping) -> tuple:
-    """Attach to a running engine or start one. (token, "", "") or ("", title, what to do)."""
-    token = read_token()
-    status = probe(token) if token else probe("")
-    if status == 0 and port_open():          # an engine is there but busy: wait for it, never start a second one
-        log("an engine is already listening on port %d; waiting for it to answer" % PORT)
-        token = read_token()
-        status = answer_slowly(token)
-    if token and status == 200 and stale_engine(token):
-        # LOKI kept working in the background on an older version, and this start just updated the folder:
-        # attaching would show the old LOKI and then restart in front of the owner ("why do i see old ui when
-        # its starting up", 2026-10-21). Stop it and start the new one before the window shows anything.
-        log("the background engine runs an older version: restarting it on the new code first")
-        splash_status("Updating LOKI…")
-        stop_running_engine(token)
-        status = probe(token)
-    if token and status == 200:
-        log("attaching to the running engine")
-        return token, "", ""
-    if status != 0:
-        return "", "Port %d is taken" % PORT, (f"Something else answers on {BASE}. Quit it, or start Loki with "
-                                               "LOKI_APP_PORT set to a free port.")
-    python = engine_python()
-    if python is None:
-        fix = (f"cd /d {REPO} && setup.bat" if sys.platform == "win32"
-               else f"cd {REPO} && bash setup.sh")
-        if RELEASE_MODE:   # installed with the installer: its launcher makes the environment
-            fix = ("Quit LOKI and open it again from the Start menu or Applications: it finishes setting "
-                   "itself up. If it keeps failing, see docs/INSTALL.md.")
-        return "", "Loki is not set up yet", f"Run this once in a terminal, then open Loki again:\n\n{fix}"
-    godot = find_godot()
-    process, token = start_and_wait(python, workspace, godot)
-    if not token:
-        return "", "The Loki engine did not start", f"Details are in {STATE / 'engine.out'}"
-    holder["process"] = process
-    threading.Thread(target=supervise, args=(holder, python, workspace, godot, stopping),
-                     daemon=True, name="loki-supervisor").start()
-    return token, "", ""
-
-
-# --------------------------------------------------------------------- the start screen
-# The window opens at once and shows a start screen while the engine starts (session 30). LOKI's own
-# evolve step E12 designs that screen (a pro-style splash): it only has to add app/ui/splash.html, a
-# SELF-CONTAINED page (inline CSS/JS, images as data: URIs - it is shown before the engine serves
-# anything). It may call window.lokiSplash?.() hooks of its own; the app replaces the page with
-# LOKI's window as soon as the engine answers, and writes progress lines into it via
-# `window.lokiSplashStatus(text)` when the page defines that function. LOKI_SPLASH=off: no start
-# screen (the window opens once the engine answers, as before).
-SPLASH_FILE = UI_DIR / "splash.html"
-
-
-def splash_wanted() -> bool:
-    if os.environ.get("LOKI_SPLASH", "").strip().lower() in ("0", "off", "no", "false"):
-        return False
-    import importlib.util  # pylint: disable=import-outside-toplevel
-    return importlib.util.find_spec("webview") is not None
-
-
-def splash_html() -> str:
+def driver_record() -> dict:
     try:
-        text = SPLASH_FILE.read_text(encoding="utf-8")
-        if text.strip():
-            return text
+        return json.loads((HOME / "lokid.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def start_driver(binary: Path, tag: str) -> bool:
+    """Run `binary` as the driver. An older driver is stopped first; its jobs resume in the new one."""
+    rec = driver_record()
+    if rec.get("tag") == tag and pid_alive(int(rec.get("pid", 0))) and health():
+        return True
+    if rec.get("pid"):
+        log("stopping driver %s (pid %s)" % (rec.get("tag"), rec.get("pid")))
+        kill(int(rec["pid"]))
+    out = open(HOME / "lokid.log", "a", encoding="utf-8")
+    kw: dict = {"stdout": out, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL, "cwd": str(HOME), "env": driver_env()}
+    if WIN:
+        kw["creationflags"] = 0x00000008 | 0x00000200 | NO_WINDOW   # detached, own group, no console
+    else:
+        kw["start_new_session"] = True
+    proc = subprocess.Popen([str(binary), "serve"], **kw)  # noqa: S603 - our own binary
+    (HOME / "lokid.json").write_text(json.dumps({"pid": proc.pid, "tag": tag, "binary": str(binary)}), encoding="utf-8")
+    for _ in range(60):
+        if health():
+            log("driver %s up (pid %s)" % (tag, proc.pid))
+            return True
+        if proc.poll() is not None:
+            break
+        time.sleep(0.5)
+    log("driver %s did not answer (exit %s)" % (tag, proc.poll()))
+    return False
+
+
+def stop_old_engine() -> None:
+    """The previous LOKI's engine may still be running from memory; ask it to quit for good."""
+    token_file = DATA / "app" / "engine.token"
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return
+    for port in (8767, 8766):
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/quit", data=b"{}", method="POST",
+                                         headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=2)
+            log("asked the old engine on port %d to quit" % port)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        token_file.unlink()
     except OSError:
         pass
-    return ("<!doctype html><meta charset=utf-8><title>LOKI</title>"
-            "<body style=\"margin:0;height:100vh;display:flex;align-items:center;justify-content:center;"
-            "background:#1f1f24;color:#9aa0aa;font:15px -apple-system,system-ui,sans-serif\">"
-            "<p id=s>Starting LOKI…</p><script>window.lokiSplashStatus=function(t){"
-            "document.getElementById('s').textContent=t}</script></body>")
 
 
-def splash_status(text: str) -> None:
-    window = WINDOW.get("window")
-    if window is None:
+# ---------------------------------------------------------------- first light (proof on a fresh machine)
+
+FIRST_GOAL = (
+    "First light on this PC. Using Blender in background mode, build a small low-poly campfire scene from scratch "
+    "(stones in a ring, crossed logs, a few flame shapes with an emissive material, a ground disc), light it warmly, "
+    "and render it with Eevee to renders/campfire.png at 1024x1024. Write the Blender Python script to "
+    "scripts/campfire.py and run it with: blender --background --python scripts/campfire.py. "
+    "Then save the .blend to scenes/campfire.blend from the same script. Checks: file:renders/campfire.png and "
+    "file:scenes/campfire.blend."
+)
+
+
+def first_light() -> None:
+    marker = HOME / "first_light.json"
+    if marker.exists() or not WIN or not find_blender():
+        return   # the PC proves the driver; the Mac stays light
+    try:
+        req = urllib.request.Request(URL + "runs", data=json.dumps({"goal": FIRST_GOAL, "max_hours": 2}).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            run_info = json.loads(r.read().decode())
+        marker.write_text(json.dumps({"run": run_info.get("id"), "t": time.time()}), encoding="utf-8")
+        log("first-light job started: %s" % run_info.get("id"))
+    except Exception as e:  # noqa: BLE001
+        log("first-light job not started: %s" % e)
+
+
+def probe_models() -> None:
+    try:
+        with urllib.request.urlopen(URL + "models?refresh=1", timeout=120) as r:
+            rows = json.loads(r.read().decode())
+        ok = [f"{x['provider']}/{x['role']}" for x in rows if x.get("ok")]
+        log("models answering: %s" % (", ".join(ok) or "none"))
+    except Exception as e:  # noqa: BLE001
+        log("model probe failed: %s" % e)
+
+
+# ---------------------------------------------------------------- staying on master
+
+def head() -> str:
+    code, out = git("rev-parse", "HEAD")
+    return out.strip() if code == 0 else ""
+
+
+def update(force: bool = False) -> str:
+    """Move to origin/master if it changed, only once the new driver builds and answers."""
+    if not (REPO / ".git").exists():
+        return "not a git checkout"
+    code, out = git("fetch", "-q", "origin", "master", timeout=180)
+    if code != 0:
+        return "fetch failed: " + out.strip()[-200:]
+    before = head()
+    code, target = git("rev-parse", "FETCH_HEAD")
+    target = target.strip()
+    if code != 0 or not target or target == before:
+        return "up to date"
+    skip_file = HOME / "update_skip.json"
+    try:
+        skip = json.loads(skip_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        skip = {}
+    if target in skip:
+        return "up to date (%s was skipped: %s)" % (target[:8], skip[target])
+    for must in ("app/loki_app.py", "Cargo.toml", "crates/lokid/src/main.rs"):
+        if git("cat-file", "-e", f"{target}:{must}")[0] != 0:
+            return f"skipped {target[:8]}: it has no {must}"
+    code, out = git("reset", "-q", "--keep", target)
+    if code != 0:
+        return "could not switch (local edits?): " + out.strip()[-200:]
+    tag = source_hash()
+    binary = build_driver(REPO, tag)
+    if binary is None or not start_driver(binary, tag):
+        log("new version %s failed; going back to %s" % (target[:8], before[:8]))
+        git("reset", "-q", "--keep", before)
+        old_tag = source_hash()
+        if binary_path(old_tag).is_file():
+            start_driver(binary_path(old_tag), old_tag)
+        skip[target] = "its driver did not build or answer"
+        try:
+            skip_file.write_text(json.dumps(dict(list(skip.items())[-20:])), encoding="utf-8")
+        except OSError:
+            pass
+        return f"rolled back from {target[:8]}"
+    log("updated %s -> %s" % (before[:8], target[:8]))
+    relaunch()
+    return "updated"
+
+
+def relaunch() -> None:
+    """Start the new launcher (it waits for this one), then leave."""
+    env = dict(os.environ, LOKI_APP_WAIT_PID=str(os.getpid()))
+    args = [sys.executable, str(REPO / "app" / "loki_app.py")]
+    if STATE.get("window") is None:
+        args.append("--background")
+    kw: dict = {"env": env, "cwd": str(REPO), "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if WIN:
+        kw["creationflags"] = 0x00000008 | 0x00000200
+    else:
+        kw["start_new_session"] = True
+    subprocess.Popen(args, **kw)  # noqa: S603
+    w = STATE.get("window")
+    if w is not None:
+        try:
+            w.destroy()
+        except Exception:  # noqa: BLE001
+            pass
+    os._exit(0)
+
+
+def update_loop() -> None:
+    last = time.time()
+    req = HOME / "update.request"
+    while True:
+        time.sleep(5)
+        asked = req.exists()
+        if asked or time.time() - last >= UPDATE_EVERY_S:
+            if asked:
+                try:
+                    req.unlink()
+                except OSError:
+                    pass
+            last = time.time()
+            result = update(force=asked)
+            status(last_update=result, last_update_t=time.time())
+            if not result.startswith("up to date") or asked:
+                log("update: " + result)
+        # keep the driver alive (it resumes its jobs on restart)
+        if STATE.get("phase") == "running" and not health(3):
+            rec = driver_record()
+            if rec.get("binary") and not pid_alive(int(rec.get("pid", 0))):
+                log("driver was not running; starting it again")
+                start_driver(Path(rec["binary"]), rec.get("tag", ""))
+
+
+# ---------------------------------------------------------------- startup
+
+def self_test() -> int:
+    """`--self-test`: what the old updater's pre-flight runs. Checks the files the launcher needs."""
+    missing = [p for p in ("Cargo.toml", "Cargo.lock", "crates/lokid/src/main.rs", "crates/loki-core/src/agent.rs",
+                           "crates/lokid/providers.default.toml", "app/ui/index.html") if not (REPO / p).is_file()]
+    print("Loki self-test: " + ("OK" if not missing else "FAILED - missing " + ", ".join(missing)), flush=True)
+    return 0 if not missing else 1
+
+
+def wait_for_old_app() -> None:
+    pid = os.environ.pop("LOKI_APP_WAIT_PID", "")
+    if pid.isdigit():
+        end = time.time() + 40
+        while time.time() < end and pid_alive(int(pid)):
+            time.sleep(0.25)
+
+
+def boot() -> None:
+    """Everything after the window opens: driver build/start, then the proof jobs."""
+    try:
+        tag = source_hash()
+        status(phase="starting the driver", version=(REPO / "VERSION").read_text().strip() if (REPO / "VERSION").exists() else "?",
+               commit=head()[:12], tag=tag, platform=platform.platform())
+        binary = build_driver(REPO, tag)
+        if binary is None or not start_driver(binary, tag):
+            status(phase="error: driver not running (see launcher.log)")
+            show(error=True)
+            return
+        status(phase="running")
+        show()
+        probe_models()
+        first_light()
+    except Exception as e:  # noqa: BLE001
+        log("boot failed: %r" % e)
+        status(phase="error: %r" % e)
+        show(error=True)
+
+
+WAIT_HTML = """<html><body style="background:#0f1115;color:#e8eaf0;font:15px system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center"><div style="font-weight:700;letter-spacing:.12em;font-size:20px">LOKI</div>
+<p style="color:#9aa3b2">Starting the driver&hellip; the first start builds it on this machine and can take a few minutes.</p></div></body></html>"""
+
+
+def show(error: bool = False) -> None:
+    w = STATE.get("window")
+    if w is None:
+        if not error and "--background" not in sys.argv and not STATE.get("webview"):
+            import webbrowser
+            webbrowser.open(URL)
         return
     try:
-        window.evaluate_js("window.lokiSplashStatus && window.lokiSplashStatus(%s)" % json.dumps(text))
-    except Exception:  # noqa: BLE001 - the start screen is decoration; never let it stop the start
+        if error:
+            w.load_html(WAIT_HTML.replace("Starting the driver&hellip; the first start builds it on this machine and can take a few minutes.",
+                                          "The driver did not start. Details: " + str(LOG)))
+        else:
+            w.load_url(URL)
+    except Exception:  # noqa: BLE001
         pass
 
 
-def run_with_splash(workspace: Path, holder: dict, stopping) -> int:
-    t0 = time.monotonic()
-    result = {"code": 0}
-
-    def behind_the_window() -> None:
-        log("window shown after %.2fs" % (time.monotonic() - T_START))
-        if auto_update().get("relaunch"):
-            log("a new release is installed; the launcher starts it")
-            result["code"] = RELAUNCH_EXIT_CODE
-            stopping.set()
-            leave_soon(RELAUNCH_EXIT_CODE)
-            close_window()
-            return
-        splash_status("Starting LOKI's engine…")
-        token, title, detail = bring_up_engine(workspace, holder, stopping)
-        if not token:
-            show_problem(title, detail)
-            return
-        click = os.environ.get("LOKI_LAUNCH_T0", "")   # set by the native launcher at the double click
-        since = (" (%.2fs since the double-click)" % (time.time() - int(click) / 1000.0)) if click.isdigit() and int(click) else ""
-        log("engine ready after %.2fs (%.2fs since the app started)%s" % (time.monotonic() - t0, time.monotonic() - T_START, since))
-        show_url(window_url(token))
-
-    if not open_window(html=splash_html(), main=True, then=behind_the_window):
-        return 1
-    return result["code"]
-
-
-def main(argv: list[str] | None = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
-    if argv[:1] == ["--engine"]:
-        return run_engine(argv[1:])
-    if argv[:1] == ["--agent-job"]:
-        return run_agent_job(argv[1:])
-    if argv[:1] == ["--run-script"]:
-        return run_script(argv[1:])
+def main(argv: list[str]) -> int:
     if argv[:1] == ["--self-test"]:
         return self_test()
-    parser = argparse.ArgumentParser(description="Loki desktop app")
-    parser.add_argument("--workspace", default="", help="folder Loki works in (remembered)")
-    parser.add_argument("--print-url", action="store_true", help="start the engine, print the URL, keep running")
-    parser.add_argument("--background", action="store_true", help="start LOKI with no window (at login)")
-    args = parser.parse_args(argv)
+    if argv[:1] == ["--update-now"]:
+        print(update(force=True))
+        return 0
     wait_for_old_app()
-    # Quitting (Cmd+Q, logout, kill) must take the engine down with the app.
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-
-    settings = load_settings()
-    workspace = choose_workspace(args.workspace, settings)
-    if adopt_old_chats(workspace):
-        log("brought your chats over from ~/Loki")
-    if args.workspace:
-        settings["workspace"] = str(workspace)
-        save_settings(settings)
-
-    import threading  # pylint: disable=import-outside-toplevel
-    process: subprocess.Popen | None = None
-    holder: dict = {"process": None}
-    stopping = threading.Event()
-    if not args.print_url and splash_wanted():
-        # session 30 (docs/SPEED.md): the window opens at once with the start screen; the start-up
-        # update and the engine run behind it, and the window switches to LOKI when the engine answers
-        try:
-            return run_with_splash(workspace, holder, stopping)
-        except KeyboardInterrupt:
-            return 0
-        finally:
-            log("the Loki app is shutting down")
-            stopping.set()
-            stop_engine(holder.get("process"))
-    if auto_update().get("relaunch"):
-        log("a new release was checked and installed; the launcher starts it")
-        return RELAUNCH_EXIT_CODE
-    token, title, detail = bring_up_engine(workspace, holder, stopping)
-    if not token:
-        return tell(title, detail)
-    process = holder.get("process")
-
-    url = window_url(token)
+    HOME.mkdir(parents=True, exist_ok=True)
+    lock = HOME / "launcher.pid"
     try:
-        def alive() -> bool:
-            current = holder.get("process")
-            if stopping.is_set():
-                return False   # relaunched: a fresh copy of the app has taken over
-            return current is not None and (current.poll() is None or current.poll() == RESTART_EXIT_CODE)
-
-        if args.print_url:
-            print(url, flush=True)
-            while process is None or alive():
-                time.sleep(1)
-            return 0
-        note = sync_login_item()
-        if note:
-            log(note)
-        if args.background:
-            log("LOKI is working in the background (open LOKI to see it)")
-            while process is not None and alive():
-                time.sleep(1)
-            return 0
-        if not open_window(url):
-            log("pywebview is not installed; opening Loki in the browser instead")
-            WINDOW["browser"] = True
-            webbrowser.open(url)
-            while process is not None and alive():
-                time.sleep(1)
-        elif process is not None and background_on() and alive() and not stopping.is_set():
-            # The window closed but LOKI keeps working (jobs, automations, self-improvement); opening
-            # LOKI again attaches a new window to this engine. Settings > Quit LOKI stops it for good.
-            WINDOW["window"] = None
-            log("the window closed; LOKI keeps working in the background")
-            while alive():
-                time.sleep(1)
+        other = int(lock.read_text().strip())
+    except (OSError, ValueError):
+        other = 0
+    if other and other != os.getpid() and pid_alive(other):
+        # LOKI is already running here: just show it.
+        if "--background" not in argv and health():
+            try:
+                import webview  # type: ignore
+                webview.create_window("LOKI", URL, width=1320, height=880, min_size=(720, 520))
+                webview.start()
+            except Exception:  # noqa: BLE001
+                import webbrowser
+                webbrowser.open(URL)
         return 0
-    except KeyboardInterrupt:
-        return 0
-    finally:
-        log("the Loki app is shutting down")
-        stopping.set()
-        stop_engine(holder.get("process") or process)
+    lock.write_text(str(os.getpid()))
+    log("launcher start %s (%s)" % (head()[:12] or "no git", platform.platform()))
+    stop_old_engine()
+    threading.Thread(target=update_loop, daemon=True).start()
+    background = "--background" in argv
+    webview = None
+    if not background:
+        try:
+            import webview  # type: ignore  # pywebview, installed by setup
+        except Exception:  # noqa: BLE001
+            webview = None
+    if webview is not None:
+        STATE["webview"] = True
+        STATE["window"] = webview.create_window("LOKI", html=WAIT_HTML, width=1320, height=880, min_size=(720, 520))
+        webview.start(boot)
+        STATE["window"] = None          # window closed: the driver keeps working, this keeps it updated
+        log("window closed; LOKI keeps working in the background")
+    else:
+        boot()
+    while True:
+        time.sleep(3600)
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except SystemExit:
-        raise
-    except BaseException:
-        log("Loki crashed:")
-        log(traceback.format_exc())
-        raise
+    sys.exit(main(sys.argv[1:]))

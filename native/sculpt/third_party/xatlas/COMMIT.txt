@@ -1,1 +1,0 @@
-f700c7790aaa030e794b52ba7791a05c085faf0c (2022-07-26) https://github.com/jpcy/xatlas source/xatlas/xatlas.cpp + xatlas.h; LOKI changes: see native/sculpt/THIRD_PARTY_NOTICES.md

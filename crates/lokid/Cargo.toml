@@ -1,0 +1,17 @@
+[package]
+name = "lokid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LOKI driver daemon: runs long jobs in the background, separate from any project"
+
+[dependencies]
+loki-core = { path = "../loki-core" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+axum.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+reqwest.workspace = true

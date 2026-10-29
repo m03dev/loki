@@ -1,18 +1,1 @@
-mcp>=2.2.0
-openai>=3.10.0
-pydantic>=2.13.5
-# video/audio for the media specialist (engine/runners/media.py)
-yt-dlp[default]>=2025.11.12
-# picture edits on this computer (engine/image_tools.py: resize, crop, convert, upscale ...)
-pillow>=10.0
-# documents (session 29, engine/doc_write.py + doc_read.py): small, pure Python
-python-docx>=1.1.0
-openpyxl>=3.1.0
-python-pptx>=1.0.0
-pypdf>=5.0.0
-# arrays for the sandbox, forecasting and the anyCreature view renderer (engine/anycreature.py)
-numpy>=1.26
-# 3D from a picture through a free Hugging Face Space (TRELLIS) when this computer has no 3D model of its own -
-# without it make_3d fell back to the flat "lift" (2026-10-25: the Mac's fox came out as a puffed cut-out)
-gradio_client>=1.3
-json-repair>=0.30   # Manga Studio / one-shot writers: repairs small models' broken JSON (MIT)
+# The engine is the Rust driver in crates/ - nothing to install with pip.

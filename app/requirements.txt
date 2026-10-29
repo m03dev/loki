@@ -1,3 +1,3 @@
-# The Loki desktop window (macOS: WebKit via PyObjC; Windows: Edge WebView2).
-# Optional: without it, app/loki_app.py opens Loki in the default browser.
+# The launcher (app/loki_app.py) uses only the standard library.
+# pywebview gives LOKI its own window; without it LOKI opens in the browser.
 pywebview>=5.0

@@ -1,7 +1,0 @@
-build*/
-out/
-__pycache__/
-*.pyc
-.cmake-build-*/
-.vs/
-.DS_Store

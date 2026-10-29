@@ -1,7 +1,8 @@
 # AGENTS.md - how to work on LOKI
 
-For every agent: Claude, Codex, LOKI's own agents. Read at the start of every session. Where the work stands is
-`HANDOFF.md`; requests for LOKI's own agents are in `LOKI_TASKS.md`.
+For every agent: Claude, Codex, LOKI's own driver. Read at the start of every session. Requests for LOKI's own
+driver are in `LOKI_TASKS.md`. The previous LOKI (Python, 246 modules) is kept as the git tag `legacy-v1`
+for reference: `git show legacy-v1:engine/<file>`.
 
 ## The rules
 
@@ -30,40 +31,35 @@ I said").
     (2026-10-17, 2026-10-25).
 13. LOKI is not a Godot project and must never look like one (2026-10-17).
 14. No CI workflow (2026-10-25). No Ziva - work goes to LOKI via `LOKI_TASKS.md` (2026-10-25).
+15. Free routes only - no paid model providers (2026-10-29).
 
-## What LOKI is now
+## What LOKI is now (rebuilt 2026-10-29)
 
-A 3D creation engine for one artist's Mac + PC: **Forge** (Maya-style modeling, sculpt, UV, bake, animation, Level),
-**Lab** (renders via ComfyUI on the PC, the farm), **local AI** (models + chat), the **Engine tab** (Godot, Carbon),
-and content making from what is built. The art pipeline: concept art -> Technical Artist (turnarounds) -> 3D model ->
-render.
+A standalone art / production / creation app for the owner's Mac + PC, built like Ziva: one focus, one agent loop,
+a few sharp tools, the work checked by the driver rather than trusted.
+
+- **Driver** (`crates/`, Rust): `lokid`, a background daemon. One goal -> a checklist -> one tool call per turn ->
+  each task re-checked by the driver -> hours of work, crash-safe, resting when free models are capped.
+- **Window** (`app/ui/index.html`, served by `lokid`): jobs, For you approvals, results as thumbnails, models.
+- **Launcher** (`app/loki_app.py`, stdlib Python): builds and starts `lokid`, opens the window, keeps the machine on
+  `master` (update only after the new driver builds and answers; otherwise roll back).
+- **Art tools** (`tools/`): the Blender job runner and ComfyUI graphs carried over from legacy-v1, next to become MCP
+  servers. **Playbooks** (`playbooks/`): the art-pipeline roles.
 
 ## Commands
 
-| Do | Command (Windows: `harness_data\.venv\Scripts\python.exe` instead of `python`) |
+| Do | Command |
 | --- | --- |
 | set up | `./setup.sh` (macOS) / `setup.bat` (Windows) |
-| run | `python app/loki_app.py` |
+| run | `Loki.cmd` (Windows) / Loki.app, or `python app/loki_app.py` |
 | quick health | `python app/loki_app.py --self-test` |
-| tests | `python tools/ship.py --check` (1-minute budget) - one suite: `--only test_forge_bake_ui` |
-| publish | `python tools/ship.py -m "what changed, how it was checked"` (tests, commit, push to master) |
+| tests | `cargo test -q` (well under 1 minute) |
+| which free models answer | `lokid probe`, or the Models icon in the window |
+| update this machine now | the Update icon, or `python app/loki_app.py --update-now` |
 
 ## The machines
 
-- **Mac mini:** checkout `/Volumes/LokiSSD/loki`; Home library `~/LOKI Projects/Home`.
-- **PC:** `D:\loki`, RTX 3070 Ti, on 24/7 - ComfyUI, the farm's GPU worker. On a different network from the Mac:
-  they link through a Cloudflare tunnel (engine/tunnel_link.py), the relay as fallback.
-- Updates: from GitHub `master`, or straight from the other machine when GitHub can't be reached
-  (engine/peer_update.py).
-
-## Where things are
-
-| Folder | What |
-| --- | --- |
-| `engine/` | Python core: agent loop `loki.py`, the agent system `agentsys/` around every harness (docs/AGENT_SYSTEM.md), HTTP API `loki_bridge.py` + `*_api.py`, workers, peers, updater |
-| `app/` | the window (`loki_app.py`, pywebview) and its UI `app/ui/` (Forge = `forge*.js`) |
-| `native/` | C++ / Rust modules (`sculpt`, `optcuts`, `carbon_mmo`), each with its own README |
-| `studio/` | LOKI Studio |
-| `tools/` | `ship.py`, generators, setup, packaging |
-| `tests/` | Python suites and `tests/js/` node tests |
-| `docs/` | `ARCHITECTURE.md`, `FORGE_*.md`, `operations/` |
+- **Mac mini:** checkout `/Volumes/LokiSSD/loki` (external drive): build cache and Rust live in its `harness_data/`.
+- **PC:** `D:\loki`, RTX 3070 Ti, on 24/7 - ComfyUI, Blender (`D:\Blender`), the heavy work.
+- Runtime data: `<checkout>/harness_data/home` (runs, results, logs: `launcher.log`, `lokid.log`, `build.log`).
+- Keys: `<checkout>/harness_data/.env` (`NVIDIA_API_KEY`, optional `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `MISTRAL_API_KEY`).

@@ -1,7 +1,0 @@
-html, body { margin: 0; height: 100%; background: #141417; color: #e4e4e7; font: 14px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; overflow: hidden; }
-.stage { position: relative; width: 100%; height: 100%; }
-#game { display: block; width: 100%; height: 100%; outline: none; image-rendering: pixelated; }
-.pe-hud { position: absolute; left: 12px; top: 10px; padding: 6px 10px; border-radius: 10px; background: rgba(20, 20, 24, .72);
-  font: 600 13px/1.3 ui-monospace, Menlo, Consolas, monospace; pointer-events: none; white-space: pre; }
-.pe-hud.big { left: 50%; top: 42%; transform: translate(-50%, -50%); font-size: 20px; text-align: center; padding: 14px 20px; }
-.pe-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #e88a8a; }
