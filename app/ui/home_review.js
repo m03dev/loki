@@ -342,7 +342,29 @@ const LokiHomeReview = (() => {
       if (!n || (n.dataset.key !== key && !typing)) { n = build(it); n.dataset.key = key; }
       order.push(n);
     }
-    list.replaceChildren(...order);
+    place(list, order);
+  }
+
+  /** Put `order` into `list` without taking out a card that is already in place. list.replaceChildren(...) every 10 s
+      took EVERY card out of the page and put it back - and an element taken out of the page loses the keyboard, so
+      the owner was thrown out of the box he was typing in (owner 2026-10-29: "the for you ... wont focus"). Only cards
+      that are new, gone or out of order are touched; if the box he is in still had to move, focus and the caret come
+      back to it. */
+  function place(list, order) {
+    const active = document.activeElement;
+    const mine = active && list.contains(active) ? active : null;
+    const caret = mine && "selectionStart" in mine ? [mine.selectionStart, mine.selectionEnd] : null;
+    const keep = new Set(order);
+    for (const ch of [...list.children]) if (!keep.has(ch)) ch.remove();   // a card that is done goes (approved, or decided elsewhere)
+    let ref = list.firstElementChild;
+    for (const n of order) {
+      if (n === ref) { ref = ref.nextElementSibling; continue; }
+      list.insertBefore(n, ref);
+    }
+    if (mine && mine.isConnected && document.activeElement !== mine) {
+      mine.focus({ preventScroll: true });
+      if (caret) try { mine.setSelectionRange(caret[0], caret[1]); } catch (_) { /* not a text box */ }
+    }
   }
 
   async function refresh(now) {
