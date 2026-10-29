@@ -4346,6 +4346,8 @@ def port_ladder(limit: int = 5) -> list:
                     return
                 if name in _SMART_FAILED or not provider_configured(name):
                     return
+                if not provider_health.registry().usable(name)[0]:
+                    return   # benched or dead (a retired model, a spent quota): its turn would only cost time
             except Exception:  # noqa: BLE001 - a provider that cannot even be checked is left out
                 return
             out.append(name)

@@ -134,6 +134,11 @@ def classify(text: str, status: int = 0, header_retry: Any = None, now: float | 
         return {"state": "quota", "until": until, "reason": "free quota used up"}
     if status == 429 or any(k in low for k in ("rate limit", "rate_limit", "too many requests")):
         return {"state": "rate_limited", "until": now + max(wait, 30.0), "reason": "rate limited"}
+    if status == 404 and "function" in low and "not found" in low:
+        # NVIDIA NIM: the model still shows in /models but its deployment is gone (2026-10-28: nemotron-3-super and
+        # kimi-k2.6 answered this on every call while Settings said "ready")
+        return {"state": "model_missing", "until": now + 12 * 3600,
+                "reason": "the provider retired this model (it is listed but every call says not found)"}
     if status == 404 and ("model" in low or "not found" in low):
         return {"state": "model_missing", "until": now + 3600, "reason": "the model is not available there"}
     if "[model unavailable]" in low or "timed out" in low or "timeout" in low or "connection" in low:
@@ -227,6 +232,8 @@ class Registry:
             else:
                 e.update(state=verdict["state"], until=float(verdict.get("until") or 0), reason=verdict["reason"],
                          key_fp=key_fp(key), at=self.clock())
+                if verdict["state"] == "model_missing":
+                    e["call_missing"] = True   # a real call said so: a /models listing does not lift it
             if session:
                 self.session.add(pid)
             else:
@@ -250,6 +257,7 @@ class Registry:
                 e["largest_ok"] = int(request_tokens)
             changed = was != "ok"
             e.update(state="ok", until=0, reason="", key_fp=key_fp(key) or e.get("key_fp", ""))
+            e.pop("call_missing", None)
             if changed or self.clock() - float(e.get("at") or 0) > 300:
                 e["at"] = self.clock()
                 save = True
@@ -272,7 +280,10 @@ class Registry:
             if state == "ok":
                 # A probe proves the key and the endpoint; it does not lift a spent quota or a
                 # rate limit early (a /models call is not a completion).
-                if e.get("state") in ("key_rejected", "unreachable", "unknown", "model_missing", "error") or \
+                missing_by_call = e.get("state") == "model_missing" and e.get("call_missing") and \
+                    float(e.get("until") or 0) > self.clock()
+                if (e.get("state") in ("key_rejected", "unreachable", "unknown", "model_missing", "error")
+                        and not missing_by_call) or \
                         (e.get("state") == "no_credit" and result.get("credit_ok")):
                     e.update(state="ok", until=0, reason="")
                 e["key_fp"] = key_fp(key)
