@@ -588,7 +588,25 @@ const LokiQol = (function () {
     let d = "";
     try { d = localStorage.getItem(DRAFT_KEY) || ""; } catch (_) { d = ""; }
     const p = $q("#prompt");
-    if (d && p && !p.value.trim()) { p.value = d; autosize(); markRestored(); }
+    if (d && p && !p.value.trim()) {
+      p.value = d; autosize(); markRestored();
+      // straight back to typing where he was (after a restart the box had his text but not his cursor)
+      const a = document.activeElement;
+      if (!a || a === document.body || a === p) { p.focus(); p.setSelectionRange(p.value.length, p.value.length); }
+    }
+  }
+
+  // The engine must know the owner is at the window: an automatic update / restart waits while he types or has an
+  // unsent message (engine/loki_bridge.py owner_active). Throttled to one small request per 20 s; a box that goes
+  // from text to empty (sent / cleared) is told at once.
+  let activeSent = 0, draftSent = null;
+  function reportActive(force) {
+    if (!window.LOKI_READY) return;
+    const p = $q("#prompt"), draft = !!(p && p.value.trim());
+    const now = Date.now();
+    if (!force && draft === draftSent && now - activeSent < 20000) return;
+    activeSent = now; draftSent = draft;
+    api("/ui/active", { draft }).catch(() => null);
   }
   function markRestored() {
     const p = $q("#prompt");
@@ -986,6 +1004,7 @@ const LokiQol = (function () {
     wireRename();
     const p = $q("#prompt");
     if (p) { p.addEventListener("input", saveDraft); p.addEventListener("paste", longPaste); }
+    for (const ev of ["keydown", "pointerdown", "wheel", "input"]) document.addEventListener(ev, () => reportActive(false), { capture: true, passive: true });
     const stop = $q("#stop");
     if (stop) stop.addEventListener("click", () => { turn.stopped = true; }, true);
     window.addEventListener("offline", () => offlineBanner(true));

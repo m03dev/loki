@@ -250,7 +250,21 @@ _USAGE_CACHE: dict = {"t": 0.0, "today": {}}
 UI_ERRORS: list = []   # the window's script errors (boot.js), newest last; also in /health
 
 
-UI_STATE = {"ready": threading.Event(), "rescue": "", "ready_info": {}}
+UI_STATE = {"ready": threading.Event(), "rescue": "", "ready_info": {}, "active_at": 0.0, "draft": False}
+
+# The owner is using the window: typed, clicked or scrolled in it lately, or has an unsent message in the box. An
+# automatic update / restart never closes the window then (owner 2026-10-29: "whever i try to type on mac i get pushed
+# out of the typing box ... this has happened before"). The cause: an update counted LOKI as idle when nothing had been
+# SENT for 2 minutes, so composing a longer message was "idle" and the whole window closed and reopened under his
+# fingers - 33 times on 2026-10-28, 103 on 2026-10-25 (harness_data/app/loki_app.log). app/ui/qol.js reports activity.
+OWNER_ACTIVE_S = 5 * 60          # typed / clicked in the last 5 minutes
+OWNER_DRAFT_S = 30 * 60          # an unsent message waits up to 30 minutes for him to come back to it
+
+
+def owner_active(now: float | None = None) -> bool:
+    now = time.time() if now is None else now
+    since = now - float(UI_STATE.get("active_at") or 0.0)
+    return since < OWNER_ACTIVE_S or (bool(UI_STATE.get("draft")) and since < OWNER_DRAFT_S)
 
 
 def update_trial_watch(updater, wait_s: float | None = None, restart=None) -> str:
@@ -1780,6 +1794,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             UI_STATE["ready"].set()
             self._send_json(200, {"ok": True})
             return
+        if route == "/ui/active":
+            # qol.js: the owner typed / clicked in the window (throttled), and whether the message box holds text
+            UI_STATE["active_at"] = time.time()
+            UI_STATE["draft"] = bool(data.get("draft"))
+            self._send_json(200, {"ok": True})
+            return
         if route == "/ui/error":
             # boot.js: a script error or the rescue screen in the window - kept in engine.out, where a
             # blank or broken window on a machine nobody is watching can be diagnosed later.
@@ -3127,9 +3147,12 @@ async def serve() -> None:
     try:
         import updater  # pylint: disable=import-outside-toplevel
         updater.RUNNING_COMMIT = updater.version().get("commit", "")
+        state.owner_active = owner_active       # peer_link: another machine's "update now" waits for him too
         def _idle(strict: bool = True) -> bool:   # nobody is talking to LOKI (strict: and no background job runs)
             if (state.chat_lock is not None and state.chat_lock.locked()) or state.chat_request_lock.locked() \
                     or state.task_request_lock.locked() or time.time() - state.last_request_at < 120:
+                return False
+            if owner_active():                    # typing, or a message half written: never close his window
                 return False
             if not strict:
                 return True

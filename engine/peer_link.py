@@ -304,6 +304,13 @@ def callbacks(state: Any, agent: Any) -> dict:
     def apply_update() -> dict:
         import updater  # pylint: disable=import-outside-toplevel
         import update_all  # pylint: disable=import-outside-toplevel
+        busy = getattr(state, "owner_active", None)
+        if callable(busy) and busy():
+            # the owner is typing at THIS machine: another machine asking (its hourly nudge, or Update everything
+            # clicked over there) must not close his window - the update is fetched and goes in when he steps away
+            threading.Thread(target=updater.check_now, daemon=True).start()
+            return {"ok": True, "deferred": True,
+                    "note": "the owner is using LOKI here; it updates as soon as he steps away"}
         restart = getattr(state, "restart_engine", None) or (lambda: None)
         return update_all.apply_here(updater, restart)
 
