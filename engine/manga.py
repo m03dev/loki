@@ -177,11 +177,30 @@ def _wrote(proj: dict, what: str) -> None:
 
 # ----------------------------------------------------------------------------- writing: outline, cast, script
 def _json(raw: str):
+    """The JSON object in a model's answer. Small models drop a colon or a comma in long answers (the PC's model on
+    page 2's script, 2026-10-28: "Expecting ':' delimiter ... char 1550"): LOKI's own repair (structured.parse), then
+    json_repair (github mangiucugna/json_repair, MIT) before the answer counts as unusable."""
     raw = re.sub(r"<think>.*?</think>", "", str(raw or ""), flags=re.S)
     s, e = raw.find("{"), raw.rfind("}")
     if s < 0 or e <= s:
         raise ValueError("no JSON in the answer")
-    return json.loads(raw[s:e + 1])
+    try:
+        return json.loads(raw[s:e + 1])
+    except ValueError as first:
+        try:
+            import structured  # pylint: disable=import-outside-toplevel
+            fixed = structured.parse(raw[s:e + 1])
+        except Exception:  # noqa: BLE001
+            fixed = None
+        if not isinstance(fixed, dict):
+            try:
+                import json_repair  # pylint: disable=import-outside-toplevel
+                fixed = json_repair.loads(raw[s:e + 1])
+            except Exception:  # noqa: BLE001 - not installed yet, or past repair
+                fixed = None
+        if isinstance(fixed, dict) and fixed:
+            return fixed
+        raise first
 
 
 OUTLINE_PROMPT = """You are a manga story editor. Plan this manga.

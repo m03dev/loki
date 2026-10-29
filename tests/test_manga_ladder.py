@@ -83,6 +83,16 @@ reg.record_success("nvidia-pro")
 check("and comes back the moment a real call works", reg.usable("nvidia-pro")[0])
 reg.record_failure("other", "HTTP 404 model not found")
 check("a plain missing model is benched", not reg.usable("other")[0])
+# A long answer with a dropped colon (the PC's model, page 2) is repaired instead of thrown away.
+broken = '{"panels": [{"n": 1, "action" "Kitsune hides", "dialogue": []}, {"n": 2, "action": "tofu drops",}]}'
+try:
+    import json_repair  # noqa: F401
+    fixed = manga._json(broken)
+    check("a dropped colon in the model's JSON is repaired", fixed["panels"][1]["action"] == "tofu drops")
+except ImportError:
+    print("  SKIP json_repair is not installed here")
+check("a trailing comma is repaired by LOKI's own parser", manga._json('{"a": [1, 2,],}') == {"a": [1, 2]})
+
 # Writing and drawing steps stay background jobs (a0df9c2 named the slow-model table SLOW and replaced this set:
 # every step then ran inside the HTTP request and the window hung until the picture was drawn).
 check("outline / sheet / draw_page are still background actions",

@@ -185,10 +185,55 @@ def plan_order(backend=None):
         (["qwen"] if os.environ.get("MODELSCOPE_API_KEY") else []) + \
         (["nvidia"] if os.environ.get("NVIDIA_API_KEY") else []) + (["gemini"] if gem else []) + \
         (["huggingface"] if hf else [])
+    for name in list(order):          # a retired / zero-quota route is not tried until its bench ends
+        why_b = benched(name)
+        if why_b and name not in ("local", local):
+            order.remove(name)
+            skipped[name] = "benched: " + why_b
     if pc and not local_ready:        # the linked PC's own model (engine/offload.py): after the hosted ones the owner
         order.append("local")         # liked, before giving up; area edits always go to it (region_edit.py)
         skipped.pop(local, None)
     return {"order": order, "skipped": skipped, "forced": False, **({"pc": pc} if pc else {})}
+
+
+def _bench_file() -> Path:
+    data = os.environ.get("LOKI_DATA") or str(Path(__file__).resolve().parents[2] / "harness_data")
+    return Path(data) / "image_backends.json"
+
+
+def benched(name: str, now: float | None = None) -> str:
+    """Why `name` is benched right now ("" = it is not)."""
+    try:
+        e = json.loads(_bench_file().read_text(encoding="utf-8")).get(name) or {}
+    except (OSError, ValueError):
+        return ""
+    return e.get("reason", "benched") if float(e.get("until") or 0) > (now or time.time()) else ""
+
+
+def bench_for(error: str) -> tuple:
+    """(seconds, reason) when a backend's error means it cannot work for a long while, else (0, "").
+    2026-10-28 on the Mac: Hugging Face's FLUX.1-dev and -schnell answered HTTP 410 (gone) on every picture, and
+    Gemini's image model has a free-tier limit of 0 - both were still tried for every manga sheet."""
+    codes = re.findall(r"HTTP (\d{3})", error or "")
+    if codes and all(c == "410" for c in codes):
+        return 7 * 86400, "every model answered HTTP 410 (retired)"
+    if re.search(r"limit:\s*0\b", error or ""):
+        return 86400, "this key's free tier allows 0 requests for it"
+    return 0, ""
+
+
+def bench(name: str, seconds: float, reason: str) -> None:
+    f = _bench_file()
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    data[name] = {"until": time.time() + seconds, "reason": reason}
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _offload():
@@ -573,7 +618,8 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
             if wait:
                 sleep(wait)
             try:
-                data = call("%s/%s" % (NVIDIA_IMAGE_BASE, model), key, body, {"Accept": "application/json"}, 180)
+                data = call("%s/%s" % (NVIDIA_IMAGE_BASE, model), key, body, {"Accept": "application/json"},
+                            180 if not errors else 120)
                 break
             except urllib.error.HTTPError as err:
                 exc = err
@@ -585,9 +631,13 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
                     after = 0.0
                 if after and wait is not NVIDIA_RETRY_WAITS[-1]:
                     sleep(min(after, 30.0))
+            except (TimeoutError, urllib.error.URLError, OSError) as err:
+                # 2026-10-28: flux.2-klein read-timed out and the other two NVIDIA models were never tried
+                exc = err
+                break
         if data is None:
             code = getattr(exc, "code", "?")
-            errors.append("%s: HTTP %s" % (model, code))
+            errors.append("%s: HTTP %s" % (model, code) if code != "?" else "%s: %s" % (model, type(exc).__name__))
             if code in (401, 403, 429):
                 break            # the key or the quota, not the model: the next model would fail the same way
             continue
@@ -772,6 +822,9 @@ def main():
                 return
             except Exception as exc:  # noqa: BLE001 - try the next backend
                 errors.append("%s: %s: %s" % (name, type(exc).__name__, str(exc)[:200]))
+                secs, why_b = bench_for(str(exc))
+                if secs and backend == "auto":
+                    bench(name, secs, why_b)
         raise RuntimeError("; ".join(errors) or "no image backend is ready on this computer: install the local image "
                            "model (Add-ons > local-image) or set NVIDIA_API_KEY / HF_TOKEN in Settings")
     except Exception as exc:  # noqa: BLE001
