@@ -48,9 +48,12 @@ Owner 2026-10-28: "i want the one with the best results that doesnt break and is
 | Cognition, "Don't build multi-agents" / "Multi-agents: what's actually working" | Parallel writers make conflicting choices; what works is ONE writer, read-only helpers (search), a reviewer with a clean context, map-reduce for research |
 | Anthropic, Agent Skills | One general agent + skills (name/description always loaded, the full skill when it fits, bundled files/scripts on demand) instead of a separate agent per use case |
 
-So: one core agent writes, with the owner's playbook + toolbox for the job; helpers only read (a researcher for look-ups,
-a fresh-eyes reviewer that checks against the playbook's done-means and runs checks without changing anything). Teams
-(engine/team.py) are builder + reviewer (+ researcher / browser checker); the orchestrator's worker is the core agent.
+So: ONE core agent does the job, with the owner's playbook + toolbox for it (owner 2026-10-28: "change the style ...
+no more 5"). No reviewer, tester, researcher or browser agent: the core agent has those tools, and the check is LOKI's
+own from the outside - engine/proof.py (the files are real) and engine/receipts.py (every pasted output was really
+printed by a tool), with engine/proof_runner.py running a request's own checks first. A "team" (engine/team.py) is
+that one agent; the orchestrator's worker is the core agent. Models: every route is tried before giving up (only dead
+ones - no credit, a model the key cannot run - are skipped), then LOKI's own agent on another route.
 The art pipeline's gated stages (engine/asset_pipeline.py) stay: each stage is the same core flow with the owner's
 check-off between stages.
 

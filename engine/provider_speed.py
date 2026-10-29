@@ -120,11 +120,26 @@ def is_slow(data_dir, provider: str, now: float | None = None) -> bool:
     return float(entry.get("slow_until") or 0) > (now or time.time())
 
 
+_DEAD = ("402", "credit", "insufficient balance", "insufficient_quota", "not found for account", "model_not_found",
+         "does not exist", "per-day", "per day", "daily", "request too large", "tokens per minute")
+
+
+def is_dead(data_dir, provider: str, now: float | None = None) -> bool:
+    """Out for real while its bench lasts: no credit, a daily cap, or this key cannot run that model. A 429, a model
+    that was down or one stuck turn is NOT dead - it is only tried later."""
+    if not is_out(data_dir, provider, now):
+        return False
+    text = str((_load(data_dir).get(provider) or {}).get("out") or "").lower()
+    return any(k in text for k in _DEAD)
+
+
 def order(data_dir, names: list, now: float | None = None, keep=()) -> list:
-    """The same providers: the slow ones moved to the end (better slow than nothing), the ones that said they are
-    OUT left off (they would only fail again - 2026-10-26: every job still tried two daily-capped routes first).
-    `keep` (the local model) is never left off. If everything is out, all are kept (something must be tried)."""
-    live = [n for n in names if n in keep or not is_out(data_dir, n, now)] or list(names)
-    names = live
-    fast = [n for n in names if not is_slow(data_dir, n, now)]
-    return fast + [n for n in names if n not in fast]
+    """The same providers: the working ones first, slow ones after them, ones benched for a moment (a 429, a model
+    that was down) after those - tried before giving up (owner 2026-10-28: "you should go through models that are
+    available try diffrent things before giving up"). Only DEAD ones are left off (no credit, a daily cap, a model the
+    key cannot run). `keep` (the local model) is never left off. If everything is dead, all are kept."""
+    live = [n for n in names if n in keep or not is_dead(data_dir, n, now)] or list(names)
+    benched = [n for n in live if n not in keep and is_out(data_dir, n, now)]
+    rest = [n for n in live if n not in benched]
+    fast = [n for n in rest if not is_slow(data_dir, n, now)]
+    return fast + [n for n in rest if n not in fast] + benched

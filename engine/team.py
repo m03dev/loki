@@ -258,38 +258,16 @@ def solo_goal(goal: str, triage: dict | None = None) -> bool:
 
 def choose_roles(goal: str, triage: dict | None = None, decide=None) -> list:
     """The roles this goal needs, in stage order. `decide` is laya.decide (or None)."""
-    triage = triage or {}
-    kind = triage.get("kind", "")
-    text = goal.lower()
-    # One core agent writes; helpers only read (docs/AGENT_SYSTEM.md "One core agent"): Google Research's study of 180
-    # set-ups (2025) found every multi-agent split 39-70% worse on sequential work, and Cognition ships one writer +
-    # a reviewer with a clean context. So: the builder (with the owner's playbook) does it all, a fresh-eyes reviewer
-    # checks it; a researcher looks things up first when the goal needs facts; a browser checker for web work.
-    roles = ["builder", "reviewer"]
+    # Google Research (2025): every multi-agent split of sequential work was 39-70% worse than one agent.
+    # ONE core agent (owner 2026-10-28: "i also told you to change the style remember thats what were doing no more
+    # 5"; his screenshot: "a playbook and toolbox strategy replaces the need to build a separate AI agent for every
+    # single task"). The core agent works from the owner's playbook (steps, rules, done means) and its toolbox; the
+    # check is LOKI's own, from the outside (engine/proof.py + engine/receipts.py), not a second model reading the
+    # first one's words. Researcher / reviewer / tester / browser roles are gone: the core agent has those tools.
     art = _art.for_goal(goal) if _art is not None else []
     if len(art) == 1:                       # one specialist does it (a concept, a render, a video)
         return ["art_" + art[0]]
-    # a small, concrete job (a check, a conversion, one file) needs one agent, not four in turn (2026-10-25: a
-    # "pixelize three pictures" request became an Architect writing a plan for 25 minutes on a 9B model)
-    if solo_goal(goal, triage):
-        return ["builder"]
-    wants = {"researcher": kind == "research" or bool(re.search(r"\b(research|latest|compare|which|best)\b", text)),
-             "browser": kind == "browse" or bool(re.search(r"\b(website|web app|landing page|site|browser|html)\b", text))}
-    if decide is not None:
-        try:
-            answers = decide({k: {"type": "noul", "instructions": q} for k, q in ROLE_QUESTIONS.items()},
-                             {"goal": goal[:2000]})
-        except Exception:  # noqa: BLE001 - Laya is advice; the rules stand without it
-            answers = {}
-        for key in ROLE_QUESTIONS:
-            p = (answers.get(key) or {}).get("noul")
-            if isinstance(p, (int, float)):
-                wants[key] = p >= 0.5
-    if wants["researcher"]:
-        roles.insert(0, "researcher")
-    if wants["browser"]:
-        roles.append("browser")
-    return roles
+    return ["builder"]
 
 
 # Owner 2026-10-22: QA teams wrote their own stand-in "forge_qa.py" that made bugs up from file-name hashes,

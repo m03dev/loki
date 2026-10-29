@@ -79,70 +79,32 @@ class FakeJobs:
 WS = TMP / "project"
 WS.mkdir()
 
-section("roles are chosen for the goal")
-check("a build gets ONE core agent (the only writer) and a fresh-eyes reviewer",
-      team.choose_roles("build a todo app") == ["builder", "reviewer"])
-check("a website also gets a browser tester", "browser" in team.choose_roles("build a landing page for my bakery"))
-check("a research-heavy goal gets a researcher first", team.choose_roles("research the best GPU and build a picker")[0] == "researcher")
-laya_says = lambda questions, state: {"researcher": {"noul": 0.9}, "browser": {"noul": 0.1}}
-check("Laya's answer decides when it is available",
-      team.choose_roles("make a website", decide=laya_says)[:1] == ["researcher"]
-      and "browser" not in team.choose_roles("make a website", decide=laya_says))
-check("a broken Laya leaves the rules in charge",
-      team.choose_roles("build a site", decide=lambda *a: 1 / 0) == team.choose_roles("build a site"))
+section("one core agent (owner 2026-10-28: 'change the style ... no more 5')")
+check("a build gets ONE core agent - no reviewer, tester, researcher or browser tester",
+      team.choose_roles("build a todo app") == ["builder"])
+check("... a website too", team.choose_roles("build a landing page for my bakery") == ["builder"])
+check("... and a research-heavy goal (the core agent has the research tools itself)",
+      team.choose_roles("research the best GPU and build a picker") == ["builder"])
+check("Laya's role advice no longer splits the work",
+      team.choose_roles("make a website", decide=lambda q, s: {"researcher": {"noul": 0.9}}) == ["builder"])
 
-section("a team runs in stages and talks on the board")
+section("the core agent does it start to finish")
 jobs = FakeJobs()
 runner = team.TeamRunner(jobs)
 t = runner.start("build a landing page for my bakery", str(WS))
-check("the team starts with the core agent building it (no plan hand-off)", t["stage"] == "build" and jobs.working() == ["Builder"], jobs.working())
-check("every agent shares the project folder (no separate copies)",
+check("the core agent starts building at once", t["stage"] == "build" and jobs.working() == ["Builder"], jobs.working())
+check("it works in the project folder (no separate copy)",
       all(j["workspace"] == str(WS) and j["isolate"] is False for j in jobs.created))
-check("each agent knows its team (for team_post/team_read)", all(j["team"] == t["id"] for j in jobs.created))
-check("the agent's prompt names its teammates and the board",
-      "Builder" in jobs.created[0]["prompt"] and "team_post" in jobs.created[0]["prompt"])
+check("it knows its board (team_post/team_read)", all(j["team"] == t["id"] for j in jobs.created)
+      and "team_post" in jobs.created[0]["prompt"])
 builder_prompt = [j for j in jobs.created if "Builder" in j["title"]][0]["prompt"]
-check("the builder plans it itself", "start to finish" in builder_prompt, builder_prompt[:400])
-check("only the builder writes while it works", sum(1 for j in jobs.created if j["status"] == "working") == 1)
+check("it plans and checks it itself", "start to finish" in builder_prompt, builder_prompt[:400])
 jobs.finish("Builder", "DONE: built index.html")
 runner.tick()
-check("the fresh-eyes reviewer and the browser tester check it together (read-only)",
-      sorted(jobs.working()) == ["Browser tester", "Reviewer"], jobs.working())
-check("the reviewer did not build it and checks against the playbook's done-means",
-      "Fresh eyes" in [j for j in jobs.created if "Reviewer" in j["title"]][0]["prompt"])
-
-section("a failed check gets one fix round")
-jobs.finish("Reviewer", "FAIL: the order button does nothing")
-jobs.finish("Browser tester", "PASS: page loads")
-runner.tick()
 t = runner.get(t["id"])
-check("the builder is sent back with the findings", t["stage"] == "fix" and jobs.working() == ["Builder"], (t["stage"], jobs.working()))
-fix_prompt = [j for j in jobs.created if j["status"] == "working"][0]["prompt"]
-check("the fix round sees the failure on the board", "order button does nothing" in fix_prompt)
-jobs.finish("Builder", "DONE: fixed the button")
-runner.tick()
-check("the checkers re-check after the fix", sorted(jobs.working()) == ["Browser tester", "Reviewer"], jobs.working())
-jobs.finish("Reviewer", "PASS: 4 checks, 0 FAIL")
-jobs.finish("Browser tester", "PASS")
-runner.tick()
-t = runner.get(t["id"])
-check("the team is verified when every re-check passes", t["status"] == "done" and t["verdict"].startswith("verified"), t)
-check("the board tells the whole story", any("Team finished" in m["text"] for m in team.board(t["id"])))
-
-section("still failing after the fix round: it asks for you")
-jobs2 = FakeJobs()
-runner2 = team.TeamRunner(jobs2)
-t2 = runner2.start("build a cli tool", str(WS))
-jobs2.finish("Builder", "DONE")
-runner2.tick()
-jobs2.finish("Reviewer", "FAIL: crashes")
-runner2.tick()
-jobs2.finish("Builder", "DONE: tried")
-runner2.tick()
-jobs2.finish("Reviewer", "FAIL: still crashes")
-runner2.tick()
-t2 = runner2.get(t2["id"])
-check("no endless loop: one fix round, then 'needs you'", t2["status"] == "done" and t2["verdict"].startswith("needs you"), t2)
+check("when it is done the team is done - one model call chain, no second agent re-reading it",
+      t["status"] == "done" and len(jobs.created) == 1 and not t["verdict"].startswith("needs you"), (t, len(jobs.created)))
+check("the board tells the story", any("Team finished" in m["text"] for m in team.board(t["id"])))
 check("a crashed or blocked agent counts as a failure", team._reports_failure({"status": "failed"})
       and team._reports_failure({"status": "done", "output": "BLOCKED: no model"}))
 check("'0 FAIL' is not a failure", not team._reports_failure({"status": "done", "output": "PASS 5, 0 FAIL"}))
@@ -176,7 +138,7 @@ check("the UI view lists members and the board", shown["members"] and shown["boa
 
 section("no invented results (owner 2026-10-22: QA teams faked their findings)")
 check("every agent is told not to invent results or write stand-ins",
-      team.HONESTY in team.agent_prompt(runner.get(t["id"]), "reviewer") and "stand-in" in team.HONESTY)
+      team.HONESTY in team.agent_prompt(runner.get(t["id"]), "builder") and "stand-in" in team.HONESTY)
 FK = TMP / "fakes"; (FK / "models").mkdir(parents=True, exist_ok=True); (FK / ".hidden").mkdir(exist_ok=True)
 (FK / "models" / "chair.glb").write_text("# Chair - Default Aspect\nFormat: GLB (Forge export)\n")
 (FK / "models" / "real.glb").write_bytes(b"glTF\x02\x00\x00\x00" + b"\x00" * 40)

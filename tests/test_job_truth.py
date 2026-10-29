@@ -201,6 +201,25 @@ check("a Mac job with the PC's model never loads the Mac's own local model (rule
       and not any(n in loki.LOCAL_PROVIDERS for n in _seen), _seen)
 loki.provider_configured = _pc; loki.MODELS.clear(); loki.MODELS.update(_orig)
 os.environ.pop("LOKI_JOB_ID"); os.environ.pop("LOKI_MACHINE_ROLE")
+_d3 = TMP / "speed3"
+provider_speed.mark_out(_d3, "groq", "429 Too Many Requests")
+provider_speed.mark_out(_d3, "deepseek", "Insufficient Balance (request_id: x)")
+provider_speed.mark_out(_d3, "nvidia-pro", "Function 'x': Not found for account 'y'")
+_o = provider_speed.order(_d3, ["groq", "deepseek", "nvidia-pro", "nvidia", "local"], keep=("local",))
+check("every route is tried before giving up: one benched for a 429 comes last, not never (owner 2026-10-28: 'go "
+      "through models that are available try diffrent things before giving up')", _o[-1] == "groq" and "nvidia" in _o, _o)
+check("... only dead ones are left off (no credit, a model the key cannot run)",
+      "deepseek" not in _o and "nvidia-pro" not in _o, _o)
+_pc3, _orig3 = loki.provider_configured, dict(loki.MODELS)
+loki.MODELS["pc-local"] = loki.ModelConfig(base_url="http://127.0.0.1:9/v1", api_key="peer", model="pc-local")
+loki.provider_configured = lambda n: n in ("pc-local", "nvidia")
+check("every OpenCode route failed: LOKI's own agent tries a route OpenCode did not run (the PC's model)",
+      loki._last_resort_route(["nvidia"], "nvidia") == "pc-local")
+loki.provider_configured = lambda n: n == "nvidia"
+check("... or the first capable one again, in the other harness", loki._last_resort_route(["nvidia"], "nvidia") == "nvidia")
+loki.provider_configured = _pc3; loki.MODELS.clear(); loki.MODELS.update(_orig3)
+_src = (REPO / "engine" / "loki.py").read_text(encoding="utf-8")
+check("OpenCode gets up to 10 routes now (was 6)", 'LOKI_MAX_ROUTES", "10"' in _src and "tries = list(models)" in _src)
 check("this suite stays under 60 s", time.time() - T0 < 60, time.time() - T0)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)

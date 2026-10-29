@@ -290,7 +290,7 @@ check("only the built-in agent can be a check job",
       _idle.create({"backend": "local", "agent": "codex", "prompt": "x", "workspace": str(WS), "selfcheck": True})["selfcheck"] is False)
 
 # ================================================================== 3. a team
-section("3. a team: build -> check -> fix -> verified, on the board, the events and the world")
+section("3. a team: one core agent, on the board, the events and the world")
 
 
 class StageAgents(workers.Backend):
@@ -334,27 +334,22 @@ for _ in range(60):
     if cur["status"] != "working":
         break
 cur = RUNNER.get(t["id"])
-check("the team went build -> check -> fix -> re-check (one core agent, a fresh-eyes reviewer)",
-      stages == ["build", "check", "fix", "fix-check"], stages)
-check("one fix round, then verified", cur["status"] == "done" and cur["verdict"].startswith("verified") and cur["fix_rounds"] == 1, cur)
+check("ONE core agent builds it start to finish (owner 2026-10-28: 'no more 5') - no reviewer round",
+      stages == ["build"], stages)
+check("it finishes, not 'needs you'", cur["status"] == "done" and not cur["verdict"].startswith("needs you"), cur)
 board = [m["text"] for m in team.board(t["id"])]
-check("the board tells the story (stages, each report, the failure, the verdict)",
-      any("Stage build" in b for b in board) and any("adding an empty note crashes" in b for b in board)
-      and board[-1].startswith("Team finished: verified"), board)
+check("the board tells the story (the stage, its report, the verdict)",
+      any("Stage build" in b for b in board) and board[-1].startswith("Team finished"), board)
 ev = events.read(mark, limit=5000)
 mine = [e for e in ev if e.get("team") == t["id"]]
 assigned = [e["recipient"] for e in mine if e["type"] == "task.assigned"]
-check("LOKI assigned each role through the event stream", assigned[:2] == ["Builder", "Reviewer"] and assigned.count("Builder") == 2,
-      assigned)
-check("every stage agent's job reported itself by role",
-      {e["sender"] for e in mine if e["type"] == "task.completed"} >= {"Builder", "Reviewer"},
+check("LOKI assigned the core agent through the event stream", assigned == ["Builder"], assigned)
+check("its job reported itself", {e["sender"] for e in mine if e["type"] == "task.completed"} == {"Builder"},
       {e["sender"] for e in mine if e["type"] == "task.completed"})
-check("the verdict was announced", any(e["type"] == "verification.completed" and e["payload"].get("verified") for e in mine))
 check("the live view showed the builder working first", world_states and world_states[0].get("Builder") == "working",
       world_states[:2])
 final = events.world(TEAM_JOBS.store.all(), RUNNER.all(), False)
-check("and the whole team done at the end, with the team listed",
-      all(world_states[-1].get(r) == "done" for r in ("Builder", "Reviewer"))
+check("and done at the end, with the team listed", world_states[-1].get("Builder") == "done"
       and any(x["id"] == t["id"] and x["status"] == "done" for x in final["teams"]), (world_states[-1], final["teams"]))
 refusing = types.SimpleNamespace(job=lambda backend, agent: policy.Verdict(policy.DENY, "background agents are off"))
 try:

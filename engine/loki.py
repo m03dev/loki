@@ -9423,9 +9423,10 @@ def _oc_providers(first: str) -> dict:
         # 2026-10-28, six adopt jobs at once all fell to the 9B model on the 16 GB Mac (the one that crashed it before)
         out = {n: v for n, v in out.items() if n not in LOCAL_PROVIDERS}
         local = ""
-    names = list(out)[:6]
+    cap = max(3, int(os.getenv("LOKI_MAX_ROUTES", "10") or 10))   # every route LOKI has before giving up (was 6)
+    names = list(out)[:cap]
     if local and local in out and local not in names:
-        names = names[:5] + [local]
+        names = names[:cap - 1] + [local]
     return {n: out[n] for n in names}
 
 
@@ -9636,7 +9637,7 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
                                     "'BLOCKED: <exactly what you need>'." % ((preamble + "\n\n") if preamble else "", text))
     result: dict = {}
     used = ""
-    tries = models[:6]   # every provider LOKI has (up to 6) before giving up - the last ones may be slow but working
+    tries = list(models)  # every route LOKI has (_oc_providers caps them, LOKI_MAX_ROUTES) - the last may be slow but work
     requeued: set = set()     # a slow-but-working route comes back after the others failed (2026-10-28, the Mac: NVIDIA
                               # DeepSeek was moved off for being slow, the two routes after it 404ed, the job died)
     waited: set = set()       # a 429 waits once and tries the same route again before moving on
@@ -9736,6 +9737,17 @@ async def run_opencode(text: str, task: bool = False, allow_bash: bool = True, p
         if result.get("text") or result.get("tools") or not result.get("error") or _cancel_event.is_set():
             break
         _progress("error", "%s failed: %s - trying the next provider" % (model or "OpenCode", result.get("error", "")[:200]))
+    if (result.get("error") and not result.get("text") and not result.get("tools") and not plan
+            and not _cancel_event.is_set() and os.getenv("LOKI_LAST_RESORT", "on").lower() not in ("off", "0", "no")):
+        # every OpenCode route failed: try something different before giving up (owner 2026-10-28: "go through models
+        # that are available try diffrent things before giving up") - LOKI's own lean agent, on a route OpenCode did
+        # not get to work (the PC's model, this computer's, or the first one again in a different harness)
+        pick = _last_resort_route(list(providers), first)
+        if pick:
+            _progress("thinking", "Every route failed inside OpenCode (%s) - trying LOKI's own agent on %s."
+                      % (str(result.get("error"))[:120], pick))
+            messages.pop()       # run_local adds the request itself
+            return await run_local(text, pick, task=task, preamble=preamble)
     if meter.get("carried"):
         result = dict(result, tools=list(meter["carried"]) + list(result.get("tools") or []))
     ok, failed = opencode_engine.tool_counts(result.get("tools") or [])
@@ -10239,6 +10251,20 @@ def job_model_choice(job: dict, current: str) -> str:
 
 
 OC_LAST: dict = {"stopped": ""}
+
+
+def _last_resort_route(tried: list, first: str = "") -> str:
+    """The route for LOKI's own agent when every OpenCode route failed: a small model OpenCode never ran (pc-local,
+    then this computer's - not on the Mac while something heavy holds it, rule 7), else the first capable one again
+    (a different harness often works where OpenCode's 12k-token prompt failed)."""
+    smalls = ["pc-local"] + [n for n in LOCAL_PROVIDERS if n != "pc-local"]
+    for n in smalls:
+        if n in MODELS and n not in tried and provider_configured(n):
+            if n in LOCAL_PROVIDERS and _machine_light() and _local_off_for_jobs():
+                continue
+            return n
+    strong = [n for n in tried if not _is_weak_route(n)]
+    return (first if first in strong else (strong[0] if strong else "")) or ""
 
 
 def _slow_may_move(pname: str, rest: list, providers: dict) -> bool:
