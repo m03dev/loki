@@ -36,6 +36,7 @@ import json
 import math
 import os
 import re
+import threading
 import time
 import uuid
 import zipfile
@@ -977,8 +978,32 @@ def card_text(args: dict, ws) -> str:
 
 WRITE_FORMAT = {"outline": OUTLINE_PROMPT, "characters": CAST_PROMPT, "script": SCRIPT_PROMPT}
 
+# One lock per project around every step that changes it. Each step loads project.json, works for minutes (a model
+# call, a picture) and saves the whole file: on 2026-10-28 three page scripts ran at once and page 1's new script (with
+# the renamed cast) was overwritten by another job's stale copy. Steps on one project now take turns; reads do not wait
+# (save() replaces the file in one move) and other projects run alongside.
+READ_ONLY = ("list", "status", "review")
+_LOCKS: dict = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def project_lock(pid: str) -> threading.RLock:
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(str(pid or ""), threading.RLock())
+
 
 def tool(args: dict, ws: Path, make: Callable[[dict], dict] | None = None, ask: Callable[[str], str] | None = None) -> dict:
+    """The `manga` tool (each changing step holds its project's lock - see project_lock)."""
+    a = dict(args or {})
+    act = str(a.get("action") or "status").lower()
+    pid = str(a.get("project") or a.get("id") or "")
+    if act in READ_ONLY or act == "project" or not pid:
+        return _tool(a, ws, make, ask)
+    with project_lock(pid):
+        return _tool(a, ws, make, ask)
+
+
+def _tool(args: dict, ws: Path, make: Callable[[dict], dict] | None = None, ask: Callable[[str], str] | None = None) -> dict:
     """The `manga` tool. action: project | outline | characters | sheet | pick | script | layout | draw_page |
     letter | edit_panel | review | export | status | list. Agents write the outline / cast / script themselves (pass
     them as JSON in `data`) or leave it to LOKI's model (`ask`)."""

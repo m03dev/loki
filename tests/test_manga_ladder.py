@@ -114,6 +114,30 @@ pp = manga.panel_prompt(proj, {}, {"shot": "wide", "angle": "low", "action": "Ki
 check("a panel prompt stays under 800 and keeps no-text and black and white",
       len(pp) <= 800 and "No text" in pp and "black and white" in pp)
 
+# Two steps on one project at once do not undo each other (page 1's new script was overwritten by page 2's job).
+import json as _json_mod  # noqa: E402
+ws2 = Path(tempfile.mkdtemp())
+pid2 = manga.tool({"action": "project", "premise": "a fox and a machine", "pages": 2}, ws2)["project"]
+manga.tool({"action": "outline", "project": pid2, "data": {"pages": [{"beat": "a", "summary": "one"},
+                                                                    {"beat": "b", "summary": "two"}]}}, ws2)
+
+
+def slow_ask(tag):
+    def ask(prompt):
+        time.sleep(0.4)
+        return _json_mod.dumps({"panels": [{"n": i + 1, "action": "%s panel %d" % (tag, i + 1)} for i in range(5)]})
+    return ask
+
+
+ts = [threading.Thread(target=manga.tool, args=({"action": "script", "project": pid2, "page": n}, ws2),
+                       kwargs={"ask": slow_ask("page%d" % n)}) for n in (1, 2)]
+[t.start() for t in ts]
+[t.join() for t in ts]
+pages = {pg["n"]: pg for pg in manga.load(ws2, pid2)["pages"]}
+check("two page scripts written at once both survive",
+      (pages[1].get("panels") or [{}])[0].get("action") == "page1 panel 1" and
+      (pages[2].get("panels") or [{}])[0].get("action") == "page2 panel 1")
+
 # Writing and drawing steps stay background jobs (a0df9c2 named the slow-model table SLOW and replaced this set:
 # every step then ran inside the HTTP request and the window hung until the picture was drawn).
 check("outline / sheet / draw_page are still background actions",
