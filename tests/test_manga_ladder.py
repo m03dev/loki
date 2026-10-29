@@ -98,6 +98,22 @@ lt = manga.look_text({"name": "Kitsune", "species": "a small white fox spirit", 
 check("the species comes first in the drawing prompt", lt.startswith("Kitsune (a small white fox spirit)"))
 check("the cast prompt asks what each character is", '"species"' in manga.CAST_PROMPT)
 
+# Picture prompts fit the strictest model with the layout / style / black-and-white / no-text part intact, and carry
+# no name or age labels (FLUX paints them: "OTeu-Vending Mahne", "5 years" on the first sheet).
+long_look = {"name": "Tofu-Vending Machine", "species": "a vending machine robot", "age": "5 years",
+             "look": {k: "very detailed description " * 12 for k in ("face", "hair", "build", "outfit", "props")}}
+sheet = manga.character_sheet_args({"id": "x", "style": "normal", "colour": "mono"}, long_look)["prompt"]
+check("a sheet prompt stays under 800 characters", len(sheet) <= 800)
+check("and keeps its layout, black and white and no-text instructions",
+      "three head close-ups" in sheet and "black and white" in sheet and sheet.rstrip().endswith("no letters."))
+check("and has no name or age label", "Tofu-Vending Machine" not in sheet and "5 years" not in sheet)
+proj = {"id": "x", "style": "normal", "colour": "mono", "characters": [dict(long_look, name="Kit")]}
+pp = manga.panel_prompt(proj, {}, {"shot": "wide", "angle": "low", "action": "Kit hides behind a pillar " * 20,
+                                   "setting": "a shrine at dusk", "characters": ["Kit"], "style": "normal",
+                                   "dialogue": [{"text": "hi", "place": "top"}]})["prompt"]
+check("a panel prompt stays under 800 and keeps no-text and black and white",
+      len(pp) <= 800 and "No text" in pp and "black and white" in pp)
+
 # Writing and drawing steps stay background jobs (a0df9c2 named the slow-model table SLOW and replaced this set:
 # every step then ran inside the HTTP request and the window hung until the picture was drawn).
 check("outline / sheet / draw_page are still background actions",

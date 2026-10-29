@@ -371,6 +371,41 @@ def look_text(ch: dict) -> str:
     return "; ".join(bits)
 
 
+def draw_text(ch: dict) -> str:
+    """What a character LOOKS like, for the picture model: what they are, then face, hair, build, outfit, props,
+    colours - no name or age label (2026-10-28: FLUX painted "OTeu-Vending Mahne" and "5 years" onto the sheet)."""
+    lk = ch.get("look") or {}
+    bits = [ch["species"]] if ch.get("species") else []
+    for k in ("face", "hair", "build", "outfit", "props", "description"):
+        if lk.get(k):
+            bits.append(str(lk[k]))
+    if lk.get("colours") and isinstance(lk["colours"], list):
+        bits.append("colours " + ", ".join(lk["colours"]))
+    return "; ".join(bits)
+
+
+PROMPT_BUDGET = 780   # the strictest picture model here takes 800 characters (NVIDIA flux.2-klein)
+
+
+def budget(head: str, middle: list, tail: str, limit: int = PROMPT_BUDGET) -> str:
+    """head + as much of `middle` as fits + tail, never over `limit`: the instructions that make the picture right
+    (layout, style, black and white, no text) are the tail and are never the part that is cut."""
+    room = limit - len(head) - len(tail) - 2
+    kept = []
+    for part in middle:
+        part = " ".join(str(part or "").split())
+        if not part:
+            continue
+        if len(part) + 1 > room:
+            cut = part[:max(0, room - 1)].rsplit(" ", 1)[0].rstrip(" ,.;")
+            if len(cut) > 20:
+                kept.append(cut)
+            break
+        kept.append(part)
+        room -= len(part) + 1
+    return " ".join(x for x in [head] + kept + [tail] if x)[:limit]
+
+
 def script(ws, pid: str, n: int, ask: Callable[[str], str] | None = None, data: dict | None = None) -> dict:
     """One page's panels (from `data`, `ask`, or a plain fallback), checked and stored."""
     proj = load(ws, pid)
@@ -519,7 +554,7 @@ def rects(proj: dict, page: dict) -> tuple:
 def panel_prompt(proj: dict, page: dict, panel: dict) -> dict:
     """What one panel's picture is asked for: the drawing only - the words are lettered by LOKI afterwards."""
     by = {c["name"].lower(): c for c in proj.get("characters") or []}
-    cast_bits = [look_text(by[n.lower()]) for n in panel.get("characters") or [] if n.lower() in by]
+    cast_bits = ["%s: %s" % (n, draw_text(by[n.lower()])) for n in panel.get("characters") or [] if n.lower() in by]
     style = STYLES.get(panel.get("style") or proj.get("style") or "normal", STYLES["normal"])
     parts = ["Manga panel, %s shot, %s." % (panel.get("shot") or "medium", panel.get("angle") or "eye level"),
              panel.get("action") or "",
@@ -530,9 +565,12 @@ def panel_prompt(proj: dict, page: dict, panel: dict) -> dict:
              "Style: " + style + ".", COLOUR.get(proj.get("colour") or "mono", COLOUR["mono"]) + ".",
              "Leave clear empty space near the %s for speech balloons." % _space_hint(panel) if panel.get("dialogue") else "",
              "No text, no letters, no speech bubbles, no captions, no watermark, no panel borders."]
-    prompt = " ".join(x for x in parts if x).strip()
+    style_bits = [x for x in parts if x.startswith(("Style: ", "Leave clear", "No text"))] + \
+        [x for x in parts if x in COLOUR.values() or x.rstrip(".") in COLOUR.values()]
+    body = [x for x in parts[1:] if x and x not in style_bits]
+    prompt = budget(parts[0], body, " ".join(x for x in style_bits if x))
     refs = [by[n.lower()]["sheet"] for n in panel.get("characters") or [] if n.lower() in by and by[n.lower()].get("sheet")]
-    return {"prompt": prompt[:1800], "reference": refs[:3],
+    return {"prompt": prompt, "reference": refs[:3],
             "negative": "text, letters, words, speech bubble, caption, watermark, signature, extra fingers, deformed hands, "
                         "duplicate character, frame border"}
 
@@ -554,11 +592,11 @@ def _size_for(box: tuple) -> tuple:
 
 # ----------------------------------------------------------------------------- drawing (the makers do the pictures)
 def character_sheet_args(proj: dict, ch: dict) -> dict:
-    prompt = ("Character reference sheet for a manga: %s. Full body front view, side view and back view side by side, "
-              "plus three head close-ups with different expressions (neutral, happy, angry), same character in every "
-              "view, neutral standing pose, plain white background, %s, %s, clean linework, model sheet layout"
-              % (look_text(ch), STYLES.get(proj.get("style") or "normal"), COLOUR.get(proj.get("colour") or "mono")))
-    return {"prompt": prompt[:1800], "width": 1536, "height": 1024,
+    prompt = budget("Manga character model sheet:", [draw_text(ch) + "."],
+                    "Front, side and back full-body views side by side, three head close-ups (neutral, happy, angry), "
+                    "same character in every view, plain white background. %s. %s. No text, no labels, no letters."
+                    % (STYLES.get(proj.get("style") or "normal"), COLOUR.get(proj.get("colour") or "mono", COLOUR["mono"])))
+    return {"prompt": prompt, "width": 1536, "height": 1024,
             "negative": "text, letters, labels, watermark, different characters, inconsistent outfit",
             "folder": "manga/%s/characters" % proj["id"], "style": ""}
 
