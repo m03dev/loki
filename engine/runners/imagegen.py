@@ -104,6 +104,19 @@ def memory_gate(ram_gb=None, nvidia=None):
 _SAID: dict = {}
 
 
+def _say_once_a_day(what: str) -> bool:
+    """True for the first process on this machine to ask today (a stamp file next to the plan file)."""
+    try:
+        stamp = _plan_file().parent / (".said-%s-%s" % (what, time.strftime("%Y%m%d")))
+        if stamp.exists():
+            return False
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        stamp.write_text("1", encoding="utf-8")
+    except OSError:
+        pass
+    return True
+
+
 def zimage_status():
     """(ready, why not) for local Z-Image on this machine."""
     try:
@@ -112,9 +125,9 @@ def zimage_status():
             return False, "torch/diffusers are not installed (tools/setup_extras.py adds them)"
         fits, why = memory_gate()
         if not fits:
-            if not _SAID.get("zimage"):   # once per process: it was printed on every status call and filled the
-                _SAID["zimage"] = True    # Mac's whole shared log (2026-10-28) - every real error was pushed out
-                print("[imagegen] local Z-Image skipped: " + why, file=sys.stderr, flush=True)
+            if not _SAID.get("zimage") and _say_once_a_day("zimage"):   # it filled the Mac's whole shared log
+                _SAID["zimage"] = True    # (2026-10-28); "once per process" was not enough - every job and tool
+                print("[imagegen] local Z-Image skipped: " + why, file=sys.stderr, flush=True)  # server is one
             return False, why
         try:
             record = json.loads(_plan_file().read_text(encoding="utf-8"))
