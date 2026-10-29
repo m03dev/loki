@@ -93,6 +93,11 @@ except ImportError:
     print("  SKIP json_repair is not installed here")
 check("a trailing comma is repaired by LOKI's own parser", manga._json('{"a": [1, 2,],}') == {"a": [1, 2]})
 
+# What a character IS leads every drawing prompt (a fox spirit drawn as a girl, then refused by the filter).
+lt = manga.look_text({"name": "Kitsune", "species": "a small white fox spirit", "look": {"face": "round"}})
+check("the species comes first in the drawing prompt", lt.startswith("Kitsune (a small white fox spirit)"))
+check("the cast prompt asks what each character is", '"species"' in manga.CAST_PROMPT)
+
 # Writing and drawing steps stay background jobs (a0df9c2 named the slow-model table SLOW and replaced this set:
 # every step then ran inside the HTTP request and the window hung until the picture was drawn).
 check("outline / sheet / draw_page are still background actions",

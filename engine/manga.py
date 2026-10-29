@@ -221,12 +221,14 @@ CAST_PROMPT = """List the cast of this manga and LOCK each character's look so e
 Title: %(title)s. Premise: %(premise)s
 Outline: %(outline)s
 Answer with JSON only:
-{"characters": [{"name": "...", "role": "protagonist|deuteragonist|rival|mentor|side|extra", "age": "...",
+{"characters": [{"name": "...", "species": "what they are, plainly (a human teenage boy, a small white fox spirit in
+  animal form, a vending machine with a face ...)", "role": "protagonist|deuteragonist|rival|mentor|side|extra", "age": "...",
   "look": {"face": "shape, eye shape and colour, distinguishing marks", "hair": "style, length, colour",
            "build": "height, body type, posture", "outfit": "every garment and its colour, shoes, accessories",
            "colours": ["3-5 colours that belong to this character"], "props": "what they carry"},
   "personality": "3-6 words", "voice": "how they talk"}]}
-Keep it to the characters the outline needs (1-6)."""
+Keep it to the characters the outline needs (1-6). A character who is not a human must say so in "species" - an
+artist who reads only the look draws a person."""
 
 SCRIPT_PROMPT = """Write the panel script for page %(n)d of the manga "%(title)s".
 Premise: %(premise)s
@@ -334,7 +336,8 @@ def cast(ws, pid: str, ask: Callable[[str], str] | None = None, data: dict | Non
             continue
         lib = _library_get(ws, name) if library else None
         look = ch.get("look") if isinstance(ch.get("look"), dict) else {"description": str(ch.get("look") or "")}
-        entry = {"id": _slug(name), "name": name, "role": str(ch.get("role") or "")[:30], "age": str(ch.get("age") or "")[:20],
+        entry = {"id": _slug(name), "name": name, "species": " ".join(str(ch.get("species") or "").split())[:80],
+                 "role": str(ch.get("role") or "")[:30], "age": str(ch.get("age") or "")[:20],
                  "look": {k: (v if isinstance(v, list) else str(v)[:300]) for k, v in look.items()},
                  "personality": str(ch.get("personality") or "")[:120], "voice": str(ch.get("voice") or "")[:120],
                  "sheet": "", "variants": []}
@@ -354,7 +357,9 @@ def cast(ws, pid: str, ask: Callable[[str], str] | None = None, data: dict | Non
 def look_text(ch: dict) -> str:
     """One character's locked look, as a drawing instruction (the same words in every panel)."""
     lk = ch.get("look") or {}
-    bits = [ch["name"]]
+    # what the character IS comes first (2026-10-28: "Kitsune ... tiny, cherubic face, shrine uniform" with no word
+    # saying fox was drawn as a little girl and NVIDIA's filter refused the sheet)
+    bits = ["%s (%s)" % (ch["name"], ch["species"]) if ch.get("species") else ch["name"]]
     for k in ("age",):
         if ch.get(k):
             bits.append(str(ch[k]))

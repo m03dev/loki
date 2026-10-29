@@ -451,6 +451,17 @@ FLUX1_SIZES = [(1024, 1024), (768, 1344), (1344, 768), (832, 1216), (1216, 832),
 FLUX2_MAX_SIDE = int(os.environ.get("LOKI_FLUX2_MAX_SIDE", "1024") or 1024)
 
 
+def fit_prompt(prompt, limit):
+    """At most `limit` characters, cut after the last whole clause that fits. NVIDIA's flux.2-klein refuses longer
+    prompts (HTTP 422 "String should have at most 800 characters" - every manga character sheet, 2026-10-28)."""
+    text = " ".join(str(prompt or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    best = max(cut.rfind(", "), cut.rfind(". "), cut.rfind("; "))
+    return (cut[:best] if best > limit // 2 else cut.rsplit(" ", 1)[0]).rstrip(" ,.;")
+
+
 def fit_side(width, height, cap):
     """(w, h) scaled down so neither side is over `cap`, keeping the aspect, multiples of 16."""
     scale = min(1.0, float(cap) / max(width, height, 1))
@@ -612,7 +623,8 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
         flux1 = "flux.1" in model
         w, h = nearest_size(width, height) if flux1 else fit_side(width, height, FLUX2_MAX_SIDE)
         ex = extra or {}
-        body = {"prompt": prompt[:2000], "width": w, "height": h, "seed": int(seed) % 2**32,
+        body = {"prompt": fit_prompt(prompt, 800 if "flux.2" in model else 2000), "width": w, "height": h,
+                "seed": int(seed) % 2**32,
                 "steps": int(ex.get("steps") or (4 if "schnell" in model or "klein" in model else 30))}
         if "dev" in model:
             body.update(cfg_scale=3.5, mode="base")
@@ -647,7 +659,9 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
                 break
         if data is None:
             code = getattr(exc, "code", "?")
-            errors.append("%s: HTTP %s" % (model, code) if code != "?" else "%s: %s" % (model, type(exc).__name__))
+            detail = _http_detail(exc) if code in (400, 404, 422) else ""   # what NVIDIA says is wrong (422 x2 unexplained)
+            errors.append(("%s: HTTP %s" % (model, code) + (" %s" % " ".join(detail.split())[:180] if detail else ""))
+                          if code != "?" else "%s: %s" % (model, type(exc).__name__))
             if code in (401, 403, 429):
                 break            # the key or the quota, not the model: the next model would fail the same way
             continue

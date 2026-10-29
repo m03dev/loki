@@ -62,5 +62,14 @@ imagegen.nvidia("a fox", 1536, 1024, tempfile.mkdtemp(), 3, sleep=lambda s: None
                 request=lambda u, k, b, h, t: sizes.append((b["width"], b["height"])) or
                 {"artifacts": [{"base64": "iVBORw0KGgo="}]})
 check("FLUX.2 gets the fitted size", sizes[:1] == [(1024, 672)])
+long_prompt = "Character reference sheet for a manga: " + ", ".join("detail %d of the look" % i for i in range(80))
+fp = imagegen.fit_prompt(long_prompt, 800)
+check("a long prompt is cut to 800 characters at a clause", len(fp) <= 800 and fp.endswith("of the look"))
+check("a short prompt is left alone", imagegen.fit_prompt("a fox", 800) == "a fox")
+sent = []
+imagegen.nvidia(long_prompt, 1024, 1024, tempfile.mkdtemp(), 3, sleep=lambda s: None,
+                request=lambda u, k, b, h, t: sent.append((u.rsplit("/", 1)[-1], len(b["prompt"]))) or
+                {"artifacts": [{"base64": "iVBORw0KGgo="}]})
+check("FLUX.2 klein gets at most 800 characters", sent[:1] and sent[0][1] <= 800)
 print("\n%d passed, %d failed (%.1f s)" % (PASSED, FAILED, time.time() - t0))
 sys.exit(1 if FAILED else 0)
