@@ -1440,7 +1440,7 @@ body.fdock-dragging, body.fdock-dragging * { cursor: grabbing !important; user-s
 #forge .forge-out-head .forge-out-title { max-width: calc(100% - 46px); flex: 0 1 auto; }
 /* the wheel's wedges stay on top of an open menu (a menu nudged onto the ring hid the next wedge: QA sweep) */
 .forge-wheel-wedge { z-index: 2; }
-.forge-wheel-sub { z-index: 1; }
+.forge-wheel-sub { z-index: 50; }
 
 /* the Level workspace (forge_level.js): Place Actors, Content Browser, Details, Output */
 #forge .forge-levelpanel .flv-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 6px 8px; display: flex; flex-direction: column; gap: 10px; }
