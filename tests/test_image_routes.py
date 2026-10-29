@@ -57,6 +57,7 @@ check("a benched route leaves the order and says why",
       "huggingface" not in plan["order"] and "benched" in plan["skipped"].get("huggingface", ""))
 check("a forced backend is still tried", imagegen.plan_order("huggingface")["order"] == ["huggingface"])
 check("a 1536x1024 sheet is sent to FLUX.2 as 1024x672", imagegen.fit_side(1536, 1024, 1024) == (1024, 672))
+check("a wide strip panel still gets FLUX.2's 512 px minimum", imagegen.fit_side(1536, 448, 1024, 512) == (1024, 512))
 check("a 1024x1024 picture is left as it is", imagegen.fit_side(1024, 1024, 1024) == (1024, 1024))
 sizes = []
 imagegen.nvidia("a fox", 1536, 1024, tempfile.mkdtemp(), 3, sleep=lambda s: None,

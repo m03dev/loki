@@ -449,6 +449,8 @@ FLUX1_SIZES = [(1024, 1024), (768, 1344), (1344, 768), (832, 1216), (1216, 832),
 
 # FLUX.2 klein on NVIDIA drew 1024x1024 here but answered HTTP 422 to a 1536x1024 manga character sheet (2026-10-28)
 FLUX2_MAX_SIDE = int(os.environ.get("LOKI_FLUX2_MAX_SIDE", "1024") or 1024)
+# ...and each side must be 512, 528, 544 ... (HTTP 422 "Input should be 512, 528, ..." for a wide 1024x288 strip panel)
+FLUX2_MIN_SIDE = 512
 
 
 def fit_prompt(prompt, limit):
@@ -462,10 +464,12 @@ def fit_prompt(prompt, limit):
     return (cut[:best] if best > limit // 2 else cut.rsplit(" ", 1)[0]).rstrip(" ,.;")
 
 
-def fit_side(width, height, cap):
-    """(w, h) scaled down so neither side is over `cap`, keeping the aspect, multiples of 16."""
+def fit_side(width, height, cap, floor=256):
+    """(w, h) scaled down so neither side is over `cap`, keeping the aspect, multiples of 16, neither under `floor`
+    (a very wide or tall panel is drawn a little less wide/tall and cropped to its frame when the page is composed)."""
     scale = min(1.0, float(cap) / max(width, height, 1))
-    return max(256, int(width * scale) // 16 * 16), max(256, int(height * scale) // 16 * 16)
+    return (min(cap, max(floor, int(width * scale) // 16 * 16)),
+            min(cap, max(floor, int(height * scale) // 16 * 16)))
 
 
 def nearest_size(width, height, sizes=FLUX1_SIZES):
@@ -625,7 +629,7 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
             errors.append("%s: skipped (%s)" % (model, why_b))   # 2026-10-28: dev's 500s and schnell's timeouts
             continue                                            # cost ~5 minutes on every manga panel
         flux1 = "flux.1" in model
-        w, h = nearest_size(width, height) if flux1 else fit_side(width, height, FLUX2_MAX_SIDE)
+        w, h = nearest_size(width, height) if flux1 else fit_side(width, height, FLUX2_MAX_SIDE, FLUX2_MIN_SIDE)
         ex = extra or {}
         body = {"prompt": fit_prompt(prompt, 800 if "flux.2" in model else 2000), "width": w, "height": h,
                 "seed": int(seed) % 2**32,
