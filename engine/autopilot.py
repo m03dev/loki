@@ -167,8 +167,40 @@ def inbox_requests(path: Path) -> list:
             want = re.match(r"^\[(windows|mac|linux)\]\s*", text, re.I)   # a request for one machine only
             if want and want.group(1).lower() != _this_os():
                 continue
-            out.append({"id": hashlib.sha1(text.encode("utf-8")).hexdigest()[:12], "text": text})
+            out.append({"id": request_key(text), "text": text})
     return out
+
+
+def request_key(text: str) -> str:
+    """A request's id from its title, not its whole text. The id used to be a hash of the full line, so every edit
+    (an "UPDATE ..." note, a reworded part) made it a brand-new request with fresh tries: the Mac re-ran the same
+    edited requests every hour for days (2026-10-29: 350 jobs in 3 days, 40 done). The title = the text without its
+    machine tag, "DO FIRST -", any "UPDATE ...:" note or "(Try n of m ...)" suffix, cut at 80 characters."""
+    t = re.sub(r"^\[(windows|mac|linux)\]\s*", "", text.strip(), flags=re.I)
+    t = re.sub(r"^DO FIRST\s*-\s*", "", t, flags=re.I)
+    t = re.sub(r"\s*\(Try \d+ of \d+\..*$", "", t, flags=re.S)
+    t = re.split(r"\s+UPDATE\b", t, maxsplit=1)[0]
+    t = re.sub(r"\s+", " ", t).strip().lower()[:80]
+    return hashlib.sha1(t.encode("utf-8")).hexdigest()[:12]
+
+
+def _rekey_requests(data: dict) -> None:
+    """Move requests saved under the old full-text ids to their title id, keeping their tries (once, on load)."""
+    started, attempts = data["started"], data["attempts"]
+    for key in [k for k in started if not k.startswith("always-")]:
+        entry = started.get(key) or {}
+        new = request_key(str(entry.get("text") or "")) if entry.get("text") else key
+        if new == key:
+            continue
+        old_try = attempts.pop(key, None)
+        if new in started:                      # several edits of one request: keep the most tries
+            if old_try and int(old_try.get("n") or 1) > int((attempts.get(new) or {}).get("n") or 1):
+                attempts[new] = old_try
+            started.pop(key)
+            continue
+        started[new] = started.pop(key)
+        if old_try is not None:
+            attempts[new] = old_try
 
 
 # ------------------------------------------------------------------------ work slots
@@ -253,6 +285,7 @@ class Autopilot:
         data.setdefault("attempts", {})     # request id -> tries, why they failed, when the next one is (task_board)
         data.setdefault("goal_fails", {})   # standing goal -> failures in a row, resting until
         data.setdefault("dismissed", [])    # board rows the owner took off
+        _rekey_requests(data)
         return data
 
     def _save(self) -> None:

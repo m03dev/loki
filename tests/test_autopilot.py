@@ -313,6 +313,18 @@ check("a light machine (the Mac) runs one job at a time by default", autopilot.s
 check("... and standing goals at most once an hour", autopilot.always_every_s() == 3600, autopilot.always_every_s())
 os.environ["LOKI_MACHINE_ROLE"] = "main"
 check("the PC keeps 3 slots and 10-minute standing goals", autopilot.slots() == 3 and autopilot.always_every_s() == 600)
+# an edited request keeps its id and its tries (2026-10-29: every edit restarted it with fresh tries)
+_k = autopilot.request_key
+_base = "[mac] DO FIRST - Manga Studio: the same character in every panel (2026-10-29, the kitsune manga). (1) fix it"
+check("an UPDATE note does not change a request's id",
+      _k(_base) == _k(_base.replace("). (1)", "). UPDATE 2026-10-29 05:40: part 1 is done - do (3). (1)")))
+check("a retry suffix does not change it", _k(_base) == _k(_base + "\n\n(Try 2 of 3. Earlier tries failed - x)"))
+check("a different request gets a different id", _k(_base) != _k("[mac] DO FIRST - Blender + its MCP on this Mac"))
+_old = {"started": {"aaaaaaaaaaaa": {"text": _base, "team": "t1"}, "always-x": {"text": "y"}},
+        "attempts": {"aaaaaaaaaaaa": {"n": 3, "given_up": True}}}
+autopilot._rekey_requests(_old)
+check("saved requests move to their title id with their tries",
+      _k(_base) in _old["started"] and _old["attempts"][_k(_base)]["given_up"] and "always-x" in _old["started"], _old)
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 if FAIL:
     print("FAILED: " + ", ".join(FAIL))
