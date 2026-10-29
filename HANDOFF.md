@@ -23,6 +23,12 @@ Last updated: 2026-10-28 23:30 (chat keeps the strong model; receipts + LOKI run
   it hourly); the proxy trims old tool output past 60k characters (jobs sent 19.6k tokens at step 1 and 535k by step 16);
   a premade expert only on a clear fit (score 18+; loose matches gave a manga fix the auth engineer); the Z-Image line
   once a day per machine.
+- Later (656-657 + LOKI_TASKS): a For you card "being drawn" >30 min comes back with buttons (the PC's moss golem sat a
+  day with none - LOKI restarted mid-draw); working cards have Stop. Library sync carries deletions (trash lists +
+  removed-by-hand, size-matched, mass-removal guard). NVIDIA ids are probed with a 1-token call (Mac's Fast/Max asked
+  404 models for days; the PC's key runs nemotron-3.5-lightning-30b-a3b at 7 s/step). LOKI_TASKS: 47 stale requests
+  (10-26/27 proofs) moved to "## Parked", 10 left. The PC's colibri Qwen3.6-35B download is incomplete (6 shards
+  missing, gs64 container needs an unmerged branch) - why colibri never worked; PC is 8 GB VRAM / ~16 GB RAM.
 - Owner direction: free and offline, no paid providers. Next: the PC's GPU as LOKI's always-on brain with a lean agent
   loop made for a local model; measure what the 3070 Ti + its RAM can really run first.
 
