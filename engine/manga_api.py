@@ -29,18 +29,43 @@ def _ws(state) -> Path:
     return Path(getattr(getattr(state, "agent", None), "WORKSPACE", "."))
 
 
-def _ask(state, timeout_s: float = 180):
+def _ask(state, timeout_s: float = 150):
+    """The writer for outline / cast / script: every usable model in turn (loki.port_ladder) until one answers
+    with JSON Manga Studio can read. On 2026-10-28 the main driver timed out on an outline and the step 'succeeded'
+    with the premise pasted onto every page; now each model gets its turn and the reasons come back when all fail."""
     agent, loop = getattr(state, "agent", None), getattr(state, "loop", None)
     if agent is None or loop is None or not hasattr(agent, "_port_ask"):
         return None
 
-    def ask(prompt: str) -> str:
-        fut = asyncio.run_coroutine_threadsafe(agent._port_ask(prompt, max_tokens=4000), loop)  # pylint: disable=protected-access
+    def once(prompt: str, provider: str, limit: float) -> str:
+        fut = asyncio.run_coroutine_threadsafe(agent._port_ask(prompt, max_tokens=4000, provider=provider), loop)  # pylint: disable=protected-access
         try:
-            return fut.result(timeout=timeout_s)
+            return fut.result(timeout=limit)
         except Exception:  # noqa: BLE001
             fut.cancel()
             raise
+
+    def ask(prompt: str) -> str:
+        try:
+            ladder = list(agent.port_ladder()) if hasattr(agent, "port_ladder") else [""]
+        except Exception:  # noqa: BLE001
+            ladder = [""]
+        why = []
+        for i, provider in enumerate(ladder or [""]):
+            limit = timeout_s if i == 0 else min(timeout_s, 90.0)
+            t0 = time.time()
+            try:
+                raw = once(prompt, provider, limit)
+                manga._json(raw)   # pylint: disable=protected-access - the same check the caller makes
+                if i:
+                    print("[manga] written by %s after: %s" % (provider, "; ".join(why)), flush=True)
+                return raw
+            except Exception as exc:  # noqa: BLE001 - next model
+                kind = "timed out after %ds" % int(time.time() - t0) if isinstance(exc, TimeoutError) or \
+                    type(exc).__name__ == "TimeoutError" else "%s: %s" % (type(exc).__name__, str(exc)[:160])
+                why.append("%s %s" % (provider or "main model", kind))
+        print("[manga] every model failed: %s" % "; ".join(why), flush=True)
+        raise RuntimeError("every model failed - " + "; ".join(why))
     return ask
 
 

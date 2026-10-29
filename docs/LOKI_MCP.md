@@ -21,7 +21,7 @@ disk.
 1. Open Claude desktop > Settings > Developer > Edit Config.
 2. Add this, then restart Claude desktop:
    ```json
-   {"mcpServers": {"loki": {"command": "/bin/bash", "args": ["/Users/mohamed/Documents/loki/tools/loki_mcp_launch.sh"]}}}
+   {"mcpServers": {"loki": {"command": "/bin/bash", "args": ["/Volumes/LokiSSD/loki/tools/loki_mcp_launch.sh"]}}}
    ```
    Use your checkout's real path.
 3. Claude sessions linked to that Mac then see the `loki` tools.
@@ -138,3 +138,11 @@ docs/STUDIO.md "Studio as an MCP server".
 `tests/test_studio.py` section 4: every tool through the mcp client in-process, the jail, approvals
 (refused without a code, a code is valid for one exact call), a fake running engine (status,
 doctor, settings without secrets, jobs, restart), the stdio server process and the HTTP token check.
+
+## Making things: Manga Studio
+
+`manga_meta`, `manga_list`, `manga_project`, `manga_new`, `manga_step`, `manga_job` drive Forge > Manga from any
+MCP client: `manga_new` (an idea) -> `manga_step outline` -> `characters` -> `sheet {character}` -> `script {page}` ->
+`draw_page {page}` -> `letter` -> `review` -> `export {kind: pdf|cbz}`. `manga_step` waits on the job and returns
+its result. Each writing step walks every usable model (loki.port_ladder: main driver, the other free online
+ones, the PC's model, this computer's) before a placeholder, and a placeholder shows up in `warnings` and review.

@@ -385,6 +385,50 @@ class LokiAPI:
         return self._out(*self.bridge("POST", "/engine/restart", {}), keep=("ok", "note", "error"))
 
     # ------------------------------------------------------------- LOKI's code (the dev worktree)
+    # ------------------------------------------------------------- Manga Studio (engine/manga_api.py)
+    def manga_meta(self) -> str:
+        """Manga Studio's options: formats, styles, panel layouts, shots, angles, balloon kinds, endings."""
+        return self._out(*self.bridge("GET", "/manga/meta"))
+
+    def manga_list(self) -> str:
+        """Every Manga Studio project (id, title, pages, state)."""
+        return self._out(*self.bridge("GET", "/manga/list"))
+
+    def manga_project(self, id: str) -> str:  # noqa: A002
+        """One manga project in full: outline, cast with sheets, panel scripts, drawn panel/page files, review issues."""
+        import urllib.parse  # pylint: disable=import-outside-toplevel
+        return self._out(*self.bridge("GET", "/manga/project?id=" + urllib.parse.quote(id), timeout=20.0))
+
+    def manga_new(self, premise: str, title: str = "", pages: int = 4, format: str = "page",  # noqa: A002
+                  style: str = "normal", colour: str = "bw", language: str = "en", reading: str = "rtl") -> str:
+        """Start a manga from an idea (as Forge > Manga > New does). Returns the project id; next step: outline."""
+        return self._out(*self.bridge("POST", "/manga/do", {"action": "project", "premise": premise, "title": title,
+                         "pages": int(pages), "format": format, "style": style, "colour": colour,
+                         "language": language, "reading": reading}))
+
+    def manga_step(self, project: str, action: str, args: dict | None = None, wait_s: int = 600) -> str:
+        """Run one Manga Studio step and wait for its job: outline, characters, sheet {character, variants},
+        pick {character, file}, script {page}, draw_page {page}, edit_panel {page, panel, ...},
+        letter {page, panel, data}, review, export {kind: pdf|cbz}. Returns the job result (errors per panel)."""
+        body = dict(args or {}, action=action, project=project)
+        status, data = self.bridge("POST", "/manga/do", body, timeout=60.0)
+        if status != 200 or not isinstance(data, dict) or not data.get("job"):
+            return self._out(status, data)
+        job, t0 = data["job"], time.time()
+        while time.time() - t0 < max(5, int(wait_s)):
+            time.sleep(2.0)
+            st, j = self.bridge("GET", "/manga/job?id=" + job, timeout=15.0)
+            if st != 200 or not isinstance(j, dict) or j.get("status") != "running":
+                if isinstance(j, dict):
+                    j["seconds"] = round(time.time() - t0)
+                return self._out(st, j)
+        return json.dumps({"ok": True, "job": job, "status": "running", "note": "still running after %ss - "
+                           "check with manga_job" % wait_s})
+
+    def manga_job(self, id: str) -> str:  # noqa: A002
+        """A Manga Studio job's state and result."""
+        return self._out(*self.bridge("GET", "/manga/job?id=" + id))
+
     def read_file(self, path: str, start_line: int = 0, end_line: int = 0) -> str:
         """Read a file of the dev worktree (start_line/end_line, 1-based, for a part of a big file)."""
         try:
@@ -617,7 +661,7 @@ def ensure_worktree(repo: Path, target: Path, branch: str) -> Path:
 TOOL_ORDER = ("chat", "task", "agent_status", "agent_install", "workspace_files", "workspace_read",
               "loki_status", "models_doctor", "settings_get", "settings_set", "jobs_list", "job_start", "job_stop",
               "job_logs", "engine_logs", "world_summary", "memory_search", "cleanup_scan", "cleanup_remove", "tools_health",
-              "creations_list",
+              "creations_list", "manga_meta", "manga_list", "manga_project", "manga_new", "manga_step", "manga_job",
               "restart_engine", "read_file", "list_files", "search_files", "edit_file", "write_file", "git_status",
               "git_diff", "git_log", "read_doc", "run_tests", "ship")
 

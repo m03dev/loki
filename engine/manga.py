@@ -165,6 +165,16 @@ def _log(proj: dict, what: str) -> None:
     proj["history"] = proj["history"][-200:]
 
 
+def _warn(proj: dict, what: str, exc: Exception) -> None:
+    """The model could not write `what`: a placeholder stands in, and the review says so (not a quiet success)."""
+    proj.setdefault("warnings", {})[what] = ("the model could not write it, a placeholder stands in: %s" % exc)[:400]
+    _log(proj, "%s: placeholder (%s)" % (what, exc))
+
+
+def _wrote(proj: dict, what: str) -> None:
+    (proj.get("warnings") or {}).pop(what, None)
+
+
 # ----------------------------------------------------------------------------- writing: outline, cast, script
 def _json(raw: str):
     raw = re.sub(r"<think>.*?</think>", "", str(raw or ""), flags=re.S)
@@ -248,8 +258,9 @@ def outline(ws, pid: str, ask: Callable[[str], str] | None = None, data: dict | 
                                             "pages": proj["pages_target"], "tone": proj["tone"],
                                             "ending": proj["ending"], "language": proj["language"],
                                             "spine": _spine(proj)}))
-        except Exception:  # noqa: BLE001 - the plain spine below
+        except Exception as exc:  # noqa: BLE001 - the plain spine below, and the window is told
             o = None
+            _warn(proj, "outline", exc)
     if not o or not o.get("pages"):
         beats = (["setup", "development", "turn", "conclusion"] if proj["format"] == "4koma"
                  else ["setup", "development", "turn", "climax", "ending"])
@@ -268,6 +279,8 @@ def outline(ws, pid: str, ask: Callable[[str], str] | None = None, data: dict | 
     old = {p["n"]: p for p in proj.get("pages") or []}
     proj["pages"] = [dict(old.get(p["n"], {}), n=p["n"], beat=p["beat"], summary=p["summary"],
                           panels_target=p["panels_target"]) for p in pages]
+    if o is data or (o and "(page 1 of" not in str((o.get("pages") or [{}])[0].get("summary", ""))):
+        _wrote(proj, "outline")
     _log(proj, "outline: %d pages" % len(pages))
     return save(ws, proj)
 
@@ -290,8 +303,11 @@ def cast(ws, pid: str, ask: Callable[[str], str] | None = None, data: dict | Non
         try:
             c = _json(ask(CAST_PROMPT % {"title": proj["title"], "premise": proj["premise"],
                                          "outline": json.dumps(proj.get("outline", {}).get("pages", []))[:3000]}))
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             c = None
+            _warn(proj, "characters", exc)
+        else:
+            _wrote(proj, "characters")
     chars = []
     for ch in (c or {}).get("characters") or []:
         name = " ".join(str(ch.get("name") or "").split())[:40]
@@ -348,8 +364,11 @@ def script(ws, pid: str, n: int, ask: Callable[[str], str] | None = None, data: 
                 "cast": "; ".join(look_text(c) for c in proj.get("characters") or [])[:3000] or "invent at most 2",
                 "format_note": _format_note(proj), "count_note": count_note, "language": proj["language"],
                 "style": proj["style"]}))
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             raw = None
+            _warn(proj, "script page %d" % n, exc)
+        else:
+            _wrote(proj, "script page %d" % n)
     panels = normalize_panels(proj, (raw or {}).get("panels") or [], want)
     if not panels:
         panels = [{"n": i + 1, "shot": SHOTS[min(i, len(SHOTS) - 1)], "angle": "eye level", "setting": "",
@@ -791,7 +810,7 @@ def edit_panel(ws, pid: str, n: int, panel_n: int, note: str = "", action: str =
 def review(ws, pid: str) -> dict:
     """The page against the script: drawn, lettered, the cast where the script put them, the format kept."""
     proj = load(ws, pid)
-    issues = []
+    issues = ["%s: %s" % (k, v) for k, v in (proj.get("warnings") or {}).items()]
     for page in proj.get("pages") or []:
         panels = page.get("panels") or []
         if not panels:
@@ -931,10 +950,11 @@ def tool(args: dict, ws: Path, make: Callable[[dict], dict] | None = None, ask: 
                     "then call again" % act, "format": WRITE_FORMAT[act].split("Answer with JSON only:", 1)[-1].strip()}
         if act == "outline":
             p = outline(ws, pid, ask=ask, data=data if isinstance(data, dict) else None)
-            return {"ok": True, "outline": p["outline"], "next": "characters"}
+            return {"ok": True, "outline": p["outline"], "next": "characters", "warnings": p.get("warnings") or {}}
         if act == "characters":
             p = cast(ws, pid, ask=ask, data=data if isinstance(data, dict) else None)
-            return {"ok": True, "characters": p["characters"], "next": "sheet for each character"}
+            return {"ok": True, "characters": p["characters"], "next": "sheet for each character",
+                    "warnings": p.get("warnings") or {}}
         if act == "sheet":
             if make is None:
                 return {"ok": False, "error": "no image maker here"}
@@ -945,7 +965,7 @@ def tool(args: dict, ws: Path, make: Callable[[dict], dict] | None = None, ask: 
             n = int(a.get("page") or 1)
             p = script(ws, pid, n, ask=ask, data=data if isinstance(data, dict) else None)
             pg = _page(p, n, create=False)
-            return {"ok": True, "page": pg, "next": "draw_page"}
+            return {"ok": True, "page": pg, "next": "draw_page", "warnings": p.get("warnings") or {}}
         if act == "layout":
             p = load(ws, pid)
             pg = _page(p, int(a.get("page") or 1), create=False)

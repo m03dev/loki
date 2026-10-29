@@ -4303,13 +4303,15 @@ REWOO_TOOLS = {                 # what plan_and_solve may run: read-only tools o
 }
 
 
-async def _port_ask(prompt: str, system: str = "", schema: dict | None = None, max_tokens: int = 0) -> str:
-    """One plain model call for the research-port tools, on the model this request uses. With a schema
-    a local server gets it as response_format (constrained JSON); a server that refuses it is asked again
-    without. <think> blocks are removed from the answer."""
-    provider = active_model_name()
+async def _port_ask(prompt: str, system: str = "", schema: dict | None = None, max_tokens: int = 0,
+                    provider: str = "") -> str:
+    """One plain model call for the research-port tools, on the model this request uses (or `provider`,
+    from port_ladder, when a tool walks the models). With a schema a local server gets it as
+    response_format (constrained JSON); a server that refuses it is asked again without. <think> blocks
+    are removed from the answer."""
+    provider = provider if provider in MODELS else active_model_name()
     cfg = MODELS[provider]
-    client = make_client()
+    client = make_client(provider)
     msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
     kwargs = {"model": cfg.model, "messages": msgs,
               "max_tokens": int(max_tokens or os.getenv("LOKI_PORT_TOKENS", "2048"))}
@@ -4329,6 +4331,33 @@ async def _port_ask(prompt: str, system: str = "", schema: dict | None = None, m
     _record_usage(response, kwargs, cfg, started)
     _record_request_usage(provider, response)
     return structured.strip_thinking(response.choices[0].message.content or "")
+
+
+def port_ladder(limit: int = 5) -> list:
+    """The models a one-shot tool (Manga Studio, design, playbooks) tries in order before giving up (owner
+    2026-10-28: 'go through models that are available try diffrent things before giving up'): the one this
+    request uses, then the other free online ones that are set up and not dead, then the PC's model, then this
+    computer's already-installed one. Never a paid one on its own."""
+    out = []
+    def add(name):
+        if name and name in MODELS and name not in out and len(out) < limit:
+            try:
+                if provider_tier(name) == "paid" and not paid_allowed_automatically():
+                    return
+                if name in _SMART_FAILED or not provider_configured(name):
+                    return
+            except Exception:  # noqa: BLE001 - a provider that cannot even be checked is left out
+                return
+            out.append(name)
+    try:
+        add(active_model_name())
+    except Exception:  # noqa: BLE001
+        pass
+    for name in ONLINE_ORDER:
+        add(name)
+    add("pc-local")
+    add("local")
+    return out
 
 
 def repo_map_tool(focus: str = "", subdir: str = ".", max_chars: int = 6000, files: str = "") -> str:
