@@ -585,7 +585,7 @@ def run_shell(args: dict, cwd: Path, ask=None) -> dict:  # noqa: ARG001 - the fo
 
 CLI = {"image": "make_image", "3d": "make_3d", "video": "make_video", "upscale": "upscale_image", "pixel": "pixelize",
        "voice": "voice", "shelf": "toolshelf", "music": "make_music", "library": "library",
-       "render": "render_scene", "sprite": "make_sprite", "manga": "manga", "design": "design", "turnaround": "make_turnaround", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
+       "render": "render_scene", "sprite": "make_sprite", "manga": "manga", "design": "design", "playbook": "playbook", "turnaround": "make_turnaround", "machines": "list_machines", "run-on": "run_on_machine", "job": "machine_job"}
 
 
 # what the first plain word means for each command (2026-10-25: `loki-make render models/x.glb` sent the file as the
@@ -598,8 +598,16 @@ POSITIONAL = {"upscale": "image", "pixel": "image", "run-on": "task", "render": 
 def cli(argv: list, cwd: Path | None = None) -> int:
     """`loki-make <what> "<prompt>" [--key value ...]` - the same tools for an agent that only has a shell
     (engine/local_agent.py): image, 3d, video, upscale, pixel, machines, run-on, job. Prints the JSON answer."""
+    if argv[:1] == ["help"] and len(argv) > 1 and argv[1] in CLI:
+        # what one tool takes (a shell-only agent ran `design` and `pip install manga`: it never saw the arguments)
+        spec = next((t for t in TOOLS if t.get("name") == CLI[argv[1]]), {})
+        props = (spec.get("inputSchema") or {}).get("properties") or {}
+        print("loki-make %s%s [--key value ...]\n%s\n\nkeys: %s" % (
+            argv[1], (" <%s>" % POSITIONAL[argv[1]]) if argv[1] in POSITIONAL else "", spec.get("description", ""),
+            ", ".join("--%s%s" % (k, (" (%s)" % "|".join(map(str, v["enum"]))) if v.get("enum") else "") for k, v in props.items())))
+        return 0
     if not argv or argv[0] not in CLI:
-        print("usage: loki-make image|3d|video|upscale|pixel|sprite|turnaround|render|voice|music|library|shelf|machines|run-on|job "
+        print("usage: loki-make " + "|".join(CLI) + " "
               "\"<prompt or file>\" [--style comic] "
               "[--count 4] [--upscale 4] [--image pic.png] [--machine mac] [--job id]")
         return 2

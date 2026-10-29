@@ -317,7 +317,20 @@ async def window_checks():
         await browser.close()
 
 
+def shell_agent_checks():
+    """A shell-only agent (the local / PC model) ran `pip install manga` and `design`: the commands are on its PATH now."""
+    import subprocess  # pylint: disable=import-outside-toplevel
+    import local_agent  # pylint: disable=import-outside-toplevel
+    d = Path(local_agent.make_wrapper())
+    check("the shell agent has manga / design / playbook as commands", all((d / n).is_file() for n in ("manga", "design", "playbook")),
+          sorted(p.name for p in d.iterdir()))
+    out = subprocess.run([sys.executable, str(REPO / "engine" / "make_mcp.py"), "help", "manga"], capture_output=True,
+                         text=True, timeout=30).stdout
+    check("`loki-make help manga` shows every key", "--action (list|project" in out and "--data" in out, out[:300])
+
+
 def main():
+    shell_agent_checks()
     ws, pid = engine_checks()
     agent_checks(ws, pid)
     asyncio.run(window_checks())

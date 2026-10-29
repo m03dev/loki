@@ -42,8 +42,8 @@ your_command_here
 ```
 
 Rules:
-- One code block per reply. Never invent output - wait for the real output.
-- Each command runs in a fresh shell in the working folder; `cd x && ...` only lasts for that command.
+- One code block per reply. Never invent output - wait for the real one.
+- Each command runs in a fresh shell in the working folder; a `cd` lasts for that command only.
 - Create files with a heredoc:  cat > path/file.py <<'EOF' ... EOF
 - A new project (a repo, an app, a site) goes in its OWN new folder inside the working folder: mkdir name && cd name
   && git init -b main. Never run git init in the working folder itself, and never commit .loki/ (private chats).
@@ -65,7 +65,7 @@ Rules:
   photo pixel-art 3d-render texture ...; --upscale 4)
   loki-make 3d "<object>" [--backend pixal3d]   loki-make video "<clip>"   loki-make upscale pic.png
   loki-make pixel pic.png --size 64   loki-make music "<style>" --seconds 60   loki-make voice --action speak --text "Hi"
-  loki-make shelf --action list   (more: sfx, sprites, LODs; loki-make manga / design)
+  loki-make shelf --action list   manga/design/playbook are LOKI's (not pip): loki-make help manga
 - The owner's other machine: loki-make machines   loki-make run-on "<full task>" --machine mac   loki-make job --job <id> --machine mac
 - When the task is done AND you have checked it (ls, cat, run it, git log ...), reply with exactly:
 ```bash
@@ -105,6 +105,12 @@ def make_wrapper() -> str:
         sh.chmod(0o755)
         if sys.platform == "win32":
             (d / "loki-make.cmd").write_text('@"%s" "%s" %%*\r\n' % (sys.executable, mcp), encoding="utf-8")
+        for short in ("manga", "design", "playbook"):   # `manga ...` as its own command (the agents typed it that way)
+            f = d / short
+            f.write_text('#!/bin/sh\nexec "%s" "%s" %s "$@"\n' % (py, str(mcp).replace("\\", "/"), short), encoding="utf-8")
+            f.chmod(0o755)
+            if sys.platform == "win32":
+                (d / (short + ".cmd")).write_text('@"%s" "%s" %s %%*\r\n' % (sys.executable, mcp, short), encoding="utf-8")
         return str(d)
     except Exception:  # noqa: BLE001
         return ""
