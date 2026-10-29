@@ -1,8 +1,8 @@
 # AGENTS.md - how to work on LOKI
 
 For every agent: Claude, Codex, LOKI's own driver. Read at the start of every session. Requests for LOKI's own
-driver are in `LOKI_TASKS.md`. The previous LOKI (Python, 246 modules) is kept as the git tag `legacy-v1`
-for reference: `git show legacy-v1:engine/<file>`.
+driver are in `LOKI_TASKS.md`. The previous LOKI (Python, 246 modules) is kept in history at commit `89c94b6`
+for reference: `git show 89c94b6:engine/<file>`.
 
 ## The rules
 
@@ -43,7 +43,7 @@ a few sharp tools, the work checked by the driver rather than trusted.
 - **Window** (`app/ui/index.html`, served by `lokid`): jobs, For you approvals, results as thumbnails, models.
 - **Launcher** (`app/loki_app.py`, stdlib Python): builds and starts `lokid`, opens the window, keeps the machine on
   `master` (update only after the new driver builds and answers; otherwise roll back).
-- **Art tools** (`tools/`): the Blender job runner and ComfyUI graphs carried over from legacy-v1, next to become MCP
+- **Art tools** (`tools/`): the Blender job runner and ComfyUI graphs carried over from the previous LOKI (`89c94b6`), next to become MCP
   servers. **Playbooks** (`playbooks/`): the art-pipeline roles.
 
 ## Commands

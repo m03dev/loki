@@ -29,4 +29,4 @@ cargo test -q
 cargo run -p lokid -- probe
 ```
 
-The previous LOKI is kept as the tag `legacy-v1`. License: AGPL-3.0.
+The previous LOKI is kept in history at commit `89c94b6`. License: AGPL-3.0.
