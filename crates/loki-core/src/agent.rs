@@ -43,7 +43,7 @@ pub struct DriverConfig {
 
 impl Default for DriverConfig {
     fn default() -> Self {
-        Self { window: 8, max_task_attempts: 8, rest_cap: Duration::from_secs(300), policy: Policy::default() }
+        Self { window: 8, max_task_attempts: 12, rest_cap: Duration::from_secs(300), policy: Policy::default() }
     }
 }
 

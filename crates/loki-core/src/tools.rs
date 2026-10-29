@@ -134,7 +134,18 @@ pub async fn run(ws: &Path, policy: &Policy, args: &Value, approved: bool) -> Ou
         let why = args["why"].as_str().unwrap_or("(no reason given)");
         return Outcome::NeedsOwner(format!("Wants to run `{cmd}` in {}: {why}", ws.display()));
     }
-    shell(ws, cmd, policy.command_timeout).await
+    shell(ws, &harden(cmd), policy.command_timeout).await
+}
+
+/// Make known tools report failure honestly. Blender exits 0 even when its Python script
+/// crashes, so a broken render looked like success; `--python-exit-code 1` fixes that.
+pub fn harden(cmd: &str) -> String {
+    let first = cmd.split_whitespace().next().unwrap_or("");
+    let prog = Path::new(first).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+    if prog == "blender" && cmd.contains("--python") && !cmd.contains("--python-exit-code") {
+        return cmd.replacen("--python", "--python-exit-code 1 --python", 1);
+    }
+    cmd.to_string()
 }
 
 pub async fn shell(ws: &Path, cmd: &str, timeout: Duration) -> Outcome {
@@ -194,6 +205,13 @@ mod tests {
         assert!(confine(ws, "../etc/passwd").is_err());
         assert_eq!(confine(ws, "/a/b.txt").unwrap(), PathBuf::from("/w/a/b.txt"));
         assert_eq!(confine(ws, "./a").unwrap(), PathBuf::from("/w/a"));
+    }
+
+    #[test]
+    fn blender_script_errors_fail_the_command() {
+        assert_eq!(harden("blender --background --python s.py"), "blender --background --python-exit-code 1 --python s.py");
+        assert_eq!(harden("blender -b --python-exit-code 1 --python s.py"), "blender -b --python-exit-code 1 --python s.py");
+        assert_eq!(harden("git status"), "git status");
     }
 
     #[test]
