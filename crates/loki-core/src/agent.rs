@@ -20,8 +20,11 @@ const SYSTEM: &str = "You are LOKI's driver: a patient production artist and tec
 on a long job by yourself. You work in a workspace folder on the owner's machine.\n\
 Rules:\n\
 - Reply with exactly ONE tool call per turn. No chit-chat.\n\
-- If there is no checklist yet, call `plan` first: 3-15 small tasks, each with a check \
-('file:<path>' or 'cmd:<command>' whenever possible).\n\
+- If there is no checklist yet, call `plan` first: 2-12 tasks, each producing something real. Every task's check \
+proves its OUTPUT exists: 'file:<output path>' (best) or 'cmd:<command that verifies>'. Never plan tasks just to \
+create folders: write_file creates missing folders itself.\n\
+- `run` takes ONE program per call: no &&, ;, |, > or < (those need the owner's OK). Use the commands of the \
+machine described under MACHINE (on Windows: cmd.exe, not bash).\n\
 - Work only on the CURRENT TASK. When its check should hold, call `mark_done`; the driver verifies it.\n\
 - If something fails, read the error, change your approach. Never repeat the exact same action.\n\
 - If a task is impossible right now, `block_task` with the reason and move on.\n\
@@ -48,6 +51,8 @@ pub struct Driver {
     pub pool: Arc<Mutex<ModelPool>>,
     pub llm: Llm,
     pub cfg: DriverConfig,
+    /// What this machine is and which programs it has (OS, shell, Blender, Python...).
+    pub machine: String,
 }
 
 struct Exchange {
@@ -75,11 +80,11 @@ fn render_tasks(tasks: &[Task]) -> String {
 
 impl Driver {
     pub fn new(pool: Arc<Mutex<ModelPool>>) -> Self {
-        Self { pool, llm: Llm::new(), cfg: DriverConfig::default() }
+        Self { pool, llm: Llm::new(), cfg: DriverConfig::default(), machine: machine_note() }
     }
 
     fn context(&self, j: &Journal, info: &RunInfo, tasks: &[Task], recent: &[Exchange], nudge: Option<&str>) -> Vec<Msg> {
-        let mut state = format!("GOAL:\n{}\n\nCHECKLIST:\n{}\n", info.goal, render_tasks(tasks));
+        let mut state = format!("MACHINE:\n{}\nWorkspace: {}\n\nGOAL:\n{}\n\nCHECKLIST:\n{}\n", self.machine, info.workspace.display(), info.goal, render_tasks(tasks));
         if let Some(t) = current_task(tasks) {
             state.push_str(&format!("\nCURRENT TASK: #{} {}\nCheck: {}\n", t.id, t.title, t.check));
         }
@@ -347,6 +352,34 @@ impl Driver {
             other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner")),
         }
     }
+}
+
+/// OS, shell and the creative tools found on PATH, so the model uses the right commands.
+pub fn machine_note() -> String {
+    let os = match std::env::consts::OS { "windows" => "Windows", "macos" => "macOS", "linux" => "Linux", o => o };
+    let shell = if cfg!(windows) { "cmd.exe (Windows commands: dir, copy, mkdir without -p)" } else { "sh" };
+    let mut have = Vec::new();
+    for prog in ["blender", "python", "python3", "ffmpeg", "magick", "git", "node"] {
+        if let Some(p) = which(prog) {
+            have.push(format!("{prog} ({})", p.display()));
+        }
+    }
+    format!("{os} {}, shell for `run`: {shell}\nPrograms available: {}", std::env::consts::ARCH,
+        if have.is_empty() { "none found".into() } else { have.join(", ") })
+}
+
+fn which(prog: &str) -> Option<std::path::PathBuf> {
+    let exts: Vec<String> = if cfg!(windows) { vec![".exe".into(), ".cmd".into(), ".bat".into()] } else { vec![String::new()] };
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        for e in &exts {
+            let c = dir.join(format!("{prog}{e}"));
+            if c.is_file() {
+                return Some(c);
+            }
+        }
+    }
+    None
 }
 
 fn short(s: &str, n: usize) -> String {

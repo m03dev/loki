@@ -329,19 +329,31 @@ def stop_old_engine() -> None:
 # ---------------------------------------------------------------- first light (proof on a fresh machine)
 
 FIRST_GOAL = (
-    "First light on this PC. Using Blender in background mode, build a small low-poly campfire scene from scratch "
-    "(stones in a ring, crossed logs, a few flame shapes with an emissive material, a ground disc), light it warmly, "
-    "and render it with Eevee to renders/campfire.png at 1024x1024. Write the Blender Python script to "
-    "scripts/campfire.py and run it with: blender --background --python scripts/campfire.py. "
-    "Then save the .blend to scenes/campfire.blend from the same script. Checks: file:renders/campfire.png and "
-    "file:scenes/campfire.blend."
+    "First light on this PC: prove the new LOKI can make art. Write ONE Blender Python script, scripts/campfire.py, "
+    "that builds a small low-poly campfire scene from scratch (a ring of stones, crossed logs, a few flame shapes "
+    "with an emissive orange material, a ground disc, a camera and warm lighting), saves the scene to "
+    "scenes/campfire.blend and renders it with Eevee to renders/campfire.png at 1024x1024. Use absolute paths built "
+    "from the script's own folder (os.path.dirname(os.path.abspath(__file__))) and create the output folders inside "
+    "the script. Then run it with: blender --background --python scripts/campfire.py . "
+    "Tasks and checks: the script (file:scripts/campfire.py), the render (file:renders/campfire.png), "
+    "the scene (file:scenes/campfire.blend)."
 )
 
 
 def first_light() -> None:
-    marker = HOME / "first_light.json"
+    marker = HOME / "first_light_v2.json"
     if marker.exists() or not WIN or not find_blender():
         return   # the PC proves the driver; the Mac stays light
+    try:   # an older first-light job left waiting is replaced by this one, never left hanging
+        old = json.loads((HOME / "first_light.json").read_text(encoding="utf-8")).get("run")
+        if old:
+            req = urllib.request.Request(URL + f"runs/{old}/reply", method="POST", headers={"Content-Type": "application/json"},
+                                         data=json.dumps({"approve": False, "note": "Replaced by a newer first-light job; stop here."}).encode())
+            urllib.request.urlopen(req, timeout=10)
+            urllib.request.urlopen(urllib.request.Request(URL + f"runs/{old}/stop", method="POST", data=b""), timeout=10)
+            log("declined and stopped the older first-light job %s" % old)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         req = urllib.request.Request(URL + "runs", data=json.dumps({"goal": FIRST_GOAL, "max_hours": 2}).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
