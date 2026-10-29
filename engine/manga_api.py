@@ -40,12 +40,13 @@ def _ask(state, timeout_s: float = 150):
         return None
 
     def once(prompt: str, provider: str, limit: float) -> str:
-        fut = asyncio.run_coroutine_threadsafe(agent._port_ask(prompt, max_tokens=4000, provider=provider), loop)  # pylint: disable=protected-access
-        try:
-            return fut.result(timeout=limit)
-        except Exception:  # noqa: BLE001
-            fut.cancel()
-            raise
+        # Its own event loop in this job's thread, not the engine's shared one. On 2026-10-29 DeepSeek answered the
+        # manga calls in 14-34 s (harness_data/usage.jsonl) yet every call "timed out after 150s": the coroutine waited
+        # its turn on the loop the chat and the agents keep busy, so the PC's small local model wrote every story.
+        t0 = time.time()
+        out = asyncio.run(asyncio.wait_for(agent._port_ask(prompt, max_tokens=4000, provider=provider), limit))  # pylint: disable=protected-access
+        print("[manga] %s answered in %.0f s" % (provider or "the main model", time.time() - t0), flush=True)
+        return out
 
     def ask(prompt: str) -> str:
         try:
