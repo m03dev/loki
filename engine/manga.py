@@ -213,9 +213,19 @@ Story method (follow it): normalise the facts of the premise first; decide the t
 (%(spine)s); give every page exactly one story job (setup, development, turn, payoff ...) and the last page the ending;
 pick visual evidence (props, places, gestures) that SHOW the story; give each main character a want and a contrast with
 the others. No filler pages.
+Plan the WHOLE story as one list of visible events first, then split it into pages (how storyboard artists work):
+- every event is something the reader SEES happen (not a feeling or a summary), and it is caused by the event before;
+- every event happens exactly ONCE in the whole manga - if the key moment (the reveal, the first bite, the punch) is on
+  page 2, no other page shows it again;
+- page 1 starts by showing the place and the main characters before anyone reacts to anything; a character only talks
+  about a thing the reader has already seen;
+- the world stays the same (one place, one time of day) unless an event changes it.
 Answer with JSON only:
 {"title": "...", "logline": "one sentence", "tone": "serious|gag|...", "ending": "<ending type>",
+ "world": {"place": "the one place, with 2-4 landmarks the reader will recognise", "time": "time of day and light",
+           "props": "the key objects and where they stand"},
  "pages": [{"n": 1, "beat": "setup|development|turn|payoff|...", "summary": "what happens on this page, 1-3 sentences",
+            "events": ["the visible events of this page, in order, 2-6 short lines"],
             "panels": <panel count this page needs>}]}"""
 
 CAST_PROMPT = """List the cast of this manga and LOCK each character's look so every artist draws them the same.
@@ -233,8 +243,11 @@ artist who reads only the look draws a person."""
 
 SCRIPT_PROMPT = """Write the panel script for page %(n)d of the manga "%(title)s".
 Premise: %(premise)s
+The world (the same in every panel unless an event changes it): %(world)s
 This page's job: %(beat)s - %(summary)s
-Previous page: %(prev)s
+THIS page shows exactly these events, in this order: %(events)s
+Already shown on earlier pages - do NOT show any of it again: %(done)s
+Comes on later pages - do NOT show it yet: %(later)s
 Cast (locked looks - refer to them by name): %(cast)s
 Format: %(format_note)s
 Panel count: %(count_note)s
@@ -246,6 +259,12 @@ insert) and the angles (eye level / low / high / bird's-eye / dutch / profile / 
 gets the biggest moment; dialogue is short (max ~18 words per balloon, max 3 balloons per panel); spoken names stay in
 the dialogue; the art description NEVER contains the dialogue words; a panel's style is one of normal, pop,
 watercolor, gekiga, sketch, chibi (keep the overall style unless a moment needs another).
+Continuity (storyboard rules): %(opening)severy panel shows one visible action, reaction or change that follows from the
+panel before it; a character only reacts to something the reader has already seen in an earlier panel; nothing happens by
+itself (a button is pressed by someone, a coin goes in before the tofu comes out); two panels never show the same action;
+keep where things stand (who is left, who is right, where the machine is) unless someone moves; a sound (CLANK, beep,
+whirr) is kind "sfx" with speaker "SFX" - an object that cannot talk never speaks; "characters" lists cast names or a plain
+group ("visitors"), never a number or an age.
 Answer with JSON only:
 {"panels": [{"n": 1, "shot": "...", "angle": "...", "setting": "where, time of day, light",
   "characters": ["names in the panel"], "action": "what we SEE (pose, gesture, expression, props) - no dialogue words",
@@ -292,14 +311,17 @@ def outline(ws, pid: str, ask: Callable[[str], str] | None = None, data: dict | 
                                                      "panels": 4 if proj["format"] == "4koma" else 6} for i in range(n)]}
     pages = []
     for i, pg in enumerate(o.get("pages") or []):
+        events = [" ".join(str(e).split())[:200] for e in (pg.get("events") or []) if str(e).strip()][:8]
         pages.append({"n": i + 1, "beat": str(pg.get("beat") or "")[:40], "summary": str(pg.get("summary") or "")[:800],
-                      "panels_target": _panel_count(proj, pg.get("panels"))})
+                      "events": events, "panels_target": _panel_count(proj, pg.get("panels"))})
+    world = o.get("world") if isinstance(o.get("world"), dict) else {}
     proj["outline"] = {"logline": str(o.get("logline") or proj["premise"])[:400], "tone": str(o.get("tone") or proj["tone"]),
-                       "ending": str(o.get("ending") or proj["ending"]), "pages": pages}
+                       "ending": str(o.get("ending") or proj["ending"]), "pages": pages,
+                       "world": {k: " ".join(str(world.get(k) or "").split())[:300] for k in ("place", "time", "props")}}
     if o.get("title") and not proj.get("title_fixed"):
         proj["title"] = str(o["title"])[:80]
     old = {p["n"]: p for p in proj.get("pages") or []}
-    proj["pages"] = [dict(old.get(p["n"], {}), n=p["n"], beat=p["beat"], summary=p["summary"],
+    proj["pages"] = [dict(old.get(p["n"], {}), n=p["n"], beat=p["beat"], summary=p["summary"], events=p["events"],
                           panels_target=p["panels_target"]) for p in pages]
     if o is data or (o and "(page 1 of" not in str((o.get("pages") or [{}])[0].get("summary", ""))):
         _wrote(proj, "outline")
@@ -414,13 +436,26 @@ def script(ws, pid: str, n: int, ask: Callable[[str], str] | None = None, data: 
     want = page.get("panels_target") or _panel_count(proj, None)
     raw = data
     if raw is None and ask is not None:
-        prev = _page(proj, n - 1, create=False) if n > 1 else None
+        done, later = [], []
+        for pg in proj.get("pages") or []:
+            if pg["n"] < n:     # what earlier pages really show (their panels), else their planned events
+                done += ["p%d: %s" % (pg["n"], p.get("action", "")[:120]) for p in pg.get("panels") or []] or \
+                    ["p%d: %s" % (pg["n"], e) for e in pg.get("events") or [pg.get("summary", "")]]
+            elif pg["n"] > n:
+                later += ["p%d: %s" % (pg["n"], e) for e in pg.get("events") or [pg.get("summary", "")]]
+        w = (proj.get("outline") or {}).get("world") or {}
         count_note = ("exactly 4" if proj["format"] == "4koma" else "%d (the outline planned it; use 5-8)" % want
                       if proj["format"] == "page" else "%d (4-7)" % want)
         try:
             raw = _json(ask(SCRIPT_PROMPT % {
                 "n": n, "title": proj["title"], "premise": proj["premise"], "beat": page.get("beat", ""),
-                "summary": page.get("summary", ""), "prev": (prev or {}).get("summary", "this is the first page"),
+                "summary": page.get("summary", ""),
+                "world": "; ".join("%s: %s" % (k, w[k]) for k in ("place", "time", "props") if w.get(k)) or "as the premise says",
+                "events": " | ".join(page.get("events") or []) or page.get("summary", ""),
+                "done": " | ".join(done)[:1800] or "nothing yet - this is the first page",
+                "later": " | ".join(later)[:900] or "nothing - this is the last page",
+                "opening": ("panel 1 is an establishing wide shot of the place with the main characters in it, before "
+                            "anyone reacts to anything; " if n == 1 else ""),
                 "cast": "; ".join(look_text(c) for c in proj.get("characters") or [])[:3000] or "invent at most 2",
                 "format_note": _format_note(proj), "count_note": count_note, "language": proj["language"],
                 "style": proj["style"]}))
@@ -450,6 +485,8 @@ def script(ws, pid: str, n: int, ask: Callable[[str], str] | None = None, data: 
 def normalize_panels(proj: dict, panels: list, want: int) -> list:
     out = []
     names = {c["name"].lower(): c["name"] for c in proj.get("characters") or []}
+    mute = {c["name"].lower() for c in proj.get("characters") or []
+            if re.search(r"\b(machine|robot|device|object|vending|car|clock|statue)\b", str(c.get("species") or ""), re.I)}
     for i, p in enumerate(panels or []):
         if not isinstance(p, dict):
             continue
@@ -458,13 +495,17 @@ def normalize_panels(proj: dict, panels: list, want: int) -> list:
             if not isinstance(d, dict) or not str(d.get("text") or "").strip():
                 continue
             kind = str(d.get("kind") or "speech").lower()
+            speaker = str(d.get("speaker") or "")
+            if kind == "speech" and re.fullmatch(r"[A-Z][A-Z!?.\- ]{1,14}", str(d.get("text") or "").strip()) \
+                    and speaker.lower() in mute:   # "Tofu-Mate: CLANK!" is a sound
+                kind, d = "sfx", dict(d, speaker="SFX")
             dl.append({"speaker": str(d.get("speaker") or "")[:40], "kind": kind if kind in KINDS else "speech",
                        "text": " ".join(str(d["text"]).split())[:240],
                        "place": str(d.get("place") or "")[:20].lower()})
         style = str(p.get("style") or proj.get("style") or "normal").lower()
         out.append({"n": len(out) + 1, "shot": str(p.get("shot") or "medium")[:40], "angle": str(p.get("angle") or "eye level")[:40],
                     "setting": str(p.get("setting") or "")[:300],
-                    "characters": [names.get(str(x).lower(), str(x))[:40] for x in (p.get("characters") or [])][:6],
+                    "characters": _cast_names(names, p.get("characters") or []),
                     "action": " ".join(str(p.get("action") or "").split())[:600],
                     "emotion": str(p.get("emotion") or "")[:120], "style": style if style in STYLES else "normal",
                     "dialogue": dl})
@@ -473,6 +514,20 @@ def normalize_panels(proj: dict, panels: list, want: int) -> list:
         while out and len(out) < 4:            # a 4-koma has four panels - a missing beat is a quiet panel
             out.append(dict(out[-1], n=len(out) + 1, dialogue=[], action=out[-1]["action"] + " (a quiet beat)"))
     return out[:8]
+
+
+def _cast_names(names: dict, raw: list) -> list:
+    """The panel's characters as cast names: "12 visitors" -> "visitors", a bare number or age is dropped (the script
+    model wrote Kitsune's age "12" as a character on 2026-10-28)."""
+    out = []
+    for x in raw:
+        t = re.sub(r"^\d+\s*", "", " ".join(str(x).split())).strip()
+        if not t or re.fullmatch(r"[\d\W_]+", t) or re.search(r"\b(years?|yrs?)\b", t, re.I):
+            continue
+        t = names.get(t.lower(), t)[:40]
+        if t not in out:
+            out.append(t)
+    return out[:6]
 
 
 def _page(proj: dict, n: int, create: bool = True) -> dict | None:
@@ -556,6 +611,13 @@ def panel_prompt(proj: dict, page: dict, panel: dict) -> dict:
     """What one panel's picture is asked for: the drawing only - the words are lettered by LOKI afterwards."""
     by = {c["name"].lower(): c for c in proj.get("characters") or []}
     cast_bits = ["%s: %s" % (n, draw_text(by[n.lower()])) for n in panel.get("characters") or [] if n.lower() in by]
+    w = (proj.get("outline") or {}).get("world") or {}
+    setting = str(panel.get("setting") or "")
+    if w.get("place") and (not setting or re.match(r"\s*(same|the same|as before)\b", setting, re.I)):
+        setting = "%s, %s" % (w["place"], w.get("time") or "")      # the scene memory every panel shares
+    elif w.get("time") and w["time"].split(",")[0].lower() not in setting.lower():
+        setting = "%s; %s" % (setting, w["time"])
+    panel = dict(panel, setting=setting.strip(" ,;"))
     style = STYLES.get(panel.get("style") or proj.get("style") or "normal", STYLES["normal"])
     # "Manga panel" made FLUX draw a whole comic page (sub-panels, balloons, made-up Japanese) inside one panel
     # (2026-10-28, page 1 panel 1); it ignores "no ..." words, so the picture is described as ONE scene instead
@@ -645,17 +707,38 @@ def draw_page(ws, pid: str, n: int, make: Callable[[dict], dict], only: list | N
         return {"ok": False, "error": "page %d has no script yet - write the script first" % n}
     W, H, boxes = rects(proj, page)
     made, errors = [], []
+    last_drawn: dict = {}
     for panel, box in zip(page["panels"], boxes):
-        if only and panel["n"] not in only:
-            continue
-        if not only and panel.get("image") and (Path(ws) / panel["image"]).is_file():
-            continue                            # already drawn (a redraw asks for it by number)
+        drawn = bool(panel.get("image")) and (Path(ws) / panel["image"]).is_file()
+        if (only and panel["n"] not in only) or (not only and drawn):
+            if drawn:
+                last_drawn = panel              # the next panel's "panel before" reference
+            continue                            # (a redraw asks for a drawn panel by number)
         args = panel_prompt(proj, page, panel)
         if note:
             args["prompt"] = ("%s Owner's note: %s" % (args["prompt"], note))[:1800]
         w, h = _size_for(box)
-        args.update(width=w, height=h, folder="manga/%s/panels" % proj["id"], reference_optional=True)
-        res = make(args)
+        args.update(width=w, height=h, folder="manga/%s/panels" % proj["id"])
+        # References, as working comic pipelines do: each character's sheet, plus the panel drawn just before (same
+        # place, same style - the "sliding window"). Before this every panel was drawn from words alone and the cast
+        # changed from panel to panel (a fox, then a fox-eared girl; a vending machine, then a boy).
+        refs = list(args.get("reference") or [])
+        prev = last_drawn.get("image")
+        if prev and (Path(ws) / prev).is_file() and len(refs) < 3:
+            refs.append(prev)
+        res = None
+        if refs:
+            res = make(dict(args, reference=refs, reference_optional=False,
+                            prompt=("Draw a new scene with the same characters as the reference pictures (their design, "
+                                    "not their pose or layout). " + args["prompt"])))
+            if res.get("ok") and res.get("files"):
+                panel["refs"] = refs
+            elif not res.get("waiting_for_owner"):
+                errors.append("panel %d: drawn without references (%s)" % (panel["n"], str(res.get("error") or "")[:160]))
+                res = None
+        if res is None:
+            res = make(dict(args, reference=[], reference_optional=True))
+            panel.pop("refs", None)
         if not res.get("ok") or not res.get("files"):
             errors.append("panel %d: %s" % (panel["n"], res.get("error") or "nothing was drawn"))
             if res.get("waiting_for_owner"):
@@ -664,6 +747,7 @@ def draw_page(ws, pid: str, n: int, make: Callable[[dict], dict], only: list | N
         panel["image"] = str(res["files"][0]).replace("\\", "/")
         panel["prompt"] = args["prompt"]
         made.append(panel["image"])
+        last_drawn = panel
         # the page grows panel by panel in the window (owner 2026-10-28: "make sure they show preview" - before this the
         # page stayed empty until every panel of a several-minute draw was done)
         save(ws, proj)
