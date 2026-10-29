@@ -64,13 +64,13 @@ check("when every model fails the step says so", "outline" in out["warnings"] an
 check("and the review lists it as an open issue", any(i.startswith("outline:") for i in rv["issues"]))
 
 # A model that timed out is tried last on the next step, and first again once it answers.
-manga_api.SLOW.clear()
+manga_api.SLOW_MODELS.clear()
 c = fake_agent({"nvidia": TimeoutError(), "local": GOOD})
 run(c)
 c.calls.clear()
 run(c)
 check("a model that just timed out is tried last next time", c.calls == ["local"])
-manga_api.SLOW.clear()
+manga_api.SLOW_MODELS.clear()
 
 # A retired NVIDIA model: a real call's 404 sticks even though /models still lists it (it used to flip back to ready).
 import provider_health  # noqa: E402
@@ -83,5 +83,9 @@ reg.record_success("nvidia-pro")
 check("and comes back the moment a real call works", reg.usable("nvidia-pro")[0])
 reg.record_failure("other", "HTTP 404 model not found")
 check("a plain missing model is benched", not reg.usable("other")[0])
+# Writing and drawing steps stay background jobs (a0df9c2 named the slow-model table SLOW and replaced this set:
+# every step then ran inside the HTTP request and the window hung until the picture was drawn).
+check("outline / sheet / draw_page are still background actions",
+      isinstance(manga_api.SLOW, set) and {"outline", "characters", "script", "sheet", "draw_page"} <= manga_api.SLOW)
 print("\n%d passed, %d failed (%.1f s)" % (PASSED, FAILED, time.time() - t0))
 sys.exit(1 if FAILED else 0)

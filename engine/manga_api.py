@@ -22,8 +22,8 @@ import manga
 
 SLOW = {"outline", "characters", "script", "sheet", "draw_page", "draw", "edit_panel"}
 JOBS: dict = {}
-SLOW: dict = {}          # provider -> until when it is tried last (it just timed out on a writing step)
-SLOW_FOR_S = 20 * 60
+SLOW_MODELS: dict = {}   # provider -> until when it is tried last (it just timed out on a writing step)
+SLOW_MODEL_S = 20 * 60
 _LOCK = threading.Lock()
 
 
@@ -55,7 +55,7 @@ def _ask(state, timeout_s: float = 150):
         now = time.time()
         # a model that just timed out goes last for a while (the main driver timed out on every
         # outline / cast step on 2026-10-28 - 150 s lost each time before the PC's model wrote it)
-        ladder.sort(key=lambda prov: SLOW.get(prov, 0) > now)
+        ladder.sort(key=lambda prov: SLOW_MODELS.get(prov, 0) > now)
         why = []
         for i, provider in enumerate(ladder or [""]):
             limit = timeout_s if i == 0 else min(timeout_s, 90.0)
@@ -63,14 +63,14 @@ def _ask(state, timeout_s: float = 150):
             try:
                 raw = once(prompt, provider, limit)
                 manga._json(raw)   # pylint: disable=protected-access - the same check the caller makes
-                SLOW.pop(provider, None)
+                SLOW_MODELS.pop(provider, None)
                 if i:
                     print("[manga] written by %s after: %s" % (provider, "; ".join(why)), flush=True)
                 return raw
             except Exception as exc:  # noqa: BLE001 - next model
                 timed_out = isinstance(exc, TimeoutError) or type(exc).__name__ == "TimeoutError"
                 if timed_out:
-                    SLOW[provider] = time.time() + SLOW_FOR_S
+                    SLOW_MODELS[provider] = time.time() + SLOW_MODEL_S
                 kind = "timed out after %ds" % int(time.time() - t0) if timed_out else \
                     "%s: %s" % (type(exc).__name__, str(exc)[:160])
                 why.append("%s %s" % (provider or "main model", kind))
