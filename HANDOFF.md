@@ -14,6 +14,18 @@ Linux box (headless Chromium, stubs, headless Godot).
 
 Last updated: 2026-10-28 23:30 (chat keeps the strong model; receipts + LOKI runs the checks itself; install cards; For you stays mounted - see "2026-10-28 night" below); before that 2026-10-28 22:30 (one core agent + the owner's playbooks and toolboxes); before that 2026-10-28 21:00 (Manga Studio, Design + phone testing); before that 2026-10-28 12:00 (the agent system, engine/agentsys/); before that 2026-10-24 14:05 (owner idea I5: Forge hotbox menus stay clear of the title strip - Windows > OpenChannelsLayers is clickable again; app/ui/forge_pro.js forgeTopInset, tests/test_forge_pro_ui.py).
 
+## 2026-10-29 morning - why the loop died (Claude, from the Mac's real jobs + both machines' logs)
+
+- Numbers: 350 jobs in 3 days, 40 DONE (11%). Every model route but NVIDIA's free DeepSeek Flash is dead (DeepSeek /
+  OpenRouter no credit, free daily caps hit, Gemini quota, Nemotron/Kimi 404 on this key); Flash took 80-900 s a step.
+  The PC's chat brain is qwen3-abliterated 8B, unloaded by the memory guard at 92-94% RAM.
+- Fixed (shipped, 651-654): a request's id is its title, so an edited request keeps its tries (edits used to restart
+  it hourly); the proxy trims old tool output past 60k characters (jobs sent 19.6k tokens at step 1 and 535k by step 16);
+  a premade expert only on a clear fit (score 18+; loose matches gave a manga fix the auth engineer); the Z-Image line
+  once a day per machine.
+- Owner direction: free and offline, no paid providers. Next: the PC's GPU as LOKI's always-on brain with a lean agent
+  loop made for a local model; measure what the 3070 Ti + its RAM can really run first.
+
 ## 2026-10-28 night - why LOKI felt weaker, and fake proofs (Claude, read on the PC)
 
 - **Chat on the small model.** Every "capable route before the 8B" rule was jobs-only; pc-local (the PC's 8B over
