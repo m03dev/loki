@@ -22,6 +22,8 @@ import manga
 
 SLOW = {"outline", "characters", "script", "sheet", "draw_page", "draw", "edit_panel"}
 JOBS: dict = {}
+SLOW: dict = {}          # provider -> until when it is tried last (it just timed out on a writing step)
+SLOW_FOR_S = 20 * 60
 _LOCK = threading.Lock()
 
 
@@ -50,6 +52,10 @@ def _ask(state, timeout_s: float = 150):
             ladder = list(agent.port_ladder()) if hasattr(agent, "port_ladder") else [""]
         except Exception:  # noqa: BLE001
             ladder = [""]
+        now = time.time()
+        # a model that just timed out goes last for a while (the main driver timed out on every
+        # outline / cast step on 2026-10-28 - 150 s lost each time before the PC's model wrote it)
+        ladder.sort(key=lambda prov: SLOW.get(prov, 0) > now)
         why = []
         for i, provider in enumerate(ladder or [""]):
             limit = timeout_s if i == 0 else min(timeout_s, 90.0)
@@ -57,12 +63,16 @@ def _ask(state, timeout_s: float = 150):
             try:
                 raw = once(prompt, provider, limit)
                 manga._json(raw)   # pylint: disable=protected-access - the same check the caller makes
+                SLOW.pop(provider, None)
                 if i:
                     print("[manga] written by %s after: %s" % (provider, "; ".join(why)), flush=True)
                 return raw
             except Exception as exc:  # noqa: BLE001 - next model
-                kind = "timed out after %ds" % int(time.time() - t0) if isinstance(exc, TimeoutError) or \
-                    type(exc).__name__ == "TimeoutError" else "%s: %s" % (type(exc).__name__, str(exc)[:160])
+                timed_out = isinstance(exc, TimeoutError) or type(exc).__name__ == "TimeoutError"
+                if timed_out:
+                    SLOW[provider] = time.time() + SLOW_FOR_S
+                kind = "timed out after %ds" % int(time.time() - t0) if timed_out else \
+                    "%s: %s" % (type(exc).__name__, str(exc)[:160])
                 why.append("%s %s" % (provider or "main model", kind))
         print("[manga] every model failed: %s" % "; ".join(why), flush=True)
         raise RuntimeError("every model failed - " + "; ".join(why))

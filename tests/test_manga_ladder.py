@@ -63,6 +63,15 @@ out, rv = run(b)
 check("when every model fails the step says so", "outline" in out["warnings"] and "every model failed" in out["warnings"]["outline"])
 check("and the review lists it as an open issue", any(i.startswith("outline:") for i in rv["issues"]))
 
+# A model that timed out is tried last on the next step, and first again once it answers.
+manga_api.SLOW.clear()
+c = fake_agent({"nvidia": TimeoutError(), "local": GOOD})
+run(c)
+c.calls.clear()
+run(c)
+check("a model that just timed out is tried last next time", c.calls == ["local"])
+manga_api.SLOW.clear()
+
 # A retired NVIDIA model: a real call's 404 sticks even though /models still lists it (it used to flip back to ready).
 import provider_health  # noqa: E402
 reg = provider_health.Registry(Path(tempfile.mkdtemp()) / "h.json")
