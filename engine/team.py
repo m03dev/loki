@@ -152,7 +152,10 @@ def premade_specialist(role: str, brief: str, goal: str = "") -> str:
                  "builder": "developer engineer pro", "tester": "test automation qa engineer",
                  "reviewer": "code reviewer review", "browser": "browser e2e test playwright"}.get(role, role)
         hits = specialist_library.best_specialists("%s %s" % (goal or brief[-600:], words), 1, "agent")
-        if not hits or hits[0]["score"] < 6:
+        # A real fit scores 20+ (FastAPI goal -> fastapi-pro 28.8); a loose word match 8-12 - which gave a manga
+        # fix the "auth-integration-engineer" and an NVIDIA-route fix "qa"/"playwright" (the Mac's jobs, 2026-10-29):
+        # 800 tokens of the wrong expert in every step. Only a clear fit is added.
+        if not hits or hits[0]["score"] < float(os.getenv("LOKI_TEAM_PREMADE_MIN", "18") or 18):
             return ""
         text = clean_playbook(specialist_library.specialist_text(hits[0], 3000))
     except Exception:  # noqa: BLE001 - the brief stands alone

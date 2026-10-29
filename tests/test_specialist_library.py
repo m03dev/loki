@@ -202,5 +202,13 @@ check("the new libraries are registered for download",
       {"wshobson-agents", "voltagent-subagents", "nano-banana-prompts", "chatgpt-prompts", "wan-prompts"} <=
       set(ecc_sync.SOURCES))
 
+# a loose word match (score 8-12) adds no expert - a manga fix once got the auth engineer (2026-10-29)
+import specialist_library as _sl  # noqa: E402
+import team as _team  # noqa: E402
+_saved_best = _sl.best_specialists
+_sl.best_specialists = lambda *a, **k: [{"name": "auth-integration-engineer", "lib": "x", "score": 10.8}]
+check("a loose match adds no premade expert", _team.premade_specialist("builder", "fix the manga panels", "manga") == "")
+_sl.best_specialists = _saved_best
+
 print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
 sys.exit(1 if FAIL else 0)
