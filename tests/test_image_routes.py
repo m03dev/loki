@@ -42,6 +42,7 @@ try:
 except Exception as exc:  # noqa: BLE001
     ok, res = False, str(exc)
 check("a timed-out NVIDIA model moves on to the next one", ok and tried[:2] == ["flux.2-klein-4b", "flux.1-dev"])
+imagegen._bench_file().unlink(missing_ok=True)   # that timeout benched klein; the next checks start clean
 
 check("all-410 is benched for days", imagegen.bench_for("FLUX.1-dev: HTTP 410; FLUX.1-schnell: HTTP 410")[0] >= 86400)
 check("a free-tier limit of 0 is benched",
@@ -71,5 +72,13 @@ imagegen.nvidia(long_prompt, 1024, 1024, tempfile.mkdtemp(), 3, sleep=lambda s: 
                 request=lambda u, k, b, h, t: sent.append((u.rsplit("/", 1)[-1], len(b["prompt"]))) or
                 {"artifacts": [{"base64": "iVBORw0KGgo="}]})
 check("FLUX.2 klein gets at most 800 characters", sent[:1] and sent[0][1] <= 800)
+tried.clear()
+imagegen._bench_file().unlink(missing_ok=True)
+imagegen.bench("nvidia:black-forest-labs/flux.1-dev", 600, "it answered HTTP 500 a moment ago")
+try:
+    imagegen.nvidia("a fox", 1024, 1024, tempfile.mkdtemp(), 7, request=fake_call, sleep=lambda s: None)
+except Exception:  # noqa: BLE001
+    pass
+check("a model that just failed is skipped for a while", "flux.1-dev" not in tried and "flux.1-schnell" in tried)
 print("\n%d passed, %d failed (%.1f s)" % (PASSED, FAILED, time.time() - t0))
 sys.exit(1 if FAILED else 0)

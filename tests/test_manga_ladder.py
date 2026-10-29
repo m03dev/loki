@@ -113,6 +113,8 @@ pp = manga.panel_prompt(proj, {}, {"shot": "wide", "angle": "low", "action": "Ki
                                    "dialogue": [{"text": "hi", "place": "top"}]})["prompt"]
 check("a panel prompt stays under 800 and keeps no-text and black and white",
       len(pp) <= 800 and "No text" in pp and "black and white" in pp)
+check("a panel is asked for as one picture, not a comic page",
+      pp.startswith("One single illustration") and "Manga panel" not in pp and "not a comic page" in pp)
 
 # Two steps on one project at once do not undo each other (page 1's new script was overwritten by page 2's job).
 import json as _json_mod  # noqa: E402

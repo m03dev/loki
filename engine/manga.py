@@ -557,16 +557,21 @@ def panel_prompt(proj: dict, page: dict, panel: dict) -> dict:
     by = {c["name"].lower(): c for c in proj.get("characters") or []}
     cast_bits = ["%s: %s" % (n, draw_text(by[n.lower()])) for n in panel.get("characters") or [] if n.lower() in by]
     style = STYLES.get(panel.get("style") or proj.get("style") or "normal", STYLES["normal"])
-    parts = ["Manga panel, %s shot, %s." % (panel.get("shot") or "medium", panel.get("angle") or "eye level"),
+    # "Manga panel" made FLUX draw a whole comic page (sub-panels, balloons, made-up Japanese) inside one panel
+    # (2026-10-28, page 1 panel 1); it ignores "no ..." words, so the picture is described as ONE scene instead
+    parts = ["One single illustration of one moment, %s shot, %s." % (panel.get("shot") or "medium",
+                                                                    panel.get("angle") or "eye level"),
              panel.get("action") or "",
              ("Setting: " + panel["setting"]) if panel.get("setting") else "",
              ("Mood: " + panel["emotion"]) if panel.get("emotion") else "",
              ("Characters (draw exactly these, same face, hair and outfit as described): " + " | ".join(cast_bits))
              if cast_bits else "",
              "Style: " + style + ".", COLOUR.get(proj.get("colour") or "mono", COLOUR["mono"]) + ".",
-             "Leave clear empty space near the %s for speech balloons." % _space_hint(panel) if panel.get("dialogue") else "",
-             "No text, no letters, no speech bubbles, no captions, no watermark, no panel borders."]
-    style_bits = [x for x in parts if x.startswith(("Style: ", "Leave clear", "No text"))] + \
+             "Keep the %s of the picture calm and empty (plain sky, wall or shadow)." % _space_hint(panel)
+             if panel.get("dialogue") else "",
+             "No text, no letters, no speech bubbles, no captions, no watermark, no panel borders - one full-bleed "
+             "picture, not a comic page."]
+    style_bits = [x for x in parts if x.startswith(("Style: ", "Keep the", "No text"))] + \
         [x for x in parts if x in COLOUR.values() or x.rstrip(".") in COLOUR.values()]
     body = [x for x in parts[1:] if x and x not in style_bits]
     prompt = budget(parts[0], body, " ".join(x for x in style_bits if x))

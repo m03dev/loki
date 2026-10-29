@@ -620,6 +620,10 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
     call = request or _json_request
     errors = []
     for model in NVIDIA_IMAGE_MODELS:
+        why_b = benched("nvidia:" + model)
+        if why_b and model != NVIDIA_IMAGE_MODELS[-1] or (why_b and errors):
+            errors.append("%s: skipped (%s)" % (model, why_b))   # 2026-10-28: dev's 500s and schnell's timeouts
+            continue                                            # cost ~5 minutes on every manga panel
         flux1 = "flux.1" in model
         w, h = nearest_size(width, height) if flux1 else fit_side(width, height, FLUX2_MAX_SIDE)
         ex = extra or {}
@@ -659,6 +663,9 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
                 break
         if data is None:
             code = getattr(exc, "code", "?")
+            if code in (500, 502, 503, 504) or code == "?":
+                bench("nvidia:" + model, 30 * 60, "it %s a moment ago" % ("timed out" if code == "?" else
+                                                                        "answered HTTP %s" % code))
             detail = _http_detail(exc) if code in (400, 404, 422) else ""   # what NVIDIA says is wrong (422 x2 unexplained)
             errors.append(("%s: HTTP %s" % (model, code) + (" %s" % " ".join(detail.split())[:180] if detail else ""))
                           if code != "?" else "%s: %s" % (model, type(exc).__name__))
