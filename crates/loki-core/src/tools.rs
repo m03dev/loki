@@ -26,7 +26,8 @@ impl Default for Policy {
     fn default() -> Self {
         let auto = [
             "ls", "cat", "head", "tail", "wc", "echo", "mkdir", "touch", "cp", "mv", "find", "grep",
-            "git", "python", "python3", "node", "cargo", "blender", "ffmpeg", "magick", "convert",
+            "git", "python", "python3", "node", "cargo", "blender", "ffmpeg", "ffprobe", "magick", "convert",
+            "dir", "type", "where", "findstr", "tree",
         ];
         Self {
             auto_commands: auto.iter().map(|s| s.to_string()).collect(),

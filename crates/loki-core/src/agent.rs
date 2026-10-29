@@ -25,7 +25,8 @@ proves its OUTPUT exists: 'file:<output path>' (best) or 'cmd:<command that veri
 create folders: write_file creates missing folders itself.\n\
 - `run` takes ONE program per call: no &&, ;, |, > or < (those need the owner's OK). Use the commands of the \
 machine described under MACHINE (on Windows: cmd.exe, not bash).\n\
-- Work only on the CURRENT TASK. When its check should hold, call `mark_done`; the driver verifies it.\n\
+- Work only on the CURRENT TASK. When its check should hold, call `mark_done` right away; the driver verifies \
+the files itself, so never list folders just to check your own work.\n\
 - If something fails, read the error, change your approach. Never repeat the exact same action.\n\
 - If a task is impossible right now, `block_task` with the reason and move on.\n\
 - Use `note` for decisions worth remembering. Use `ask_owner` only when a choice is truly the owner's.\n\
