@@ -55,5 +55,12 @@ plan = imagegen.plan_order("auto")
 check("a benched route leaves the order and says why",
       "huggingface" not in plan["order"] and "benched" in plan["skipped"].get("huggingface", ""))
 check("a forced backend is still tried", imagegen.plan_order("huggingface")["order"] == ["huggingface"])
+check("a 1536x1024 sheet is sent to FLUX.2 as 1024x672", imagegen.fit_side(1536, 1024, 1024) == (1024, 672))
+check("a 1024x1024 picture is left as it is", imagegen.fit_side(1024, 1024, 1024) == (1024, 1024))
+sizes = []
+imagegen.nvidia("a fox", 1536, 1024, tempfile.mkdtemp(), 3, sleep=lambda s: None,
+                request=lambda u, k, b, h, t: sizes.append((b["width"], b["height"])) or
+                {"artifacts": [{"base64": "iVBORw0KGgo="}]})
+check("FLUX.2 gets the fitted size", sizes[:1] == [(1024, 672)])
 print("\n%d passed, %d failed (%.1f s)" % (PASSED, FAILED, time.time() - t0))
 sys.exit(1 if FAILED else 0)

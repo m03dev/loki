@@ -447,6 +447,16 @@ NVIDIA_IMAGE_MODELS = [m.strip() for m in os.environ.get(
 FLUX1_SIZES = [(1024, 1024), (768, 1344), (1344, 768), (832, 1216), (1216, 832), (896, 1152), (1152, 896)]
 
 
+# FLUX.2 klein on NVIDIA drew 1024x1024 here but answered HTTP 422 to a 1536x1024 manga character sheet (2026-10-28)
+FLUX2_MAX_SIDE = int(os.environ.get("LOKI_FLUX2_MAX_SIDE", "1024") or 1024)
+
+
+def fit_side(width, height, cap):
+    """(w, h) scaled down so neither side is over `cap`, keeping the aspect, multiples of 16."""
+    scale = min(1.0, float(cap) / max(width, height, 1))
+    return max(256, int(width * scale) // 16 * 16), max(256, int(height * scale) // 16 * 16)
+
+
 def nearest_size(width, height, sizes=FLUX1_SIZES):
     want = width / float(height)
     return min(sizes, key=lambda s: abs((s[0] / float(s[1])) - want))
@@ -600,7 +610,7 @@ def nvidia(prompt, width, height, out_dir, seed, request=None, sleep=None, extra
     errors = []
     for model in NVIDIA_IMAGE_MODELS:
         flux1 = "flux.1" in model
-        w, h = nearest_size(width, height) if flux1 else (width, height)
+        w, h = nearest_size(width, height) if flux1 else fit_side(width, height, FLUX2_MAX_SIDE)
         ex = extra or {}
         body = {"prompt": prompt[:2000], "width": w, "height": h, "seed": int(seed) % 2**32,
                 "steps": int(ex.get("steps") or (4 if "schnell" in model or "klein" in model else 30))}
