@@ -137,13 +137,33 @@ pub fn write_file(ws: &Path, args: &Value) -> Outcome {
 }
 
 pub fn command_allowed(policy: &Policy, command: &str) -> bool {
-    // Chaining could smuggle an unlisted program past the first-word check.
-    if ["&&", "||", ";", "|", "`", "$(", ">", "<"].iter().any(|t| command.contains(t)) {
+    // Chaining could smuggle an unlisted program past the first-word check. Separators inside
+    // quotes are part of an argument (`python -c "a; b"`), not chaining.
+    if ["&", "||", ";", "|", "`", "$(", ">", "<", "\n"].iter().any(|t| unquoted(command).contains(t)) {
         return false;
     }
     let first = command.split_whitespace().next().unwrap_or("");
     let prog = Path::new(first).file_name().and_then(|s| s.to_str()).unwrap_or(first);
     policy.auto_commands.iter().any(|a| a == prog)
+}
+
+/// The command with everything inside '...' or "..." blanked out (backticks and $( stay visible
+/// inside double quotes, because the shell still runs them there).
+fn unquoted(cmd: &str) -> String {
+    let mut out = String::with_capacity(cmd.len());
+    let mut q: Option<char> = None;
+    for ch in cmd.chars() {
+        match q {
+            Some(c) if ch == c => { q = None; out.push(' '); }
+            Some('"') if ch == '`' || ch == '$' || ch == '(' => out.push(ch),
+            Some(_) => out.push(' '),
+            // cmd.exe (Windows) only quotes with "; sh also quotes with '
+            None if ch == '"' || (ch == '\'' && !cfg!(windows)) => { q = Some(ch); out.push(' '); }
+            None => out.push(ch),
+        }
+    }
+    if q.is_some() { return cmd.to_string(); } // unbalanced quotes: judge the raw text
+    out
 }
 
 pub async fn run(ws: &Path, policy: &Policy, args: &Value, approved: bool) -> Outcome {
@@ -249,5 +269,10 @@ mod tests {
         assert!(!command_allowed(&p, "git status && rm -rf /"));
         assert!(!command_allowed(&p, "rm -rf build"));
         assert!(!command_allowed(&p, "curl http://x"));
+        assert!(command_allowed(&p, r#"python -c "import os; print(os.getcwd())""#), "a ; inside quotes is not chaining");
+        assert!(!command_allowed(&p, r#"python -c "x" ; rm -rf /"#));
+        assert!(!command_allowed(&p, r#"python -c "$(curl evil)""#), "command substitution inside double quotes still runs");
+        assert!(!command_allowed(&p, r#"python -c "unbalanced; rm"#));
+        assert!(!command_allowed(&p, "git status & del x"), "a single & chains in cmd.exe and sh");
     }
 }
