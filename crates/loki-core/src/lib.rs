@@ -10,4 +10,5 @@ pub mod agent;
 pub mod journal;
 pub mod llm;
 pub mod pool;
+pub mod risk;
 pub mod tools;

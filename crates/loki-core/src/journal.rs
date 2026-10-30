@@ -83,6 +83,15 @@ pub struct RunInfo {
     /// Turns in a row without progress, kept across pauses and approvals.
     #[serde(default)]
     pub idle_turns: u32,
+    /// "always" | "big" | "off": ask the owner a few option questions before planning.
+    #[serde(default)]
+    pub interview: String,
+    /// The interview happened (or was skipped on purpose).
+    #[serde(default)]
+    pub interviewed: bool,
+    /// The driver already reminded the model to interview once.
+    #[serde(default)]
+    pub interview_asked: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,6 +176,9 @@ impl Journal {
             title: title_of(goal),
             approved_commands: vec![],
             idle_turns: 0,
+            interview: "off".into(),
+            interviewed: false,
+            interview_asked: false,
         };
         let j = Self { dir };
         j.save_info(&info)?;

@@ -1,0 +1,460 @@
+[
+ {
+  "tag": "qwen3.8:27b",
+  "size": 18.0,
+  "need": 22,
+  "score": 94,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "why": "the newest Qwen: the strongest open agent and coding model a home computer can run",
+  "family": "standard"
+ },
+ {
+  "tag": "qwen3.5:35b-a3b",
+  "size": 22.0,
+  "need": 26,
+  "score": 91,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "moe": true,
+  "why": "big-model quality, but only 3B active so it answers quickly",
+  "family": "standard"
+ },
+ {
+  "tag": "gemma4:26b",
+  "size": 17.0,
+  "need": 21,
+  "score": 89,
+  "roles": [
+   "agent"
+  ],
+  "moe": true,
+  "why": "Google's Gemma 4: strong tool use, sees images",
+  "family": "standard"
+ },
+ {
+  "tag": "qwen3-coder:30b",
+  "size": 19.0,
+  "need": 23,
+  "score": 88,
+  "roles": [
+   "code"
+  ],
+  "moe": true,
+  "why": "built for coding agents, 256K context, 3B active so it is quick",
+  "family": "standard"
+ },
+ {
+  "tag": "gpt-oss:20b",
+  "size": 14.0,
+  "need": 16,
+  "score": 88,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "moe": true,
+  "why": "OpenAI's open model: dependable tool calls, fast for its size",
+  "family": "standard"
+ },
+ {
+  "tag": "qwen3:14b",
+  "size": 9.3,
+  "need": 12,
+  "score": 85,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "why": "reliable tool calling and good reasoning",
+  "family": "standard"
+ },
+ {
+  "tag": "qwen3.5:9b",
+  "size": 6.6,
+  "need": 8.5,
+  "score": 84,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "why": "the best small all-rounder: tools, coding, 256K context",
+  "family": "standard"
+ },
+ {
+  "tag": "gemma4:12b",
+  "size": 8.0,
+  "need": 10,
+  "score": 83,
+  "roles": [
+   "agent"
+  ],
+  "why": "Gemma 4 mid-size: good tool use, sees images",
+  "family": "standard"
+ },
+ {
+  "tag": "hf.co/prism-ml/Ternary-Bonsai-2-9B-gguf:Ternary-Bonsai-2-9B-Q2_0",
+  "size": 2.6,
+  "need": 4.5,
+  "score": 83,
+  "roles": [
+   "agent",
+   "fast"
+  ],
+  "family": "bonsai",
+  "why": "Bonsai 2 9B: Qwen3.5-9B quality in 2.6 GB (ternary weights), calls tools - the most model per GB"
+ },
+ {
+  "tag": "hf.co/prism-ml/Ternary-Bonsai-2-4B-gguf:Ternary-Bonsai-2-4B-Q2_0",
+  "size": 1.2,
+  "need": 2.5,
+  "score": 71,
+  "roles": [
+   "fast",
+   "agent"
+  ],
+  "family": "bonsai",
+  "why": "Bonsai 2 4B: a capable agent model in 1.2 GB"
+ },
+ {
+  "tag": "hf.co/prism-ml/Ternary-Bonsai-2-2B-gguf:Ternary-Bonsai-2-2B-Q2_0",
+  "size": 0.6,
+  "need": 1.5,
+  "score": 57,
+  "roles": [
+   "fast"
+  ],
+  "family": "bonsai",
+  "why": "Bonsai 2 2B: 0.6 GB, for the smallest machines and quick replies"
+ },
+ {
+  "tag": "qwen3:8b",
+  "size": 5.2,
+  "need": 7,
+  "score": 78,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "why": "the proven 8 GB agent model",
+  "family": "standard"
+ },
+ {
+  "tag": "granite4.1:8b",
+  "size": 5.3,
+  "need": 7,
+  "score": 74,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "why": "IBM Granite 4.1: steady tool calls and clean JSON",
+  "family": "standard"
+ },
+ {
+  "tag": "qwen3.5:4b",
+  "size": 3.4,
+  "need": 5,
+  "score": 72,
+  "roles": [
+   "fast",
+   "agent"
+  ],
+  "why": "small and quick, still calls tools well",
+  "family": "standard"
+ },
+ {
+  "tag": "granite4.1:3b",
+  "size": 2.1,
+  "need": 3,
+  "score": 60,
+  "roles": [
+   "fast"
+  ],
+  "why": "tiny and very fast, calls tools",
+  "family": "standard"
+ },
+ {
+  "tag": "qwen3.5:2b",
+  "size": 2.7,
+  "need": 3.5,
+  "score": 58,
+  "roles": [
+   "fast"
+  ],
+  "why": "tiny and fast, for quick answers on modest hardware",
+  "family": "standard"
+ },
+ {
+  "tag": "llama3.2:3b",
+  "size": 2.0,
+  "need": 3,
+  "score": 55,
+  "roles": [
+   "fast"
+  ],
+  "why": "smallest that still calls tools",
+  "family": "standard"
+ },
+ {
+  "tag": "huihui_ai/qwen3.5-abliterated:35b-a3b",
+  "size": 22.2,
+  "need": 24,
+  "score": 89,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "moe": true,
+  "why": "Qwen3.5 35B-A3B abliterated: frontier-class tool calling and coding, only 3B active per token"
+ },
+ {
+  "tag": "huihui_ai/qwen3-abliterated:30b-a3b",
+  "size": 17.3,
+  "need": 19,
+  "score": 85,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "moe": true,
+  "why": "Qwen3 30B-A3B abliterated: strong reasoning that runs fast (mixture of experts)"
+ },
+ {
+  "tag": "huihui_ai/gemma3-abliterated:12b",
+  "size": 22.7,
+  "need": 25,
+  "score": 82,
+  "roles": [
+   "agent"
+  ],
+  "family": "abliterated",
+  "why": "Gemma 3 12B abliterated: good tool use and vision, without the refusals"
+ },
+ {
+  "tag": "huihui_ai/qwen3-abliterated:14b",
+  "size": 8.4,
+  "need": 10.5,
+  "score": 80,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "why": "Qwen3 14B abliterated: the 14B that still calls tools, uncensored"
+ },
+ {
+  "tag": "huihui_ai/qwen3.5-abliterated:9b",
+  "size": 6.6,
+  "need": 8.5,
+  "score": 80,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "why": "Qwen3.5 9B abliterated: the strongest uncensored small model that still calls tools"
+ },
+ {
+  "tag": "huihui_ai/phi4-abliterated:14b",
+  "size": 8.4,
+  "need": 10.5,
+  "score": 75,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "why": "Phi-4 14B abliterated: sharp reasoning and clean JSON, no refusals"
+ },
+ {
+  "tag": "huihui_ai/qwen2.5-abliterate:14b",
+  "size": 8.4,
+  "need": 10.5,
+  "score": 74,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "why": "Qwen2.5 14B abliterated: dependable and uncensored on 12 GB+ machines"
+ },
+ {
+  "tag": "huihui_ai/qwen3-abliterated:8b",
+  "size": 4.7,
+  "need": 6.5,
+  "score": 74,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "why": "Qwen3 8B abliterated: the tool calling of qwen3:8b, without the lectures"
+ },
+ {
+  "tag": "huihui_ai/deepseek-r1-abliterated:8b",
+  "size": 4.7,
+  "need": 6.5,
+  "score": 72,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "why": "DeepSeek-R1 8B abliterated: reasons step by step, uncensored"
+ },
+ {
+  "tag": "mannix/llama3.1-8b-abliterated:q4_K_M",
+  "size": 4.6,
+  "need": 6.5,
+  "score": 70,
+  "roles": [
+   "agent"
+  ],
+  "family": "abliterated",
+  "why": "Llama 3.1 8B abliterated (mannix): a community favourite, steady tool calls"
+ },
+ {
+  "tag": "dolphin3:8b",
+  "size": 4.6,
+  "need": 6.5,
+  "score": 70,
+  "roles": [
+   "agent"
+  ],
+  "family": "uncensored",
+  "why": "Dolphin 3.0: uncensored Llama 3.1 8B, steady tool calls"
+ },
+ {
+  "tag": "huihui_ai/gemma3-abliterated:4b",
+  "size": 8.0,
+  "need": 10,
+  "score": 70,
+  "roles": [
+   "fast",
+   "agent"
+  ],
+  "family": "abliterated",
+  "why": "Gemma 3 4B abliterated: quick, tool-capable, sees images"
+ },
+ {
+  "tag": "huihui_ai/qwen3.5-abliterated:4b",
+  "size": 3.1,
+  "need": 4.5,
+  "score": 68,
+  "roles": [
+   "fast",
+   "agent"
+  ],
+  "family": "abliterated",
+  "why": "Qwen3.5 4B abliterated: small, fast, still calls tools"
+ },
+ {
+  "tag": "dolphin-llama3:8b",
+  "size": 4.3,
+  "need": 6,
+  "score": 66,
+  "roles": [
+   "agent"
+  ],
+  "family": "uncensored",
+  "why": "Dolphin Llama 3 8B: an established uncensored agent model"
+ },
+ {
+  "tag": "huihui_ai/qwen2.5-abliterate:7b",
+  "size": 4.4,
+  "need": 6,
+  "score": 66,
+  "roles": [
+   "agent",
+   "code"
+  ],
+  "family": "abliterated",
+  "why": "Qwen2.5 7B abliterated: a light uncensored coder"
+ },
+ {
+  "tag": "huihui_ai/qwen3-abliterated:4b",
+  "size": 2.3,
+  "need": 3.5,
+  "score": 66,
+  "roles": [
+   "fast",
+   "agent"
+  ],
+  "family": "abliterated",
+  "why": "Qwen3 4B abliterated: the smallest Qwen3 that still calls tools"
+ },
+ {
+  "tag": "dolphin-mistral:7b",
+  "size": 3.8,
+  "need": 5.5,
+  "score": 64,
+  "roles": [
+   "agent",
+   "fast"
+  ],
+  "family": "uncensored",
+  "why": "Dolphin Mistral 7B: the classic uncensored chat model"
+ },
+ {
+  "tag": "huihui_ai/qwen3.5-abliterated:2b",
+  "size": 1.8,
+  "need": 3,
+  "score": 56,
+  "roles": [
+   "fast"
+  ],
+  "family": "abliterated",
+  "why": "Qwen3.5 2B abliterated: tiny and quick"
+ },
+ {
+  "tag": "huihui_ai/qwen2.5-abliterate:3b",
+  "size": 1.8,
+  "need": 3,
+  "score": 54,
+  "roles": [
+   "fast"
+  ],
+  "family": "abliterated",
+  "why": "Qwen2.5 3B abliterated: very light"
+ },
+ {
+  "tag": "huihui_ai/llama3.2-abliterate:3b",
+  "size": 2.1,
+  "need": 3,
+  "score": 54,
+  "roles": [
+   "fast"
+  ],
+  "family": "abliterated",
+  "why": "Llama 3.2 3B abliterated: tiny and quick, no refusals"
+ },
+ {
+  "tag": "huihui_ai/llama3.2-abliterate:1b",
+  "size": 0.9,
+  "need": 1.5,
+  "score": 44,
+  "roles": [
+   "fast"
+  ],
+  "family": "abliterated",
+  "why": "Llama 3.2 1B abliterated: the smallest, for quick replies"
+ },
+ {
+  "tag": "huihui_ai/qwen2.5-abliterate:1.5b",
+  "size": 0.9,
+  "need": 1.5,
+  "score": 44,
+  "roles": [
+   "fast"
+  ],
+  "family": "abliterated",
+  "why": "Qwen2.5 1.5B abliterated: runs anywhere"
+ }
+]

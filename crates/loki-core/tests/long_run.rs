@@ -64,7 +64,11 @@ async fn full_run_with_failover_verification_and_owner_pause() {
     // First leg: runs until it needs the owner.
     let info = driver.run(&j, Arc::new(AtomicBool::new(false))).await.unwrap();
     assert_eq!(info.status, Status::Waiting, "should pause for the unlisted command");
-    assert!(info.waiting_for.as_deref().unwrap().contains("rm -rf old_renders"));
+    let w = info.waiting_for.as_deref().unwrap();
+    assert!(w.contains("clean old renders") && w.contains("Deletes old_renders"), "plain summary, not a raw command: {w}");
+    let sum = &info.pending.as_ref().unwrap()["summary"];
+    assert_eq!(sum["risk"], "high");
+    assert_eq!(sum["what"], "Deletes old_renders");
     let tasks = j.tasks();
     assert_eq!(tasks[0].state, TaskState::Passed, "task 1 passes only after the file exists");
     assert!(tasks[0].evidence.contains("verified"));
@@ -183,5 +187,37 @@ async fn a_model_that_never_progresses_pauses_and_asks() {
     assert_eq!(info.status, Status::Waiting);
     assert!(info.steps <= 16, "stopped early, not after {} steps", info.steps);
     assert!(info.waiting_for.unwrap().contains("stuck"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn interview_first_then_plan_with_the_owners_choices() {
+    let script = Arc::new(Mutex::new(VecDeque::from(vec![
+        call("plan", json!({"tasks":[{"title":"a","check":"self-check"},{"title":"b","check":"self-check"}]})), // refused once
+        call("interview", json!({"questions":[{"header":"Style","question":"Which look?","options":[{"label":"Painterly"},{"label":"Pixel art"}]}]})),
+        call("plan", json!({"tasks":[{"title":"Concept","check":"self-check"}]})),
+        call("mark_done", json!({"task_id":1,"evidence":"ok"})),
+    ])));
+    let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
+    let st = (script, seen.clone());
+    let url = serve(Router::new().route("/v1/chat/completions", post(
+        |State((s, seen)): State<(Arc<Mutex<VecDeque<Value>>>, Arc<Mutex<Vec<String>>>)>, Json(b): Json<Value>| async move {
+            seen.lock().await.push(b["messages"].to_string());
+            Json(s.lock().await.pop_front().unwrap_or_else(|| text("nothing left")))
+        })).with_state(st)).await;
+    let driver = Driver::new(Arc::new(Mutex::new(ModelPool::new(vec![provider("good", &url, 1)]))));
+    let root = std::env::temp_dir().join(format!("lokiiv-{}", std::process::id()));
+    let (j, mut info) = Journal::create(&root.join("runs"), "Paint a red baby dragon", &root.join("ws"), 30, 1.0).unwrap();
+    info.interview = "always".into();
+    j.save_info(&info).unwrap();
+    let info = driver.run(&j, Arc::new(AtomicBool::new(false))).await.unwrap();
+    assert_eq!(info.status, Status::Waiting);
+    assert_eq!(info.pending.as_ref().unwrap()["name"], "interview");
+    let mut info = j.info().unwrap();
+    info.owner_reply = Some(OwnerReply { approve: true, note: "Style: Painterly".into() });
+    j.save_info(&info).unwrap();
+    let info = driver.run(&Journal::open(&j.dir), Arc::new(AtomicBool::new(false))).await.unwrap();
+    assert_eq!(info.status, Status::Done, "{}", j.progress_tail(30));
+    assert!(seen.lock().await.join("").contains("OWNER'S CHOICES (from the interview): Style: Painterly"));
     let _ = std::fs::remove_dir_all(root);
 }

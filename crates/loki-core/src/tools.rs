@@ -27,7 +27,7 @@ impl Default for Policy {
         let auto = [
             "ls", "cat", "head", "tail", "wc", "echo", "mkdir", "touch", "cp", "mv", "find", "grep",
             "git", "python", "python3", "node", "cargo", "blender", "ffmpeg", "ffprobe", "magick", "convert",
-            "dir", "type", "where", "findstr", "tree",
+            "dir", "type", "where", "findstr", "tree", "copy", "move", "xcopy", "robocopy", "ren", "md", "mv", "cp",
         ];
         Self {
             auto_commands: auto.iter().map(|s| s.to_string()).collect(),
@@ -60,6 +60,11 @@ pub fn schemas() -> Value {
           json!({"text":{"type":"string"},"files":{"type":"array","items":{"type":"string"}}}), &["text"]),
         f("image_prompt", "REQUIRED before generating any AI image: submit the exact prompt. The owner approves or edits it; use the prompt that comes back, word for word.",
           json!({"prompt":{"type":"string"},"purpose":{"type":"string"}}), &["prompt","purpose"]),
+        f("interview", "Ask the owner 1-3 quick questions with options BEFORE planning, about choices the goal leaves open (style, framing, size, use, length, tone). Each question: a header (max 12 chars), the question, 2-4 options with a label and one-line description, and multi=true if several can be picked.",
+          json!({"questions":{"type":"array","items":{"type":"object","properties":{
+              "header":{"type":"string"},"question":{"type":"string"},"multi":{"type":"boolean"},
+              "options":{"type":"array","items":{"type":"object","properties":{"label":{"type":"string"},"description":{"type":"string"}},"required":["label"]}}},
+              "required":["header","question","options"]}}}), &["questions"]),
         f("finish", "End the job with a short summary for the owner. Allowed when no task is still todo, or for a question that needed no work.",
           json!({"summary":{"type":"string"},"files":{"type":"array","items":{"type":"string"}}}), &["summary"])
     ])
@@ -168,9 +173,12 @@ fn unquoted(cmd: &str) -> String {
 
 pub async fn run(ws: &Path, policy: &Policy, args: &Value, approved: bool) -> Outcome {
     let Some(cmd) = args["command"].as_str() else { return Outcome::Err("missing 'command'".into()) };
-    if !approved && !command_allowed(policy, cmd) {
-        let why = args["why"].as_str().unwrap_or("(no reason given)");
-        return Outcome::NeedsOwner(format!("Wants to run `{cmd}` in {}: {why}", ws.display()));
+    // Runs by itself only when it is a known program, not chained, low risk and inside the job's folder.
+    let a = crate::risk::assess(cmd, ws);
+    if !approved && (!command_allowed(policy, cmd) || a.risk != crate::risk::Risk::Low) {
+        let why = args["why"].as_str().unwrap_or("").trim().trim_end_matches('.');
+        let head = if why.is_empty() { a.what.clone() } else { why.to_string() };
+        return Outcome::NeedsOwner(format!("{head}. {}", a.what));
     }
     shell(ws, &harden(cmd), policy.command_timeout).await
 }

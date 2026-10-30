@@ -16,6 +16,19 @@ Done 2026-10-29 (owner: "clean look like Ziva", "modular like ZBrush", "drag and
   `<home>/inbox` takes jobs and messages as JSON files.
 - [x] Driver pauses and asks when a model makes no progress for 16 turns.
 
+Done 2026-10-30 (owner: "old loki ui and features are wayyyyyy superior" - checklist in the chat, For you as a
+notification, simple approvals, interview, abliterated models, system scan, theme presets):
+
+- [x] One chat with the plan inside it; a slim rail + one drawer (Jobs, Library, Settings) that swaps sides and resizes;
+  For you is a bell with a badge, toast and desktop notification.
+- [x] Approvals read in plain words (what it does, risk, anything outside the job folder; the command behind a toggle);
+  low-risk commands inside the job folder no longer ask; an approved command is not asked again in that job.
+  Risk patterns: OpenHands' PatternSecurityAnalyzer via the previous LOKI's command_risk.py.
+- [x] Interview before work (Every job / Big jobs / Never in Settings), templates from the previous LOKI's interview.py.
+- [x] Settings: theme presets (Glass, Midnight, Ember, Forest, Mono, Light) + own accent colour, sizes; system scan
+  (hardware, tools, advice) with model picks that fit this machine - standard, abliterated, fast - and one-click
+  download / remove (catalog from the previous LOKI's model_setup.py).
+
 Next, in order (owner's direction 2026-10-29: art, production, creation; long runs; free models;
 owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local
 models; drive real Maya/Blender rather than rebuilding Forge; then ads & social and the phone app):

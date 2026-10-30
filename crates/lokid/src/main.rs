@@ -30,6 +30,8 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 const DEFAULT_PROVIDERS: &str = include_str!("../providers.default.toml");
+/// Local model catalog carried over from the previous LOKI (standard + abliterated builds).
+const CATALOG: &str = include_str!("../models.catalog.json");
 const UI: &str = include_str!("../../../app/ui/index.html");
 
 #[derive(Clone)]
@@ -37,6 +39,26 @@ struct App {
     home: PathBuf,
     driver: Arc<Driver>,
     live: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    /// model name -> download progress (Ollama pulls started from the window)
+    pulls: Arc<Mutex<HashMap<String, Value>>>,
+}
+
+fn default_settings() -> Value {
+    json!({"theme": "glass", "accent": null, "interview": "always", "scale": 1.0, "thumb": 110, "notify": true})
+}
+
+impl App {
+    fn settings(&self) -> Value {
+        let mut base = default_settings();
+        if let Some(saved) = std::fs::read_to_string(self.home.join("settings.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
+            if let (Some(b), Some(o)) = (base.as_object_mut(), saved.as_object()) {
+                for (k, v) in o {
+                    b.insert(k.clone(), v.clone());
+                }
+            }
+        }
+        base
+    }
 }
 
 /// LOKI_HOME holds runs, providers and pool state. The launcher points it at
@@ -136,6 +158,7 @@ impl App {
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     info.workspace = req.workspace.unwrap_or_else(|| ws_root.join(&info.id));
     info.mode = req.mode.filter(|m| !m.is_empty()).unwrap_or_else(|| "agent".into());
+    info.interview = app.settings()["interview"].as_str().unwrap_or("always").to_string();
     info.prefer = req.prefer.filter(|p| !p.is_empty());
     let _ = std::fs::create_dir_all(&info.workspace);
     let files = app.attach(&info.workspace, &req.attach);
@@ -288,6 +311,186 @@ async fn library(State(app): State<App>, Query(q): Query<Page>) -> Json<Value> {
     let total = all.len();
     let items: Vec<Value> = all.into_iter().skip(page * per).take(per).collect();
     Json(json!({"total": total, "page": page, "per": per, "items": items}))
+}
+
+async fn get_settings(State(app): State<App>) -> Json<Value> {
+    Json(app.settings())
+}
+
+async fn put_settings(State(app): State<App>, Json(v): Json<Value>) -> StatusCode {
+    let mut cur = app.settings();
+    if let (Some(c), Some(n)) = (cur.as_object_mut(), v.as_object()) {
+        for (k, val) in n {
+            c.insert(k.clone(), val.clone());
+        }
+    }
+    match serde_json::to_vec_pretty(&cur).map(|b| loki_core::journal::atomic_write(&app.home.join("settings.json"), &b)) {
+        Ok(Ok(())) => StatusCode::OK,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+fn run_out(prog: &str, args: &[&str]) -> Option<String> {
+    let mut c = std::process::Command::new(prog);
+    c.args(args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000);
+    }
+    c.output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+}
+
+fn which(prog: &str) -> Option<String> {
+    let exts: &[&str] = if cfg!(windows) { &[".exe", ".cmd", ".bat"] } else { &[""] };
+    for dir in std::env::split_paths(&std::env::var_os("PATH")?) {
+        for e in exts {
+            let c = dir.join(format!("{prog}{e}"));
+            if c.is_file() {
+                return Some(c.to_string_lossy().to_string());
+            }
+        }
+    }
+    None
+}
+
+/// System scan: hardware, creative tools, local AI, and what to install or change.
+async fn system(State(app): State<App>) -> Json<Value> {
+    use sysinfo::{Disks, System};
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    let ram_gb = sys.total_memory() as f64 / 1e9;
+    let cpu = sys.cpus().first().map(|c| c.brand().trim().to_string()).unwrap_or_default();
+    let cores = sys.cpus().len();
+    // the drive LOKI keeps its data on
+    let disks = Disks::new_with_refreshed_list();
+    let home_s = app.home.to_string_lossy().to_ascii_lowercase();
+    let disk = disks.list().iter().filter(|d| home_s.starts_with(&d.mount_point().to_string_lossy().to_ascii_lowercase())).max_by_key(|d| d.mount_point().as_os_str().len());
+    let (disk_free, disk_total) = disk.map(|d| (d.available_space() as f64 / 1e9, d.total_space() as f64 / 1e9)).unwrap_or((0.0, 0.0));
+    // GPU
+    let mut gpu = json!(null);
+    let mut vram_gb = 0.0;
+    if let Some(o) = run_out("nvidia-smi", &["--query-gpu=name,memory.total,memory.used,driver_version", "--format=csv,noheader,nounits"]) {
+        let f: Vec<&str> = o.lines().next().unwrap_or("").split(',').map(|x| x.trim()).collect();
+        if f.len() >= 3 {
+            vram_gb = f[1].parse::<f64>().unwrap_or(0.0) / 1024.0;
+            gpu = json!({"name": f[0], "vram_gb": vram_gb, "used_gb": f[2].parse::<f64>().unwrap_or(0.0) / 1024.0, "driver": f.get(3)});
+        }
+    }
+    let mac = cfg!(target_os = "macos");
+    if mac && gpu.is_null() {
+        let chip = run_out("sysctl", &["-n", "machdep.cpu.brand_string"]).unwrap_or_default();
+        gpu = json!({"name": format!("{chip} (unified memory)"), "vram_gb": ram_gb, "unified": true});
+    }
+    // How much model fits: a dedicated GPU's memory; on the Mac a careful share of unified memory
+    // (owner 2026-10-26: a heavy local model next to Blender crashed it).
+    let budget = if vram_gb > 0.0 { vram_gb } else if mac { ram_gb * 0.4 } else { ram_gb * 0.5 };
+    // tools
+    let blender = std::env::var("LOKI_BLENDER").ok().filter(|b| Path::new(b).is_file()).or_else(|| which("blender"));
+    let http = reqwest::Client::builder().timeout(std::time::Duration::from_secs(3)).build().unwrap();
+    let comfy = http.get("http://127.0.0.1:8188/system_stats").send().await.map(|r| r.status().is_success()).unwrap_or(false);
+    let ollama_models: Vec<String> = match http.get(format!("{}/api/tags", ollama_base())).send().await {
+        Ok(r) => r.json::<Value>().await.ok().and_then(|v| v["models"].as_array().map(|a| a.iter().filter_map(|m| m["name"].as_str().map(String::from)).collect())).unwrap_or_default(),
+        Err(_) => vec![],
+    };
+    let ollama_up = which("ollama").is_some() || !ollama_models.is_empty();
+    let tools = json!({
+        "blender": blender, "ffmpeg": which("ffmpeg"), "python": which("python").or_else(|| which("python3")),
+        "git": which("git"), "ollama": ollama_up, "comfyui": comfy,
+    });
+    // model picks that fit this machine
+    let catalog: Vec<Value> = serde_json::from_str(CATALOG).unwrap_or_default();
+    let installed = |tag: &str| ollama_models.iter().any(|m| m == tag || m.trim_end_matches(":latest") == tag || m.ends_with(&format!("/{tag}")) || m.contains(tag));
+    let fits = |m: &Value| m["need"].as_f64().unwrap_or(99.0) <= budget + 0.01;
+    let pick = |family: &dyn Fn(&Value) -> bool| -> Vec<Value> {
+        let mut v: Vec<Value> = catalog.iter().filter(|m| family(m) && fits(m)).cloned().collect();
+        v.sort_by(|a, b| b["score"].as_f64().unwrap_or(0.0).partial_cmp(&a["score"].as_f64().unwrap_or(0.0)).unwrap());
+        v.truncate(4);
+        for m in v.iter_mut() {
+            let tag = m["tag"].as_str().unwrap_or("").to_string();
+            m["installed"] = json!(installed(&tag));
+        }
+        v
+    };
+    let standard = pick(&|m| m["family"] == "standard");
+    let uncensored = pick(&|m| matches!(m["family"].as_str(), Some("abliterated" | "uncensored")));
+    let fast = pick(&|m| m["roles"].as_array().is_some_and(|r| r.iter().any(|x| x == "fast")));
+    // what to do next, most useful first
+    let mut advice: Vec<Value> = Vec::new();
+    let mut tip = |level: &str, text: String| advice.push(json!({"level": level, "text": text}));
+    if blender.is_none() { tip("high", "Blender was not found - LOKI's 3D work needs it. Install it from blender.org (or set LOKI_BLENDER).".into()); }
+    if tools["ffmpeg"].is_null() { tip("mid", "ffmpeg was not found - needed to turn renders into videos (winget install ffmpeg / brew install ffmpeg).".into()); }
+    if !comfy && vram_gb >= 6.0 { tip("mid", "ComfyUI is not running - start it for AI images, image-to-3D (TRELLIS / Hunyuan3D) and video on this GPU.".into()); }
+    if !ollama_up { tip("mid", "No local AI (Ollama) - install it from ollama.com so LOKI keeps working offline.".into()); }
+    if let Some(best) = standard.first() {
+        if !best["installed"].as_bool().unwrap_or(false) {
+            tip("low", format!("Best local model for this machine: {} - {}", best["tag"].as_str().unwrap_or(""), best["why"].as_str().unwrap_or("")));
+        }
+    }
+    if let Some(best) = uncensored.first() {
+        if !best["installed"].as_bool().unwrap_or(false) {
+            tip("low", format!("Best abliterated (uncensored) model that fits: {} - {}", best["tag"].as_str().unwrap_or(""), best["why"].as_str().unwrap_or("")));
+        }
+    }
+    if mac && std::env::var("OLLAMA_MODELS").is_err() {
+        tip("high", "On the Mac, set OLLAMA_MODELS to a folder on the external drive before downloading models - the internal disk is full.".into());
+    }
+    if disk_total > 0.0 && disk_free < 20.0 { tip("high", format!("Only {disk_free:.0} GB free where LOKI keeps its data.")); }
+    let missing: Vec<&str> = ["GROQ_API_KEY", "OPENROUTER_API_KEY", "MISTRAL_API_KEY"].into_iter()
+        .filter(|k| std::env::var(k).map(|v| v.trim().is_empty()).unwrap_or(true)).collect();
+    if !missing.is_empty() {
+        tip("low", format!("More free model capacity: add {} to harness_data/.env (free signups).", missing.join(", ")));
+    }
+    Json(json!({
+        "machine": std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default(),
+        "os": format!("{} {}", System::name().unwrap_or_default(), System::os_version().unwrap_or_default()),
+        "cpu": cpu, "cores": cores, "ram_gb": ram_gb, "gpu": gpu, "model_budget_gb": budget,
+        "disk": {"free_gb": disk_free, "total_gb": disk_total},
+        "tools": tools, "local_models": ollama_models,
+        "recommend": {"standard": standard, "uncensored": uncensored, "fast": fast},
+        "advice": advice,
+    }))
+}
+
+/// Download a local model with Ollama in the background; progress at GET /local-models/pulls.
+async fn pull_model(State(app): State<App>, Json(m): Json<ModelName>) -> StatusCode {
+    let name = m.name.trim().to_string();
+    if name.is_empty() || name.contains(char::is_whitespace) {
+        return StatusCode::BAD_REQUEST;
+    }
+    if cfg!(target_os = "macos") && std::env::var("OLLAMA_MODELS").is_err() {
+        return StatusCode::PRECONDITION_FAILED; // the Mac's internal disk is full: set OLLAMA_MODELS first
+    }
+    app.pulls.lock().await.insert(name.clone(), json!({"status": "starting", "pct": 0}));
+    let pulls = app.pulls.clone();
+    tokio::spawn(async move {
+        let c = reqwest::Client::builder().timeout(std::time::Duration::from_secs(6 * 3600)).build().unwrap();
+        let resp = c.post(format!("{}/api/pull", ollama_base())).json(&json!({"model": name, "name": name, "stream": true})).send().await;
+        let mut resp = match resp {
+            Ok(r) if r.status().is_success() => r,
+            Ok(r) => { pulls.lock().await.insert(name.clone(), json!({"status": format!("failed: http {}", r.status().as_u16()), "pct": 0})); return; }
+            Err(e) => { pulls.lock().await.insert(name.clone(), json!({"status": format!("failed: {e}"), "pct": 0})); return; }
+        };
+        let mut buf = String::new();
+        while let Ok(Some(chunk)) = resp.chunk().await {
+            buf.push_str(&String::from_utf8_lossy(&chunk));
+            while let Some(i) = buf.find('\n') {
+                let line: String = buf.drain(..=i).collect();
+                if let Ok(v) = serde_json::from_str::<Value>(line.trim()) {
+                    let pct = match (v["completed"].as_f64(), v["total"].as_f64()) { (Some(a), Some(b)) if b > 0.0 => (a / b * 100.0).round(), _ => -1.0 };
+                    let status = v["status"].as_str().unwrap_or("").to_string();
+                    let mut p = pulls.lock().await;
+                    let prev = p.get(&name).and_then(|x| x["pct"].as_f64()).unwrap_or(0.0);
+                    p.insert(name.clone(), json!({"status": if v.get("error").is_some() { format!("failed: {}", v["error"]) } else { status }, "pct": if pct >= 0.0 { pct } else { prev }}));
+                }
+            }
+        }
+    });
+    StatusCode::OK
+}
+
+async fn pulls(State(app): State<App>) -> Json<Value> {
+    Json(json!(app.pulls.lock().await.clone()))
 }
 
 /// The owner's panel layout for this machine (pywebview does not keep browser storage).
@@ -623,7 +826,7 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
     let mut pool = load_pool(&home)?;
     fit_local_models(&mut pool).await;
     let pool = Arc::new(Mutex::new(pool));
-    let app = App { home: home.clone(), driver: Arc::new(Driver::new(pool)), live: Arc::new(Mutex::new(HashMap::new())) };
+    let app = App { home: home.clone(), driver: Arc::new(Driver::new(pool)), live: Arc::new(Mutex::new(HashMap::new())), pulls: Arc::new(Mutex::new(HashMap::new())) };
     let router = Router::new()
         .route("/", get(|| async { Html(UI) }))
         .route("/health", get(|| async { Json(json!({"ok": true, "service": "lokid", "version": env!("CARGO_PKG_VERSION")})) }))
@@ -643,6 +846,10 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
         .route("/layout", get(get_layout).put(put_layout))
         .route("/local-models", get(local_models))
         .route("/local-models/remove", post(remove_local_model))
+        .route("/local-models/pull", post(pull_model))
+        .route("/local-models/pulls", get(pulls))
+        .route("/settings", get(get_settings).put(put_settings))
+        .route("/system", get(system))
         .with_state(app.clone());
     tokio::spawn(inbox_loop(app.clone()));
     let port: u16 = std::env::var("LOKI_DRIVER_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7717);

@@ -109,7 +109,16 @@ impl Driver {
         if !tail.is_empty() {
             state.push_str(&format!("\nRECENT LOG:\n{tail}\n"));
         }
-        let mut msgs = vec![Msg::system(SYSTEM), Msg::user(state)];
+        let mut system = SYSTEM.to_string();
+        if !info.interviewed && info.interview != "off" {
+            system.push_str(&format!("\nINTERVIEW ({}): before `plan`, if the goal makes or changes something and leaves real \
+choices open, call `interview` once with 1-3 questions (skip anything the goal already says). Good questions by kind - \
+image: Style, Framing, Shape (16:9 / 1:1 / 9:16); turnaround: Views, Pose (T / A); 3D model: Use (game asset / hero detail / \
+blockout), Start from (concept / Blender from scratch); video: Length, Shape, Look; writing: Length, Tone. {}\n",
+                info.interview,
+                if info.interview == "big" { "Only for big jobs (several outputs or hours of work)." } else { "Plain questions are never interviewed." }));
+        }
+        let mut msgs = vec![Msg::system(system), Msg::user(state)];
         for ex in recent {
             msgs.push(Msg::assistant(json!({"tool": ex.call.name, "args": ex.call.args}).to_string()));
             msgs.push(Msg::user(format!("RESULT of {}:\n{}", ex.call.name, ex.result)));
@@ -172,7 +181,16 @@ impl Driver {
                         }
                     }
                 }
-                let result = if call.name == "ask_owner" {
+                if call.name == "interview" {
+                    info.interviewed = true;
+                }
+                let result = if call.name == "interview" {
+                    if reply.approve && !note.is_empty() {
+                        format!("OWNER'S CHOICES (from the interview): {note}\nPlan the job around these choices.")
+                    } else {
+                        "The owner chose 'go as written': use your best judgement and plan.".to_string()
+                    }
+                } else if call.name == "ask_owner" {
                     format!("OWNER ANSWERED: {}", if note.is_empty() { if reply.approve { "yes" } else { "no" } } else { &note })
                 } else if reply.approve {
                     match self.exec(j, &mut info, &call, true).await { Outcome::Ok(s) | Outcome::Err(s) | Outcome::NeedsOwner(s) => s }
@@ -280,7 +298,7 @@ impl Driver {
                 continue;
             };
             silent_turns = 0;
-            if matches!(call.name.as_str(), "add_task" | "tell_owner" | "ask_owner" | "finish" | "plan" | "block_task") {
+            if matches!(call.name.as_str(), "add_task" | "tell_owner" | "ask_owner" | "finish" | "plan" | "block_task" | "interview") {
                 owner_request = None; // the model has acted on what the owner said
             }
 
@@ -299,7 +317,13 @@ impl Driver {
                     (format!("ERROR: {s}"), false)
                 }
                 Outcome::NeedsOwner(s) => {
-                    info.pending = Some(json!({"name": call.name, "args": call.args}));
+                    let mut pend = json!({"name": call.name, "args": call.args});
+                    if call.name == "run" {
+                        let a = crate::risk::assess(call.args["command"].as_str().unwrap_or(""), &info.workspace);
+                        pend["summary"] = json!({"title": call.args["why"].as_str().unwrap_or(&a.what), "what": a.what,
+                            "risk": a.risk, "reasons": a.reasons, "outside": a.outside});
+                    }
+                    info.pending = Some(pend);
                     info.waiting_for = Some(s.clone());
                     info.status = Status::Waiting;
                     (s, true)
@@ -308,7 +332,7 @@ impl Driver {
             j.log_step(&json!({"step": info.steps, "provider": reply.provider, "model": reply.model,
                 "tool": call.name, "args": call.args, "result": short(&result, 2000)}));
             let productive = !result.starts_with("ERROR")
-                && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish");
+                && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish" | "interview");
             let repeat = recent.iter().rev().take(4).any(|e| e.call == call);
             idle_turns = if productive && !repeat { 0 } else { idle_turns + 1 };
             info.idle_turns = idle_turns;
@@ -379,6 +403,10 @@ impl Driver {
         match call.name.as_str() {
             "plan" => {
                 let Some(list) = a["tasks"].as_array() else { return Outcome::Err("'tasks' must be a list".into()) };
+                if info.interview == "always" && !info.interviewed && !info.interview_asked && list.len() >= 2 {
+                    info.interview_asked = true; // remind once; if the model plans again, the goal said enough
+                    return Outcome::Err("Interview the owner first: call `interview` with 1-3 option questions about the choices this goal leaves open. If the goal already settles everything, send the same plan again.".into());
+                }
                 let mut tasks = j.tasks();
                 if tasks.iter().any(|t| t.state == TaskState::Passed) {
                     return Outcome::Err("a checklist already exists; use add_task".into());
@@ -452,6 +480,17 @@ impl Driver {
                 j.say("loki", text, files);
                 Outcome::Ok("sent to the owner".into())
             }
+            "interview" => {
+                let qs = a["questions"].as_array().cloned().unwrap_or_default();
+                if qs.is_empty() {
+                    return Outcome::Err("interview needs 1-3 questions".into());
+                }
+                if info.interviewed {
+                    return Outcome::Err("the owner was already interviewed; use their choices and plan".into());
+                }
+                let n = qs.len().min(3);
+                Outcome::NeedsOwner(format!("{} question{} before starting", n, if n == 1 { "" } else { "s" }))
+            }
             "image_prompt" => {
                 let prompt = a["prompt"].as_str().unwrap_or("").trim();
                 if prompt.is_empty() {
@@ -497,7 +536,7 @@ impl Driver {
                 let again = a["command"].as_str().is_some_and(|c| info.approved_commands.iter().any(|x| x == c));
                 tools::run(&ws, &self.cfg.policy, a, approved || again).await
             }
-            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, finish")),
+            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, interview, finish")),
         }
     }
 }
