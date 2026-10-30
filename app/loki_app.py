@@ -129,9 +129,77 @@ def driver_env() -> dict:
     if blender:
         env["LOKI_BLENDER"] = blender
         extra.append(str(Path(blender).parent))
+    for k, v in cad_paths().items():
+        if v:
+            env[k] = v
     extra.append(str(cargo_home() / "bin"))
     env["PATH"] = os.pathsep.join(extra + [env.get("PATH", "")])
     return env
+
+
+# ---------------------------------------------------------------- CAD tools (owner 2026-10-30: build123d + FreeCAD)
+
+CAD = DATA / "cad"                      # on the Mac this is the external drive, like everything big
+FREECAD_VER = "1.0.2"
+
+
+def cad_paths() -> dict:
+    """Where this machine's CAD tools live once installed (empty values when not yet)."""
+    py = CAD / "b123" / ("Scripts/python.exe" if WIN else "bin/python")
+    names = ("freecadcmd.exe", "FreeCADCmd.exe") if WIN else ("freecadcmd", "FreeCADCmd")
+    fc = None
+    if (CAD / "freecad").is_dir():
+        for pat in ("*/bin/%s", "*/usr/bin/%s", "FreeCAD.app/Contents/Resources/bin/%s", "FreeCAD.app/Contents/MacOS/%s"):
+            fc = next((p for n in names for p in sorted((CAD / "freecad").glob(pat % n))), None)
+            if fc:
+                break
+    return {"LOKI_CAD_PY": str(py) if py.is_file() else "", "LOKI_FREECAD": str(fc) if fc and fc.is_file() else ""}
+
+
+def ensure_cad() -> None:
+    """Install build123d (own Python via uv) and FreeCAD (portable) into harness_data/cad, once, in the background."""
+    try:
+        CAD.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ, UV_CACHE_DIR=str(CAD / "uv-cache"), UV_PYTHON_INSTALL_DIR=str(CAD / "pythons"),
+                   PIP_CACHE_DIR=str(CAD / "pip-cache"), TMPDIR=str(CAD / "tmp"), TEMP=str(CAD / "tmp"), TMP=str(CAD / "tmp"))
+        (CAD / "tmp").mkdir(exist_ok=True)
+        tools = CAD / "tools"                                   # a tiny venv that only holds uv and py7zr
+        tpy = tools / ("Scripts/python.exe" if WIN else "bin/python")
+        if not tpy.is_file():
+            run([sys.executable, "-m", "venv", str(tools)], timeout=300, env=env)
+            run([str(tpy), "-m", "pip", "install", "-q", "uv", "py7zr"], timeout=900, env=env)
+        uv = [str(tpy), "-m", "uv"]
+        if not cad_paths()["LOKI_CAD_PY"]:
+            log("cad: installing build123d (Python 3.12 via uv)")
+            run(uv + ["venv", "--python", "3.12", str(CAD / "b123")], timeout=900, env=env)
+            code, out = run(uv + ["pip", "install", "--python", str(CAD / "b123"), "build123d"], timeout=1800, env=env)
+            log("cad: build123d %s" % ("ready" if code == 0 else "failed: " + out[-300:]))
+        if not cad_paths()["LOKI_FREECAD"]:
+            arch = "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x86_64"
+            name = {True: f"FreeCAD_{FREECAD_VER}-conda-Windows-x86_64-py311.7z"}.get(WIN) or \
+                (f"FreeCAD_{FREECAD_VER}-conda-macOS-{arch}-py311.dmg" if MAC else f"FreeCAD_{FREECAD_VER}-conda-Linux-{arch}-py311.AppImage")
+            dest = CAD / "freecad"
+            dest.mkdir(exist_ok=True)
+            pkg = CAD / "tmp" / name
+            if not pkg.is_file():
+                log("cad: downloading %s" % name)
+                urllib.request.urlretrieve(f"https://github.com/FreeCAD/FreeCAD/releases/download/{FREECAD_VER}/{name}", pkg)
+            if WIN:
+                code, out = run([str(tpy), "-c", "import py7zr,sys; py7zr.SevenZipFile(sys.argv[1]).extractall(sys.argv[2])", str(pkg), str(dest)], timeout=1800, env=env)
+            elif MAC:
+                mnt = CAD / "tmp" / "fcmount"
+                run(["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", str(mnt), str(pkg)], timeout=600)
+                code, out = run(["cp", "-R", str(mnt / "FreeCAD.app"), str(dest)], timeout=1800)
+                run(["hdiutil", "detach", str(mnt)], timeout=120)
+            else:
+                pkg.chmod(0o755)
+                code, out = run([str(pkg), "--appimage-extract"], timeout=1800, cwd=str(dest))
+            ok = bool(cad_paths()["LOKI_FREECAD"])
+            log("cad: FreeCAD %s" % ("ready" if ok else "failed: " + str(out)[-300:]))
+            if ok:
+                pkg.unlink(missing_ok=True)
+    except Exception as e:  # noqa: BLE001
+        log("cad: setup failed: %r" % e)
 
 
 # ---------------------------------------------------------------- building the driver
@@ -504,6 +572,7 @@ def boot() -> None:
             return
         status(phase="running")
         show()
+        threading.Thread(target=ensure_cad, daemon=True).start()
         probe_models()
         first_light()
     except Exception as e:  # noqa: BLE001

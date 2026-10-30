@@ -64,11 +64,12 @@ Done 2026-10-30 (owner: "blender results are shit", "floating lids ... we need t
   `hdri()` studio light in lights(); flat colours only when offline.
 - [x] Every finish() renders a four-view sheet (front, right, back, above); the `look:` check scores the sheet.
 
-Next, in order (owner 2026-10-30: rework the 3D):
+Next, in order (owner 2026-10-30: "a cad software", "take the top two and pit them against each other"):
 
-0. More kits, each proven with a four-view render before it ships: crate, barrel, door with frame, table + chairs,
-   bookshelf, lantern, campfire, tree, rock cluster, sword/shield. Then image-to-3D on the PC through ComfyUI
-   (Hunyuan3D-2 quantized first, TripoSR as the fast option) for anything no kit covers.
+0. CAD head-to-head on both machines: build123d vs FreeCAD (the launcher installs both into harness_data/cad).
+   Five different objects each (chest, chair, lantern, sword, bookshelf), written by LOKI's free models with the
+   cad-modeling playbook, rendered by scripts/cad_render.py. Compare: passed first try, steps, time, vision score.
+   The winner becomes the one CAD route; the loser and the old box-stacking kits go.
 
 Then (owner's direction 2026-10-29: art, production, creation; long runs; free models;
 owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local

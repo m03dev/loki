@@ -74,6 +74,45 @@ pub struct Driver {
 const INSPECT_SCRIPT: &str = include_str!("../../../tools/blender/inspect_scene.py");
 /// The Blender helper library every job gets in scripts/ (placing, hinging, framing, rendering).
 const LOKI_BPY: &str = include_str!("../../../tools/blender/loki_bpy.py");
+const CAD_RENDER: &str = include_str!("../../../tools/cad/cad_render.py");
+
+/// CAD tools the launcher installed into harness_data/cad after this driver started (found without a restart).
+fn find_cad(key: &str) -> Option<String> {
+    let cad = std::path::PathBuf::from(std::env::var("LOKI_HOME").ok()?).parent()?.join("cad");
+    let found = if key == "LOKI_CAD_PY" {
+        [cad.join("b123/Scripts/python.exe"), cad.join("b123/bin/python")].into_iter().find(|p| p.is_file())
+    } else {
+        let names = ["freecadcmd.exe", "FreeCADCmd.exe", "freecadcmd", "FreeCADCmd"];
+        let mut hit = None;
+        if let Ok(rd) = std::fs::read_dir(cad.join("freecad")) {
+            'outer: for e in rd.flatten() {
+                for sub in ["bin", "usr/bin", "Contents/Resources/bin", "Contents/MacOS"] {
+                    for n in names {
+                        let p = e.path().join(sub).join(n);
+                        if p.is_file() { hit = Some(p); break 'outer; }
+                    }
+                }
+            }
+        }
+        hit
+    };
+    found.map(|p| p.to_string_lossy().to_string())
+}
+
+/// The tools this machine really has, with exact paths (how to use each lives in its playbook, not here).
+fn machine_tools(blender: Option<&str>) -> String {
+    let mut lines = vec![];
+    if let Some(b) = blender {
+        lines.push(format!("Blender: \"{b}\" (scripts/loki_bpy.py helpers are in the job folder)"));
+    }
+    for (k, what) in [("LOKI_CAD_PY", "build123d (CAD): run scripts with"), ("LOKI_FREECAD", "FreeCAD (CAD, headless): run scripts with")] {
+        if let Some(p) = std::env::var(k).ok().filter(|p| std::path::Path::new(p).is_file()).or_else(|| find_cad(k)) {
+            lines.push(format!("{what} \"{p}\""));
+        }
+    }
+    if lines.is_empty() { return String::new(); }
+    format!("\nMACHINE TOOLS (exact paths):\n- {}\n- scripts/cad_render.py renders CAD parts (parts/<material>.stl) in Blender.\n", lines.join("\n- "))
+}
 
 struct Exchange {
     call: ToolCall,
@@ -135,12 +174,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 info.interview,
                 if info.interview == "big" { "Only for big jobs (several outputs or hours of work)." } else { "Plain questions are never interviewed." }));
         }
-        system.push_str("\n- Blender scripts: scripts/loki_bpy.py is already in the job folder - USE IT instead of computing coordinates. \
-Start every script with: import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from loki_bpy import * ; then start(__file__). \
-Helpers: mat(name, '#hex', metal=, rough=, emit=), box(name, (x,y,z), mat, bevel=), cyl(name, r, depth, mat, axis='X'), sphere, cone, ground(size, mat), \
-planks(name, (x,y,z), n, mat), place_on(a, b, x=, y=, z=), place_beside(a, b, side='+x'|'-y'..), place_inside(a, b, depth=), center_on(a, b), \
-hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, mat), bounds(o), frame(), lights(), finish('name') \
-(finish saves scenes/name.blend and renders renders/name.png). Sizes are metres; parts stand on their bottom centre.\n");
+        system.push_str(&machine_tools(self.blender.as_deref()));
         system.push_str("\n- 3D / render work: after building, call inspect_scene on the .blend and fix every error; plan checks as \
 'blend:<file.blend>' and 'look:<render.png>' so the work is judged on what it made. After fixing a real error, call `learn`.\n");
         for pb in self.knowledge.pick(&info.goal, 2) {
@@ -259,6 +293,7 @@ hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, ma
         let scripts = info.workspace.join("scripts");
         if std::fs::create_dir_all(&scripts).is_ok() {
             let _ = std::fs::write(scripts.join("loki_bpy.py"), LOKI_BPY);
+            let _ = std::fs::write(scripts.join("cad_render.py"), CAD_RENDER);
         }
 
         loop {
@@ -544,6 +579,23 @@ hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, ma
         let mut text = summary.unwrap_or_else(|| format!("Done: {} of {} tasks passed.", tasks.len() - blocked.len(), tasks.len()));
         if !blocked.is_empty() {
             text.push_str(&format!("\nCould not finish: {}", blocked.join("; ")));
+        }
+        // the facts about what was made (cad_render writes renders/<name>_info.json)
+        let mut facts = vec![];
+        if let Ok(rd) = std::fs::read_dir(info.workspace.join("renders")) {
+            for e in rd.flatten() {
+                let n = e.file_name().to_string_lossy().to_string();
+                let Some(stem) = n.strip_suffix("_info.json") else { continue };
+                let Some(v) = std::fs::read_to_string(e.path()).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else { continue };
+                let sz: Vec<String> = v["size_m"].as_array().map(|a| a.iter().map(|x| format!("{:.2}", x.as_f64().unwrap_or(0.0))).collect()).unwrap_or_default();
+                facts.push(format!("**{stem}**: {} m · {} triangles · {} parts · {}{}", sz.join(" × "), v["triangles"].as_u64().unwrap_or(0),
+                    v["parts"].as_object().map(|o| o.len()).unwrap_or(0),
+                    if v["watertight"].as_bool().unwrap_or(false) { "watertight" } else { "has open edges" },
+                    v["render_s"].as_f64().map(|t| format!(" · rendered in {t:.0}s")).unwrap_or_default()));
+            }
+        }
+        if !facts.is_empty() {
+            text.push_str(&format!("\n\n{}", facts.join("\n")));
         }
         j.say("loki", &text, files);
     }
