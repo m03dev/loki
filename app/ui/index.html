@@ -62,11 +62,18 @@ svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 .split:hover::after,.split.drag::after{background:var(--grad)}
 .chatw{min-width:0;min-height:0;display:flex;flex-direction:column;position:relative}
 .frame{gap:0}
-.menu{position:fixed;z-index:65;min-width:230px;padding:6px;display:none}
-.menu.show{display:block;animation:in .14s var(--ease)}
-.menu h5{margin:6px 8px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
-.mi{display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border-radius:9px;font-size:13px;color:var(--muted);text-align:left}
-.mi:hover{background:var(--g3);color:var(--text)}.mi.on{color:var(--accent)}
+.menu{position:fixed;z-index:65;min-width:220px;max-width:320px;max-height:70vh;overflow:auto;padding:4px;display:none;border-radius:14px;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(22px) saturate(1.3);border:1px solid var(--edge);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.menu.show{display:block;animation:in .12s var(--ease)}
+body.menuopen [data-tip]:hover::after{display:none}
+.menu h5{margin:8px 10px 3px;font-size:11px;font-weight:500;color:var(--dim)}
+.menu hr{border:0;height:1px;background:var(--edge);margin:4px 6px}
+.mi{display:flex;align-items:center;gap:10px;width:100%;padding:6px 10px;border-radius:10px;font-size:12.5px;color:var(--text);text-align:left;transition:background .1s}
+.mi:hover{background:var(--g3)}.mi.on{color:var(--accent)}
+.mi .sub{display:block;font-size:11px;color:var(--dim);margin-top:1px}.mi .ck{margin-left:auto;width:14px;height:14px;color:var(--accent);flex:none}
+.mi .tps{margin-left:auto;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dd{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:4px 8px 4px 10px;border-radius:10px;max-width:220px;white-space:nowrap}
+.dd:hover{background:var(--g3);color:var(--text)}.dd span{overflow:hidden;text-overflow:ellipsis}.dd svg.i{width:13px;height:13px;flex:none;opacity:.7}
 .mi .pv{display:flex;gap:2px;width:34px;height:20px;flex:none;border-radius:4px;overflow:hidden;border:1px solid var(--edge)}
 .mi .pv i{background:var(--g3)}.mi .pv i.c{flex:1;background:var(--g2)}.mi .pv i.a{background:color-mix(in srgb,var(--accent) 55%,transparent)}
 .drawer.dropside{outline:1.5px dashed color-mix(in srgb,var(--accent) 60%,transparent);outline-offset:-3px}
@@ -153,6 +160,9 @@ svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 .btn:hover{background:var(--g3)}.btn.pri{background:var(--grad);color:var(--onacc);font-weight:650;border-color:transparent}.btn.pri:hover{filter:brightness(1.07)}
 .btn.sm{padding:4px 10px;font-size:12px}
 .typing{color:var(--dim);font-size:12.5px;display:flex;align-items:center;gap:8px}
+.lm{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;padding:2px 2px}
+.lm .m{color:var(--muted)}
+.logs{font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--muted);background:rgba(0,0,0,.22);border-radius:10px;padding:8px 10px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0}.ind.lm{margin-top:-6px}
 .hello{margin:11vh auto 0;text-align:center;max-width:560px}
 .hello h1{font-size:30px;margin:0 0 6px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hello p{color:var(--muted);margin:0 0 18px}
@@ -167,9 +177,6 @@ svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 .seg{display:inline-flex;border-radius:11px;background:rgba(0,0,0,.18);padding:2px;border:1px solid var(--edge)}
 .seg button{padding:3px 11px;border-radius:9px;font-size:12px;color:var(--muted);white-space:nowrap}
 .seg button.on{background:var(--g3);color:var(--text);box-shadow:inset 0 1px 0 var(--hi)}
-.sel{appearance:none;font-size:12px;color:var(--muted);background:rgba(0,0,0,.18);border:1px solid var(--edge);border-radius:11px;padding:4px 24px 4px 10px;max-width:200px;
-  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 13px) 50%,calc(100% - 9px) 50%;background-size:4px 4px;background-repeat:no-repeat}
-.sel option{background:#1c1c20;color:#e4e4e7}
 .ctx{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);padding:0 6px}
 .ring{width:16px;height:16px;border-radius:50%}
 .send{width:34px;height:34px;border-radius:11px;background:var(--grad);color:var(--onacc);display:inline-flex;align-items:center;justify-content:center}
@@ -277,6 +284,46 @@ function md(t) {
   let s = esc(t).replace(/```([\s\S]*?)```/g, (_, c) => `<pre>${c.replace(/^\w*\n/, '')}</pre>`);
   return s.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
 }
+/* "loki-huihui_ai-qwen3.5-abliterated-9b:latest" -> "qwen3.5-abliterated-9b"; "nvidia/nemotron-3-ultra" -> "nemotron-3-ultra" */
+const niceModel = m => String(m || '').replace(/^loki-/, '').replace(/:latest$/, '').replace(/^.*\//, '').replace(/^[a-z0-9]+_[a-z0-9]+-/i, '');
+const kfmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n || 0);
+/* the meter bits for one model turn: model · tokens in/out · speed · seconds */
+function meterBits(it, short) {
+  const b = [`<span class="m">${esc(niceModel(it.model))}</span>`];
+  if (!short && it.provider) b.push(`<span>${esc(it.provider)}</span>`);
+  if (it.tin || it.tout) b.push(`<span>${kfmt(it.tin)} in · ${kfmt(it.tout)} out</span>`);
+  if (it.tout && it.secs) b.push(`<span>${Math.round(it.tout / it.secs)} tok/s</span>`);
+  if (it.secs) b.push(`<span>${it.secs}s</span>`);
+  return b.join('');
+}
+const elapsed = r => { const s = Math.max(0, (Date.parse(r.updated) - Date.parse(r.created)) / 1000);
+  return s < 90 ? Math.round(s) + 's' : s < 5400 ? Math.round(s / 60) + 'm' : (s / 3600).toFixed(1) + 'h'; };
+/* logs of this machine and the other one, side by side in Settings */
+async function paintLogs() {
+  const who = $('#logWho'), box = $('#logBox'); if (!box) return;
+  const peers = (S.link?.peers || []).filter(p => p.online).map(p => p.name);
+  S.logWho = S.logWho && peers.includes(S.logWho) ? S.logWho : ''; S.logFile = S.logFile || 'lokid.log';
+  who.innerHTML = [['', 'This machine'], ...peers.map(p => [p, p])].map(([v, l]) => `<button data-lw="${esc(v)}" class="${S.logWho === v ? 'on' : ''}">${esc(l)}</button>`).join('');
+  $('#logFile').innerHTML = ['lokid.log', 'launcher.log', 'build.log'].map(f => `<button data-lf="${f}" class="${S.logFile === f ? 'on' : ''}">${f.replace('.log', '')}</button>`).join('');
+  who.querySelectorAll('[data-lw]').forEach(b => b.onclick = () => { S.logWho = b.dataset.lw; paintLogs(); });
+  $('#logFile').querySelectorAll('[data-lf]').forEach(b => b.onclick = () => { S.logFile = b.dataset.lf; paintLogs(); });
+  const d = await api((S.logWho ? `/peer/${encodeURIComponent(S.logWho)}` : '') + '/logs?lines=300').catch(() => null);
+  box.textContent = d ? (d[S.logFile] || '(empty)') : 'Could not read the logs' + (S.logWho ? ` of ${S.logWho}` : '');
+  box.scrollTop = box.scrollHeight;
+}
+/* one small menu for every choice (no native selects) */
+function dropdown(anchor, title, items, value, onpick) {
+  const m = $('#lmenu');
+  m.innerHTML = (title ? `<h5>${esc(title)}</h5>` : '') + items.map((it, i) => `<button class="mi ${it.v === value ? 'on' : ''}" data-dd="${i}">
+    <span style="min-width:0"><span>${esc(it.label)}</span>${it.sub ? `<span class="sub">${esc(it.sub)}</span>` : ''}</span>
+    ${it.tps ? `<span class="tps">${Math.round(it.tps)} tok/s</span>` : ''}${it.v === value ? ic('check', 'ck') : ''}</button>`).join('');
+  const r = anchor.getBoundingClientRect();
+  m.classList.add('show'); document.body.classList.add('menuopen');
+  const h = m.offsetHeight;
+  m.style.left = Math.min(innerWidth - m.offsetWidth - 8, Math.max(8, r.left)) + 'px';
+  m.style.top = (r.top - h - 6 > 8 ? r.top - h - 6 : r.bottom + 6) + 'px';
+  m.querySelectorAll('[data-dd]').forEach(b => b.onclick = () => { m.classList.remove('show'); document.body.classList.remove('menuopen'); onpick(items[+b.dataset.dd].v); });
+}
 let toastT; function toast(t, onclick) { const e = $('#toast'); e.textContent = t; e.onclick = () => { e.classList.remove('show'); onclick && onclick(); }; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('show'), 4200); }
 
 /* ---------- state + settings ---------- */
@@ -356,7 +403,7 @@ function layMenu(anchor, sd) {
   m.querySelectorAll('[data-wide]').forEach(b => b.onclick = () => { const w = sd === 'left' ? 'wl' : 'wr'; CFG[w] = CFG[w] > 30 ? 22 : 38; saveCfg(); layout(); m.classList.remove('show'); });
   m.querySelectorAll('[data-pre]').forEach(b => b.onclick = () => { applyPreset(b.dataset.pre); m.classList.remove('show'); });
 }
-document.addEventListener('mousedown', e => { if (!e.target.closest('#lmenu') && !e.target.closest('[data-lay],[data-preset-menu]')) $('#lmenu').classList.remove('show'); });
+document.addEventListener('mousedown', e => { if (!e.target.closest('#lmenu') && !e.target.closest('[data-lay],[data-preset-menu],.dd')) { $('#lmenu').classList.remove('show'); document.body.classList.remove('menuopen'); } });
 /* drag a panel's title onto the other side to move it */
 document.addEventListener('dragstart', e => { const h = e.target.closest?.('[data-dragdrawer]'); if (!h) return;
   e.dataTransfer.setData('application/x-loki-panel', CFG[h.dataset.dragdrawer]); e.dataTransfer.effectAllowed = 'move'; S.dragPanel = CFG[h.dataset.dragdrawer]; });
@@ -410,6 +457,7 @@ async function paintSettings() {
       <div class="row"><label>Interview me</label><span class="seg">${['always','big','off'].map(v => `<button data-iv-set="${v}" class="${CFG.interview === v ? 'on' : ''}">${{always:'Every job', big:'Big jobs', off:'Never'}[v]}</button>`).join('')}</span></div>
       <div class="row"><label>Notifications</label><span class="seg"><button data-nt="1" class="${CFG.notify ? 'on' : ''}">On</button><button data-nt="0" class="${CFG.notify ? '' : 'on'}">Off</button></span></div></div>
     <div class="sec"><h3>${ic('swap')} Mac ↔ PC link</h3><div id="linkBox"><div class="empty">…</div></div></div>
+    <div class="sec"><h3>${ic('term')} Logs <span class="sp"></span><span class="seg" id="logWho"></span></h3><div class="seg" id="logFile" style="margin-bottom:6px"></div><pre class="logs" id="logBox"></pre></div>
     <div class="sec"><h3>${ic('monitor')} This machine <span class="sp"></span><button class="btn sm" id="scanB">Scan again</button></h3><div id="sysBox"><div class="empty">Scanning…</div></div></div>
     <div class="sec"><h3>${ic('chip')} Local models</h3><div id="localBox"><div class="empty">…</div></div></div>
     <div class="sec"><h3>${ic('refresh')} Free online models <span class="sp"></span><button class="btn sm" id="probeB">Check all</button></h3><div id="freeBox"></div></div>
@@ -420,6 +468,7 @@ async function paintSettings() {
       + ((l.peers || []).length ? l.peers.map(p => `<div class="row"><label><span class="st ${p.online ? 'done' : 'failed'}">${p.online ? 'online' : 'offline'}</span> ${esc(p.name)}</label><span style="font-size:12px;color:var(--dim)">${p.hello?.version ? 'v' + esc(p.hello.version) + ' · ' : ''}${p.hello?.active_runs ?? 0} working · checked ${p.checked ? ago(p.checked) : '—'}</span></div>`).join('')
         : `<div class="empty">Looking for the other machine…</div>`)
       + `<div style="font-size:11.5px;color:var(--dim);margin-top:6px">Its jobs show in Jobs with its name, its questions ring the bell here, and its pictures are copied into the Library every 2 minutes.</div>`; }).catch(() => {});
+  paintLogs();
   api('/knowledge').then(k => { const el = $('#knowBox'); if (!el) return;
     el.innerHTML = `<div style="font-size:12px;color:var(--dim);margin-bottom:6px">${k.playbooks.length} playbooks · ${k.lessons.length} lessons learned from real errors</div>`
       + k.lessons.slice().reverse().slice(0, 12).map(l => `<div class="lesson">${esc(l)}</div>`).join('')
@@ -476,8 +525,8 @@ function chatShell() {
     <div class="comp"><div class="box"><div class="atts" id="atts" style="display:none"></div>
       <textarea id="inp" rows="1" placeholder="Describe what to make, or talk to the job…"></textarea>
       <div class="cb"><span class="seg"><button data-mode="agent" class="tu" data-tip="Agent — fast free models, local model as backup">Agent</button><button data-mode="hard" class="tu" data-tip="Hard — strongest free model only; waits instead of dropping to the local model">Hard</button></span>
-        <select class="sel tu" id="modelSel" data-tip="Model — which free provider to try first"></select>
-        <select class="sel tu" id="runOn" style="display:none" data-tip="Run on — this machine, or the other one (heavy Blender / GPU work belongs on the PC)"></select>
+        <button class="dd tu" id="modelSel" data-tip="Model — which free model to try first"></button>
+        <button class="dd tu" id="runOn" style="display:none" data-tip="Run on — this machine, or the other one (heavy Blender / GPU work belongs on the PC)"></button>
         <button class="ib tu" id="bAtt" data-tip="Attach — add files as references (or drop / paste them)">${ic('plus')}</button><input type="file" id="pick" multiple hidden>
         <span class="sp"></span><span class="ctx tu" id="ctx" data-tip="Context — how much of the model's window this job uses"></span>
         <button class="send tu" id="sendB" data-tip="Send (Enter) · new line: Shift+Enter">${ic('send')}</button></div></div></div>`;
@@ -487,8 +536,13 @@ function chatShell() {
   inp.addEventListener('paste', e => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); fs.forEach(upload); } });
   $('#sendB').onclick = () => $('#sendB').classList.contains('stop') ? stopJob() : send();
   document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { S.mode = b.dataset.mode; paintComposer(); });
-  $('#modelSel').onchange = e => S.prefer = e.target.value;
-  $('#runOn').onchange = e => S.target = e.target.value; paintTarget();
+  $('#modelSel').onclick = e => { e.stopPropagation(); const brains = S.models.filter(m => m.role === 'brain' && m.ok);
+    dropdown(e.currentTarget, 'Model', [{v:'', label:'Auto', sub:'best free model that answers'}, ...brains.map(m => ({v:m.provider, label:niceModel(m.model), sub:m.provider, tps:m.tps}))],
+      S.prefer, v => { S.prefer = v; paintComposer(); }); };
+  $('#runOn').onclick = e => { e.stopPropagation(); const on = (S.link?.peers || []).filter(p => p.online);
+    dropdown(e.currentTarget, 'Run on', [{v:'', label:'This machine'}, ...on.map(p => ({v:p.name, label:p.name, sub:`${p.hello?.active_runs ?? 0} working${p.hello?.gpu ? ' · ' + p.hello.gpu : ''}`}))],
+      S.target, v => { S.target = v; paintTarget(); }); };
+  paintTarget();
   $('#bAtt').onclick = () => $('#pick').click(); $('#pick').onchange = e => { [...e.target.files].forEach(upload); e.target.value = ''; };
   const cw = $('#chatw'); let depth = 0; const isDrag = e => [...(e.dataTransfer?.types || [])].some(t => t === 'Files' || t === 'application/x-loki-ref');
   cw.addEventListener('dragenter', e => { if (!isDrag(e)) return; e.preventDefault(); depth++; cw.classList.add('dropping'); });
@@ -502,9 +556,8 @@ function chatShell() {
 function paintComposer() {
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
   const sel = $('#modelSel'); if (!sel) return;
-  const brains = S.models.filter(m => m.role === 'brain' && m.ok);
-  sel.innerHTML = `<option value="">Auto · best free</option>` + brains.map(m => `<option value="${esc(m.provider)}">${esc(m.provider)} · ${esc(m.model.split('/').pop())}${m.tps ? ` · ${Math.round(m.tps)} tok/s` : ''}</option>`).join('');
-  sel.value = brains.some(m => m.provider === S.prefer) ? S.prefer : '';
+  const pick = S.models.find(m => m.role === 'brain' && m.ok && m.provider === S.prefer);
+  sel.innerHTML = `<span>${pick ? esc(niceModel(pick.model)) : 'Auto'}</span>${ic('chev')}`;
   const r = S.chat?.run, used = r?.ctx_tokens || 0, pct = Math.min(100, used / 1280);
   $('#ctx').innerHTML = used ? `<span class="ring" style="background:conic-gradient(var(--accent) ${pct}%,var(--g3) 0)"></span>${(used/1000).toFixed(1)}k` : '';
   const live = S.chat?.active && ['running','planning','resting'].includes(r?.status), sb = $('#sendB');
@@ -608,7 +661,7 @@ function paintChat(force) {
       if (it.tool === 'plan' && !it.owner) continue; // the plan card shows it
       const [lbl, icon] = label(it), key = r.id + ':' + it.step + ':' + it.tool + (it.owner || ''), open = S.open.has(key);
       const one = `<div class="tc ${open ? 'open' : ''}" data-key="${esc(key)}"><div class="r">${ic(icon)}<span class="lbl">${lbl}</span>${it.ok ? ic('check', 'ok') : ic('x', 'no')}</div>
-        <div class="more"><div style="font-size:11px;color:var(--dim)">${esc(it.provider || '')} ${esc(it.model || '')}</div>
+        <div class="more"><div class="lm">${meterBits(it)}</div>
         ${it.tool === 'run' ? `<pre>${esc(it.args?.command || '')}</pre>` : it.tool === 'write_file' ? `<pre>${esc(String(it.args?.content || '').slice(0, 4000))}</pre>` : `<pre>${esc(JSON.stringify(it.args, null, 1)).slice(0, 1800)}</pre>`}
         <pre>${esc(String(it.result || '').slice(0, 3000))}</pre></div></div>`;
       group.push({html: one, sig: open ? key : it.tool + '|' + lbl + '|' + it.ok});
@@ -618,6 +671,10 @@ function paintChat(force) {
   if (!planShown && tasks.length) html = `<div class="ind">${planCard(tasks)}</div>` + html;
   if (r.status === 'waiting') html += `<div class="ind">${actionCard(r, false)}</div>`;
   else if (live) html += `<div class="typing ind"><span class="live"></span>${r.status === 'resting' ? 'Free models are busy — resting, then carrying on' : r.status === 'planning' ? 'Thinking about the plan…' : 'Working…'}</div>`;
+  /* the live meter: which model, tokens, speed, time - quiet, under the work (the previous LOKI's live meter) */
+  const lastTool = [...c.items].reverse().find(x => x.kind === 'tool' && x.model);
+  if (lastTool || r.tok_in) html += `<div class="lm ind" title="${esc((r.tok_in || 0).toLocaleString())} tokens in, ${esc((r.tok_out || 0).toLocaleString())} out over ${r.steps} steps">
+    ${lastTool ? meterBits(lastTool, true) : ''}<span>${kfmt((r.tok_in || 0) + (r.tok_out || 0))} tok this job</span><span>${r.steps} steps</span><span>${elapsed(r)}</span></div>`;
   const keep = {}, sameCard = col.dataset.cardFor === r.id + ':' + r.steps;
   col.querySelectorAll('[data-note]').forEach(e => keep[e.dataset.note] = e.value);
   const foc = document.activeElement?.dataset?.note;
@@ -753,17 +810,17 @@ function paintTarget() {
   const el = $('#runOn'); if (!el) return; const on = (S.link?.peers || []).filter(p => p.online);
   if (S.target && !on.some(p => p.name === S.target)) S.target = '';
   el.style.display = on.length && !S.sel ? '' : 'none';
-  el.innerHTML = `<option value="">This machine</option>` + on.map(p => `<option value="${esc(p.name)}">${esc(p.name)}${p.hello?.gpu ? ' · ' + esc(p.hello.gpu) : ''}</option>`).join('');
-  el.value = S.target;
+  el.innerHTML = `${ic('monitor')}<span>${S.target ? esc(S.target) : 'This machine'}</span>${ic('chev')}`;
 }
 async function poll(force) {
   if (busy && !force) return; busy = true;
   try {
     S.local = await api('/runs') || []; await peers(); mergeRuns();
     if (S.sel) { const remote = !!where(S.sel)[0];
-      if (!remote || force || ++S.tick % 2 === 0) { const c = await api(`${rb(S.sel)}/chat`).catch(() => null); if (c) S.chat = c; } }
+      if (!remote || force || ++S.tick % 2 === 0) { const c = await api(`${rb(S.sel)}/chat`).catch(() => null); if (c) { if (remote) c.run.id = S.sel; S.chat = c; } } }
     paintChat(force); paintBell(); notifyNew(); if (bodyOf('jobs')) fillDrawer();
-  } catch (e) { $('#mach').innerHTML = '<b style="color:var(--bad)">driver offline</b>'; }
+    if (S.offline) { S.offline = false; $('#mach').innerHTML = S.machHTML || ''; }
+  } catch (e) { if (!S.offline) { S.offline = true; $('#mach').innerHTML = '<b style="color:var(--bad)">driver restarting…</b>'; } }
   busy = false;
 }
 /* window: our bar is the title bar; buttons call the launcher (pywebview js_api) */
@@ -795,7 +852,7 @@ async function boot() {
   applyLook(); layout(); chatShell(); paintBell();
   api('/status').then(s => {
     const when = s.commit_time ? ago(s.commit_time) : '';
-    $('#mach').innerHTML = `<b>${esc(s.machine || s.os)}</b> · v${esc(s.version)}${s.commit ? ` · ${esc(s.commit)}` : ''}`;
+    $('#mach').innerHTML = S.machHTML = `<b>${esc(s.machine || s.os)}</b> · v${esc(s.version)}${s.commit ? ` · ${esc(s.commit)}` : ''}`;
     $('#mach').dataset.tip = `This machine runs LOKI ${s.version}, build ${s.commit || '?'}${when ? ` from ${when} ago` : ''}${s.commit_subject ? ': ' + s.commit_subject : ''}. It checks for updates every 10 minutes.`;
     if (s.commit && CFG.seen_commit && CFG.seen_commit !== s.commit) toast(`Updated to ${s.commit}: ${s.commit_subject || 'new version'}`);
     if (s.commit && CFG.seen_commit !== s.commit) { CFG.seen_commit = s.commit; saveCfg(); }

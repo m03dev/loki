@@ -321,7 +321,8 @@ async fn chat_run(State(app): State<App>, AxPath(id): AxPath<String>) -> Result<
         let result = s["result"].as_str().unwrap_or("");
         let ok = !result.starts_with("ERROR") && !result.contains("check failed");
         items.push(json!({"kind": "tool", "t": s["t"], "step": s["step"], "tool": tool, "args": s["args"],
-            "result": result, "ok": ok, "model": s["model"], "provider": s["provider"], "owner": s["owner"]}));
+            "result": result, "ok": ok, "model": s["model"], "provider": s["provider"], "owner": s["owner"],
+            "tin": s["tin"], "tout": s["tout"], "secs": s["secs"]}));
     }
     items.sort_by(|a, b| a["t"].as_str().unwrap_or("").cmp(b["t"].as_str().unwrap_or("")));
     let active = app.live.lock().await.contains_key(&id);
@@ -402,6 +403,18 @@ async fn peer_auth(State(app): State<App>, req: Request, next: Next) -> Response
             (StatusCode::UNAUTHORIZED, e).into_response()
         }
     }
+}
+
+/// The last lines of this machine's logs (driver, launcher, build) - shared with the other machine and the window.
+async fn logs(State(app): State<App>, Query(q): Query<HashMap<String, String>>) -> Json<Value> {
+    let n: usize = q.get("lines").and_then(|v| v.parse().ok()).unwrap_or(200).min(2000);
+    let mut out = serde_json::Map::new();
+    for name in ["lokid.log", "launcher.log", "build.log"] {
+        let text = std::fs::read_to_string(app.home.join(name)).unwrap_or_default();
+        let lines: Vec<&str> = text.lines().collect();
+        out.insert(name.into(), json!(lines[lines.len().saturating_sub(n)..].join("\n")));
+    }
+    Json(Value::Object(out))
 }
 
 async fn hello(State(app): State<App>) -> Json<Value> {
@@ -1087,6 +1100,7 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
         .route("/system", get(system))
         .route("/knowledge", get(knowledge))
         .route("/link", get(link_status))
+        .route("/logs", get(logs))
         .route("/mirror/file", get(mirror_file))
         .route("/peer/:name/*rest", any(peer_proxy).layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024)))
         .with_state(app.clone());
@@ -1094,6 +1108,7 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
         // The peer port: only what the other machine needs, every request signed.
         let peer = Router::new()
             .route("/hello", get(hello))
+            .route("/logs", get(logs))
             .route("/status", get(status))
             .route("/models", get(models))
             .route("/runs", get(list_runs).post(create_run))

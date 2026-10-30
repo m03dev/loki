@@ -87,6 +87,11 @@ pub struct RunInfo {
     /// check, write again ...) counts here even though every single turn "did something".
     #[serde(default)]
     pub since_pass: u32,
+    /// Tokens this job has sent to / received from models, all providers together.
+    #[serde(default)]
+    pub tok_in: u64,
+    #[serde(default)]
+    pub tok_out: u64,
     /// "always" | "big" | "off": ask the owner a few option questions before planning.
     #[serde(default)]
     pub interview: String,
@@ -181,6 +186,8 @@ impl Journal {
             approved_commands: vec![],
             idle_turns: 0,
             since_pass: 0,
+            tok_in: 0,
+            tok_out: 0,
             interview: "off".into(),
             interviewed: false,
             interview_asked: false,

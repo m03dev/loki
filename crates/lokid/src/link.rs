@@ -317,6 +317,16 @@ impl Link {
         tokio::time::sleep(Duration::from_secs(20)).await;
         loop {
             for peer in self.online_peers().await {
+                // its logs too, so either machine (and whoever helps) can read both
+                if let Ok(v) = self.call_json(&peer, "GET", "/logs?lines=400", None).await {
+                    let dir = self.home.join("mirror").join(clean(&peer)).join("logs");
+                    let _ = std::fs::create_dir_all(&dir);
+                    if let Some(o) = v.as_object() {
+                        for (k, t) in o {
+                            let _ = std::fs::write(dir.join(clean(k)), t.as_str().unwrap_or(""));
+                        }
+                    }
+                }
                 match self.mirror_one(&peer).await {
                     Ok((got, gone)) if got + gone > 0 => tracing::info!("mirror {peer}: {got} new, {gone} removed"),
                     Ok(_) => {}
@@ -381,7 +391,7 @@ impl Link {
                 let p = e.path();
                 if p.is_dir() { stack.push(p); continue; }
                 let rel = p.strip_prefix(&root).unwrap_or(&p).to_string_lossy().replace('\\', "/");
-                if rel == "titles.json" || rel == "index.json" { continue; }
+                if rel == "titles.json" || rel == "index.json" || rel.starts_with("logs/") { continue; }
                 if !want.contains_key(&rel) && std::fs::remove_file(&p).is_ok() { gone += 1; }
             }
         }

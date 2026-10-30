@@ -32,6 +32,10 @@ pub struct Reply {
     pub call: Option<ToolCall>,
     pub provider: String,
     pub model: String,
+    /// tokens sent / received and how long the answer took (for the window's live meter)
+    pub tokens_in: u64,
+    pub tokens_out: u64,
+    pub secs: f64,
 }
 
 #[derive(Debug)]
@@ -137,13 +141,16 @@ impl Llm {
                     let msg = &v["choices"][0]["message"];
                     let text = msg["content"].as_str().unwrap_or("").to_string();
                     let call = parse_native_call(msg).or_else(|| repair_call_with(&text, tools));
+                    let secs = started.elapsed().as_secs_f64();
+                    let tokens_in = v["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
+                    let tokens_out = v["usage"]["completion_tokens"].as_u64().unwrap_or(0);
                     let mut p = pool.lock().await;
-                    if let Some(n) = v["usage"]["completion_tokens"].as_u64() {
-                        p.report_speed(&name, &pick.model, n, started.elapsed().as_secs_f64());
+                    if tokens_out > 0 {
+                        p.report_speed(&name, &pick.model, tokens_out, secs);
                     }
                     p.report_ok(&name);
                     drop(p);
-                    return Ok(Reply { text, call, provider: name, model: pick.model });
+                    return Ok(Reply { text, call, provider: name, model: pick.model, tokens_in, tokens_out, secs });
                 }
                 Err(_) => {
                     pool.lock().await.report_fail(&name, false);
@@ -185,7 +192,8 @@ impl Llm {
                         continue;
                     }
                     pool.lock().await.report_ok(&name);
-                    return Ok(Reply { text, call: None, provider: name, model: pick.model });
+                    return Ok(Reply { text, call: None, provider: name, model: pick.model, tokens_in: v["usage"]["prompt_tokens"].as_u64().unwrap_or(0),
+                        tokens_out: v["usage"]["completion_tokens"].as_u64().unwrap_or(0), secs: 0.0 });
                 }
                 Ok(r) => {
                     let limited = matches!(r.status().as_u16(), 429 | 402);

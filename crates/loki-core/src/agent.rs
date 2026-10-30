@@ -378,8 +378,11 @@ hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, ma
                     (s, true)
                 }
             };
+            info.tok_in += reply.tokens_in;
+            info.tok_out += reply.tokens_out;
             j.log_step(&json!({"step": info.steps, "provider": reply.provider, "model": reply.model,
-                "tool": call.name, "args": call.args, "result": short(&result, 2000)}));
+                "tool": call.name, "args": call.args, "result": short(&result, 2000),
+                "tin": reply.tokens_in, "tout": reply.tokens_out, "secs": (reply.secs * 10.0).round() / 10.0}));
             let productive = !result.starts_with("ERROR")
                 && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish" | "interview" | "inspect_scene" | "look" | "learn");
             if call.name == "run" {
