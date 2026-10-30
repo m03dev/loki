@@ -239,7 +239,10 @@ pub async fn shell(ws: &Path, cmd: &str, timeout: Duration) -> Outcome {
             let err = String::from_utf8_lossy(&o.stderr);
             if !err.trim().is_empty() { text.push_str("\n[stderr]\n"); text.push_str(&err); }
             if text.len() > 8000 { let cut = text.len() - 8000; text = format!("...{}", &text[floor_char(&text, cut)..]); }
-            if o.status.success() { Outcome::Ok(format!("exit 0\n{text}")) } else { Outcome::Err(format!("exit {:?}\n{text}", o.status.code())) }
+            // freecadcmd exits 0 even when the script raised: treat its own error line as the failure it is
+            let script_failed = program_name(cmd) == "freecadcmd" && text.contains("Exception while processing file");
+            if o.status.success() && !script_failed { Outcome::Ok(format!("exit 0\n{text}")) }
+            else { Outcome::Err(format!("exit {:?}\n{text}", if script_failed { Some(1) } else { o.status.code() })) }
         }
     }
 }
