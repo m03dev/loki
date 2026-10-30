@@ -585,6 +585,15 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 let mut tasks = j.tasks();
                 let id = a["task_id"].as_u64().unwrap_or(0) as u32;
                 let Some(t) = tasks.iter_mut().find(|t| t.id == id) else { return Outcome::Err(format!("no task #{id}")) };
+                // Free models give up on fixable work: a step with a machine check needs 3 real attempts first.
+                let machine = ["blend:", "look:", "file:", "cmd:"].iter().any(|p| t.check.starts_with(p));
+                if machine && t.attempts < 3 {
+                    t.attempts += 1;
+                    let _ = j.save_tasks(&tasks);
+                    return Outcome::Err(format!("not yet: you have tried #{id} only {} time(s). If you know the cause ({}), fix it now \
+                        (write_file, run, then mark_done). Set it aside only after 3 real attempts, or ask_owner.",
+                        tasks.iter().find(|t| t.id == id).map(|t| t.attempts - 1).unwrap_or(0), short(a["reason"].as_str().unwrap_or(""), 160)));
+                }
                 t.state = TaskState::Blocked;
                 t.evidence = a["reason"].as_str().unwrap_or("").into();
                 let _ = j.save_tasks(&tasks);

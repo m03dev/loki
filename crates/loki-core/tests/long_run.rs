@@ -221,3 +221,24 @@ async fn interview_first_then_plan_with_the_owners_choices() {
     assert!(seen.lock().await.join("").contains("OWNER'S CHOICES (from the interview): Style: Painterly"));
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[tokio::test]
+async fn a_checked_step_cannot_be_dropped_before_three_tries() {
+    let script = Arc::new(Mutex::new(VecDeque::from(vec![
+        call("plan", json!({"tasks":[{"title":"Render","check":"file:r.png"}]})),
+        call("block_task", json!({"task_id":1,"reason":"hard"})),      // refused
+        call("write_file", json!({"path":"r.png","content":"x"})),
+        call("mark_done", json!({"task_id":1,"evidence":"made"})),
+    ])));
+    let url = serve(Router::new().route("/v1/chat/completions", post(
+        |State(s): State<Arc<Mutex<VecDeque<Value>>>>, Json(_b): Json<Value>| async move {
+            Json(s.lock().await.pop_front().unwrap_or_else(|| text("nothing left")))
+        })).with_state(script)).await;
+    let driver = Driver::new(Arc::new(Mutex::new(ModelPool::new(vec![provider("good", &url, 1)]))));
+    let root = std::env::temp_dir().join(format!("lokiblock-{}", std::process::id()));
+    let (j, _) = Journal::create(&root.join("runs"), "Render it", &root.join("ws"), 20, 1.0).unwrap();
+    let info = driver.run(&j, Arc::new(AtomicBool::new(false))).await.unwrap();
+    assert_eq!(info.status, Status::Done);
+    assert_eq!(j.tasks()[0].state, TaskState::Passed, "the step was fixed, not dropped");
+    let _ = std::fs::remove_dir_all(root);
+}
