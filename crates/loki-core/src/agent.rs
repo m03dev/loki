@@ -75,6 +75,7 @@ const INSPECT_SCRIPT: &str = include_str!("../../../tools/blender/inspect_scene.
 /// The Blender helper library every job gets in scripts/ (placing, hinging, framing, rendering).
 const LOKI_BPY: &str = include_str!("../../../tools/blender/loki_bpy.py");
 const CAD_RENDER: &str = include_str!("../../../tools/cad/cad_render.py");
+const LOKI_CAD: &str = include_str!("../../../tools/cad/loki_cad.py");
 
 /// CAD tools the launcher installed into harness_data/cad after this driver started (found without a restart).
 fn find_cad(key: &str) -> Option<String> {
@@ -111,7 +112,7 @@ fn machine_tools(blender: Option<&str>) -> String {
         }
     }
     if lines.is_empty() { return String::new(); }
-    format!("\nMACHINE TOOLS (exact paths):\n- {}\n- scripts/cad_render.py renders CAD parts (parts/<material>.stl) in Blender.\n", lines.join("\n- "))
+    format!("\nMACHINE TOOLS (exact paths):\n- {}\n- scripts/loki_cad.py: proven build123d parts (read its top first); scripts/cad_render.py renders parts/<material>.stl in Blender.\n", lines.join("\n- "))
 }
 
 struct Exchange {
@@ -294,6 +295,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
         if std::fs::create_dir_all(&scripts).is_ok() {
             let _ = std::fs::write(scripts.join("loki_bpy.py"), LOKI_BPY);
             let _ = std::fs::write(scripts.join("cad_render.py"), CAD_RENDER);
+            let _ = std::fs::write(scripts.join("loki_cad.py"), LOKI_CAD);
         }
 
         loop {

@@ -4,6 +4,10 @@ description: Model a 3D object as real CAD solids with build123d or FreeCAD (exa
 ---
 # CAD modeling - real solids, then a render
 
+**Start from `scripts/loki_cad.py`** (build123d): proven, tested parts - shell_box, barrel_lid, Hinge, straps, lock_plate,
+heap_in, board, post, leg, rod, handle_ring - and whole objects like `chest(m, W, D, H)`. Read its first 40 lines, then
+compose: `m = Model(); m.add("wood", ...); m.export()`. Only write raw CAD for a shape no part covers.
+
 Build the object in CAD (millimetres), one STL per material in `parts/`, then render with `scripts/cad_render.py`.
 CAD does the geometry exactly (no floating parts: things are unioned, cut and placed by dimensions); Blender only adds
 material, light and camera. Plan these steps:
