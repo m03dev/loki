@@ -69,6 +69,8 @@ pub struct Driver {
 
 /// LOKI's scene inspector, shipped inside the driver so every machine has the same one.
 const INSPECT_SCRIPT: &str = include_str!("../../../tools/blender/inspect_scene.py");
+/// The Blender helper library every job gets in scripts/ (placing, hinging, framing, rendering).
+const LOKI_BPY: &str = include_str!("../../../tools/blender/loki_bpy.py");
 
 struct Exchange {
     call: ToolCall,
@@ -130,6 +132,12 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 info.interview,
                 if info.interview == "big" { "Only for big jobs (several outputs or hours of work)." } else { "Plain questions are never interviewed." }));
         }
+        system.push_str("\n- Blender scripts: scripts/loki_bpy.py is already in the job folder - USE IT instead of computing coordinates. \
+Start every script with: import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from loki_bpy import * ; then start(__file__). \
+Helpers: mat(name, '#hex', metal=, rough=, emit=), box(name, (x,y,z), mat, bevel=), cyl(name, r, depth, mat, axis='X'), sphere, cone, ground(size, mat), \
+planks(name, (x,y,z), n, mat), place_on(a, b, x=, y=, z=), place_beside(a, b, side='+x'|'-y'..), place_inside(a, b, depth=), center_on(a, b), \
+hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, mat), bounds(o), frame(), lights(), finish('name') \
+(finish saves scenes/name.blend and renders renders/name.png). Sizes are metres; parts stand on their bottom centre.\n");
         system.push_str("\n- 3D / render work: after building, call inspect_scene on the .blend and fix every error; plan checks as \
 'blend:<file.blend>' and 'look:<render.png>' so the work is judged on what it made. After fixing a real error, call `learn`.\n");
         for pb in self.knowledge.pick(&info.goal, 2) {
@@ -235,6 +243,11 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
         }
         info.status = if j.tasks().is_empty() { Status::Planning } else { Status::Running };
         j.save_info(&info)?;
+        // every job gets the newest Blender helpers next to its scripts
+        let scripts = info.workspace.join("scripts");
+        if std::fs::create_dir_all(&scripts).is_ok() {
+            let _ = std::fs::write(scripts.join("loki_bpy.py"), LOKI_BPY);
+        }
 
         loop {
             if stop.load(Ordering::SeqCst) {

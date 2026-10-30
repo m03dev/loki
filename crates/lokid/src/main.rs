@@ -848,9 +848,28 @@ fn chrono_now() -> String {
 
 async fn status(State(app): State<App>) -> Json<Value> {
     let launcher = std::fs::read_to_string(app.home.join("launcher_status.json")).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok());
+    let repo = repo_dir();
+    let version = repo.as_ref().and_then(|r| std::fs::read_to_string(r.join("VERSION")).ok()).map(|v| v.trim().to_string()).unwrap_or_else(|| env!("CARGO_PKG_VERSION").into());
+    let commit_time = repo.as_ref().and_then(|r| {
+        let mut c = std::process::Command::new("git");
+        c.args(["-C", &r.to_string_lossy(), "log", "-1", "--format=%h|%cI|%s"]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            c.creation_flags(0x0800_0000);
+        }
+        c.output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    }).unwrap_or_default();
+    let mut parts = commit_time.splitn(3, '|');
+    let commit = parts.next().unwrap_or("").to_string();
+    let when = parts.next().unwrap_or("").to_string();
+    let subject = parts.next().unwrap_or("").to_string();
     Json(json!({
         "service": "lokid",
-        "version": env!("CARGO_PKG_VERSION"),
+        "version": version,
+        "commit": commit,
+        "commit_time": when,
+        "commit_subject": subject,
         "home": app.home,
         "active_runs": app.live.lock().await.len(),
         "machine": std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default(),

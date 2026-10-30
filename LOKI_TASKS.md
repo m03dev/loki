@@ -37,6 +37,15 @@ Done 2026-10-30 (owner: "have you given it real errors to check from, not just t
   (<home>/lessons.md, `learn` tool) so a fixed error becomes a rule for every later job.
 - [x] One title bar (frameless window, own minimise / maximise / close, resize edges); a real cog; measured tok/s.
 
+Done 2026-10-30 (owner: "make sure the mac and windows are synced", "modular as before", drag library into chat):
+
+- [x] tools/blender/loki_bpy.py - Blender helpers every job gets in scripts/: parts in metres standing on their bottom
+  centre, place_on / place_beside / place_inside / center_on by measured bounds, hinge on a real edge, coins, planks,
+  frame() camera from the scene's bounds, three-point lights(), finish() saves + renders with the right engine.
+- [x] The window shows the real build (version + commit + time) and says "Updated to ..." after an update.
+- [x] Two docks (left + right) at once; layout presets (Focus, Classic, Studio, Gallery, Tuning); drag a panel's title
+  to the other side; Library pictures drag into the chat as references.
+
 Next, in order (owner's direction 2026-10-29: art, production, creation; long runs; free models;
 owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local
 models; drive real Maya/Blender rather than rebuilding Forge; then ads & social and the phone app):

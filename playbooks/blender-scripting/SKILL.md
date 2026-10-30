@@ -6,7 +6,26 @@ description: Build, light and render a prop or scene from scratch with a Blender
 
 Written from what went wrong in LOKI's first real jobs (floating lids, flames outside the frame, crashes on Blender 5.2).
 
-**Script shape** (one script makes everything; run: `blender --background --python scripts/x.py`)
+**Use loki_bpy** (it is in every job's scripts/ folder): it places parts by their measured bounds, hinges lids on a
+real edge, frames the camera from the scene's bounds and renders with the right engine for this Blender. A whole chest:
+
+```python
+import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from loki_bpy import *
+start(__file__)
+wood, gold = mat("Wood", "#8a5a2b", rough=0.75), mat("Gold", "#d4a017", metal=1.0, rough=0.28)
+ground(6, mat("Floor", "#4a4744", rough=0.9))
+body = box("Body", (0.8, 0.5, 0.42), wood, bevel=0.015)
+lid = box("Lid", (0.82, 0.52, 0.12), wood, bevel=0.02); place_on(lid, body)
+for i, x in enumerate((-0.3, 0.3)):
+    b = box(f"Band{i}", (0.05, 0.53, 0.43), gold); center_on(b, body); b.location.x += x
+plate = box("LockPlate", (0.12, 0.02, 0.14), gold, bevel=0.005); place_beside(plate, body, side="-y", align="center")
+coins(body, 45, gold)
+hinge(lid, edge="+y", angle=40)        # back hinge (+y), front lifts; the camera looks from -y
+frame(); lights(); finish("chest")
+```
+
+**Script shape without the helpers** (one script makes everything; run: `blender --background --python scripts/x.py`)
 1. Start clean: `bpy.ops.wm.read_factory_settings(use_empty=True)`; real units (metres): a chest ~0.8 x 0.5 x 0.5.
 2. Paths from the script's own folder: `ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`;
    `os.makedirs(os.path.join(ROOT, "renders"), exist_ok=True)`. Never relative `//` paths (they follow the .blend).
