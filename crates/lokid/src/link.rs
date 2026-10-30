@@ -330,6 +330,7 @@ impl Link {
     pub async fn mirror_one(&self, peer: &str) -> Result<(usize, usize), String> {
         let root = self.home.join("mirror").join(clean(peer));
         let mut want: HashMap<String, (u64, String)> = HashMap::new(); // rel -> (bytes, title)
+        let mut stamp: HashMap<String, u64> = HashMap::new();            // rel -> modified time over there
         let per = 200;
         for page in 0..25 {
             let v = self.call_json(peer, "GET", &format!("/library?own=1&per={per}&page={page}"), None).await?;
@@ -338,26 +339,39 @@ impl Link {
                 let (Some(run), Some(path)) = (it["run"].as_str(), it["path"].as_str()) else { continue };
                 let rel = format!("{}/{}", clean(run), path.split('/').map(clean).collect::<Vec<_>>().join("/"));
                 if rel.contains("..") { continue; }
+                stamp.insert(rel.clone(), it["modified"].as_u64().unwrap_or(0));
                 want.insert(rel, (it["bytes"].as_u64().unwrap_or(0), it["title"].as_str().unwrap_or("").to_string()));
             }
             if items.len() < per { break; }
         }
+        // what was copied last time (and when it changed over there): copy only what is new or changed since
+        let index_path = root.join("index.json");
+        let mut index: HashMap<String, u64> = std::fs::read_to_string(&index_path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         let mut got = 0;
         for (rel, (bytes, _)) in &want {
             let dest = root.join(rel);
-            if std::fs::metadata(&dest).map(|m| m.len() == *bytes).unwrap_or(false) { continue; }
+            let there = stamp.get(rel).copied().unwrap_or(0);
+            if dest.is_file() && (index.get(rel) == Some(&there) || std::fs::metadata(&dest).map(|m| m.len() == *bytes).unwrap_or(false) && !index.contains_key(rel)) {
+                index.insert(rel.clone(), there);
+                continue;
+            }
             let (run, path) = rel.split_once('/').unwrap();
             let r = self.call(peer, "GET", &format!("/runs/{}/file?path={}", enc(run), enc(path)), vec![], None).await?;
             if !r.status().is_success() { continue; }
             let Ok(b) = r.bytes().await else { continue };
             if let Some(d) = dest.parent() { let _ = std::fs::create_dir_all(d); }
             let tmp = dest.with_extension("part");
-            if std::fs::write(&tmp, &b).is_ok() && std::fs::rename(&tmp, &dest).is_ok() { got += 1; }
+            if std::fs::write(&tmp, &b).is_ok() && std::fs::rename(&tmp, &dest).is_ok() {
+                got += 1;
+                index.insert(rel.clone(), there);
+            }
         }
+        index.retain(|k, _| want.contains_key(k));
         // titles for the Library captions
         let titles: HashMap<String, String> = want.iter().map(|(rel, (_, t))| (rel.split('/').next().unwrap_or("").to_string(), t.clone())).collect();
         let _ = std::fs::create_dir_all(&root);
         let _ = std::fs::write(root.join("titles.json"), serde_json::to_string(&titles).unwrap_or_default());
+        let _ = std::fs::write(&index_path, serde_json::to_string(&index).unwrap_or_default());
         // deletes: anything here the other machine no longer has
         let mut gone = 0;
         let mut stack = vec![root.clone()];
@@ -367,7 +381,7 @@ impl Link {
                 let p = e.path();
                 if p.is_dir() { stack.push(p); continue; }
                 let rel = p.strip_prefix(&root).unwrap_or(&p).to_string_lossy().replace('\\', "/");
-                if rel == "titles.json" { continue; }
+                if rel == "titles.json" || rel == "index.json" { continue; }
                 if !want.contains_key(&rel) && std::fs::remove_file(&p).is_ok() { gone += 1; }
             }
         }
