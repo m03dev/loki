@@ -80,14 +80,34 @@ fn repo_dir() -> Option<PathBuf> {
     exe.ancestors().find(|a| a.join("playbooks").is_dir() && a.join("crates").is_dir()).map(Path::to_path_buf)
 }
 
+/// The built-in free providers always apply (so every update brings the newest list);
+/// <home>/providers.local.toml adds providers or overrides one by name. A providers.toml left by
+/// an older LOKI (a copy of the defaults it shipped with) is moved aside once.
 fn load_pool(home: &Path) -> anyhow::Result<ModelPool> {
     std::fs::create_dir_all(home)?;
-    let p = home.join("providers.toml");
-    if !p.exists() {
-        std::fs::write(&p, DEFAULT_PROVIDERS)?;
-    }
     load_dotenv(&home.join(".env"));
-    ModelPool::load(&p, &home.join("pool_state.json"))
+    let old = home.join("providers.toml");
+    if old.exists() {
+        let _ = std::fs::rename(&old, home.join("providers.old.toml"));
+    }
+    #[derive(Deserialize)]
+    struct File {
+        #[serde(default)]
+        provider: Vec<loki_core::pool::Provider>,
+    }
+    let mut list: Vec<loki_core::pool::Provider> = toml::from_str::<File>(DEFAULT_PROVIDERS)?.provider;
+    let local = home.join("providers.local.toml");
+    if let Ok(text) = std::fs::read_to_string(&local) {
+        match toml::from_str::<File>(&text) {
+            Ok(f) => {
+                for p in f.provider {
+                    if let Some(slot) = list.iter_mut().find(|x| x.name == p.name) { *slot = p; } else { list.push(p); }
+                }
+            }
+            Err(e) => tracing::warn!("providers.local.toml ignored: {e}"),
+        }
+    }
+    Ok(ModelPool::with_state(list, &home.join("pool_state.json")))
 }
 
 /// Minimal KEY=VALUE reader so keys can live next to the data, not in the shell.

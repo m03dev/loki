@@ -27,6 +27,37 @@ priority = 15
 [provider.models]
 brain = "deepseek-ai/deepseek-v4.1-flash"
 
+# Vision (looks at renders for `look:` checks). Several, because free vision endpoints come and go.
+[[provider]]
+name = "nvidia-vl"
+base_url = "https://integrate.api.nvidia.com/v1"
+key_env = "NVIDIA_API_KEY"
+rpm = 40
+rpd = 10000
+priority = 12
+[provider.models]
+vision = "nvidia/nemotron-nano-12b-v2-vl"
+
+[[provider]]
+name = "nvidia-maverick"
+base_url = "https://integrate.api.nvidia.com/v1"
+key_env = "NVIDIA_API_KEY"
+rpm = 40
+rpd = 10000
+priority = 13
+[provider.models]
+vision = "meta/llama-4-maverick-17b-128e-instruct"
+
+[[provider]]
+name = "groq-vision"
+base_url = "https://api.groq.com/openai/v1"
+key_env = "GROQ_API_KEY"
+rpm = 30
+rpd = 1000
+priority = 21
+[provider.models]
+vision = "meta-llama/llama-4-scout-17b-16e-instruct"
+
 [[provider]]
 name = "groq"
 base_url = "https://api.groq.com/openai/v1"

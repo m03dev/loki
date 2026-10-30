@@ -727,6 +727,7 @@ dependencies = [
  "serde_json",
  "sysinfo",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]

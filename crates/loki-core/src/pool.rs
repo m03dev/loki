@@ -106,6 +106,12 @@ impl ModelPool {
         Ok(Self { providers: file.provider, state, state_path: Some(state_path.to_path_buf()) })
     }
 
+    /// Providers given directly, with usage remembered in `state_path`.
+    pub fn with_state(providers: Vec<Provider>, state_path: &Path) -> Self {
+        let state = std::fs::read_to_string(state_path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        Self { providers, state, state_path: Some(state_path.to_path_buf()) }
+    }
+
     pub fn providers(&self) -> &[Provider] {
         &self.providers
     }
