@@ -77,6 +77,12 @@ pub struct RunInfo {
     /// Short title for the job list.
     #[serde(default)]
     pub title: String,
+    /// Commands the owner approved in this job; the same command runs without asking again.
+    #[serde(default)]
+    pub approved_commands: Vec<String>,
+    /// Turns in a row without progress, kept across pauses and approvals.
+    #[serde(default)]
+    pub idle_turns: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,6 +165,8 @@ impl Journal {
             owner_seen: 0,
             ctx_tokens: 0,
             title: title_of(goal),
+            approved_commands: vec![],
+            idle_turns: 0,
         };
         let j = Self { dir };
         j.save_info(&info)?;

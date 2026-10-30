@@ -153,8 +153,9 @@ impl Driver {
         let mut silent_turns = 0u32;
         // An owner request stays in front of the model until it acts on it.
         let mut owner_request: Option<String> = None;
-        // Turns in a row that changed nothing (notes, looking around, errors, no tool call).
-        let mut idle_turns = 0u32;
+        // Turns in a row that changed nothing (notes, looking around, errors, no tool call),
+        // kept in run.json so pauses and approvals don't reset it.
+        let mut idle_turns = info.idle_turns;
 
         // Coming back from a pause: apply the owner's answer first.
         if let Some(reply) = info.owner_reply.take() {
@@ -164,6 +165,13 @@ impl Driver {
                 if call.name == "image_prompt" && reply.approve && !note.is_empty() {
                     call.args["prompt"] = json!(note); // the owner edited the prompt
                 }
+                if reply.approve && call.name == "run" {
+                    if let Some(c) = call.args["command"].as_str() {
+                        if !info.approved_commands.iter().any(|x| x == c) {
+                            info.approved_commands.push(c.to_string());
+                        }
+                    }
+                }
                 let result = if call.name == "ask_owner" {
                     format!("OWNER ANSWERED: {}", if note.is_empty() { if reply.approve { "yes" } else { "no" } } else { &note })
                 } else if reply.approve {
@@ -171,6 +179,8 @@ impl Driver {
                 } else {
                     format!("Owner declined. {}", reply.note)
                 };
+                let failed = result.starts_with("exit Some") || result.starts_with("Owner declined") || result.contains("timed out");
+                idle_turns = if failed { idle_turns + 1 } else { 0 };
                 j.progress(&format!("owner {} {}", if reply.approve { "approved" } else { "declined" }, call.name));
                 j.log_step(&json!({"step": info.steps, "provider": "owner", "model": "", "tool": call.name, "args": call.args,
                     "result": short(&result, 2000), "owner": if reply.approve { "approved" } else { "declined" }}));
@@ -299,7 +309,9 @@ impl Driver {
                 "tool": call.name, "args": call.args, "result": short(&result, 2000)}));
             let productive = !result.starts_with("ERROR")
                 && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish");
-            idle_turns = if productive { 0 } else { idle_turns + 1 };
+            let repeat = recent.iter().rev().take(4).any(|e| e.call == call);
+            idle_turns = if productive && !repeat { 0 } else { idle_turns + 1 };
+            info.idle_turns = idle_turns;
             if !paused && j.tasks().is_empty() && info.steps >= 5 && call.name != "plan" {
                 nudge = Some("You still have no checklist. Call `plan` now, or `finish` if the goal needs no work.".into());
             }
@@ -481,7 +493,10 @@ impl Driver {
                 if let Outcome::Ok(s) = &r { j.progress(s); }
                 r
             }
-            "run" => tools::run(&ws, &self.cfg.policy, a, approved).await,
+            "run" => {
+                let again = a["command"].as_str().is_some_and(|c| info.approved_commands.iter().any(|x| x == c));
+                tools::run(&ws, &self.cfg.policy, a, approved || again).await
+            }
             other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, finish")),
         }
     }

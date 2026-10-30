@@ -186,16 +186,28 @@ pub fn harden(cmd: &str) -> String {
     cmd.to_string()
 }
 
+/// The command line handed to the shell exactly as the model wrote it.
+///
+/// Windows: `cmd /S /C "<command>"` passed raw. Rust's normal argument quoting turns inner `"`
+/// into `\"`, which cmd.exe does not understand, so every quoted command used to break
+/// (`python -c "import os; ..."` -> SyntaxError), seen in the 2026-10-30 stress test.
+#[cfg(windows)]
+fn shell_command(cmd: &str) -> tokio::process::Command {
+    use std::os::windows::process::CommandExt;
+    let mut s = std::process::Command::new("cmd");
+    s.raw_arg(format!("/S /C \"{cmd}\"")).creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    tokio::process::Command::from(s)
+}
+
+#[cfg(not(windows))]
+fn shell_command(cmd: &str) -> tokio::process::Command {
+    let mut c = tokio::process::Command::new("sh");
+    c.arg("-c").arg(cmd);
+    c
+}
+
 pub async fn shell(ws: &Path, cmd: &str, timeout: Duration) -> Outcome {
-    let mut c = if cfg!(windows) {
-        let mut c = tokio::process::Command::new("cmd");
-        c.arg("/C").arg(cmd);
-        c
-    } else {
-        let mut c = tokio::process::Command::new("sh");
-        c.arg("-c").arg(cmd);
-        c
-    };
+    let mut c = shell_command(cmd);
     c.current_dir(ws).kill_on_drop(true);
     match tokio::time::timeout(timeout, c.output()).await {
         Err(_) => Outcome::Err(format!("`{cmd}` timed out after {}s", timeout.as_secs())),
@@ -253,6 +265,15 @@ mod tests {
         assert!(confine(ws, "../etc/passwd").is_err());
         assert_eq!(confine(ws, "/a/b.txt").unwrap(), PathBuf::from("/w/a/b.txt"));
         assert_eq!(confine(ws, "./a").unwrap(), PathBuf::from("/w/a"));
+    }
+
+    #[tokio::test]
+    async fn quoted_commands_reach_the_program_intact() {
+        let ws = std::env::temp_dir();
+        match shell(&ws, r#"python3 -c "import os; print('a b; c')""#, Duration::from_secs(20)).await {
+            Outcome::Ok(t) => assert!(t.contains("a b; c"), "{t}"),
+            Outcome::Err(t) | Outcome::NeedsOwner(t) => panic!("{t}"),
+        }
     }
 
     #[test]
