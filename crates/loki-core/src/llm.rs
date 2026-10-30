@@ -317,11 +317,54 @@ pub fn extract_json(text: &str) -> Option<Value> {
     json_candidates(text).into_iter().find_map(|c| parse_json_lenient(&c))
 }
 
-/// Strict parse, then a forgiving pass (trailing commas, single quotes).
+/// Make model-written JSON valid: inside strings, escape raw newlines/tabs/control characters and
+/// lone backslashes (Windows paths like "D:\loki\work" are invalid JSON escapes - seen on the PC).
+pub fn fix_json(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 16);
+    let mut in_str = false;
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if !in_str {
+            if c == '"' { in_str = true; }
+            out.push(c);
+            continue;
+        }
+        match c {
+            '"' => { in_str = false; out.push(c); }
+            '\\' => match chars.peek().copied() {
+                Some('"') | Some('\\') | Some('/') => { out.push(c); out.push(chars.next().unwrap()); }
+                Some('u') => {
+                    // a real \uXXXX escape, or a path like C:\users
+                    let rest: String = chars.clone().skip(1).take(4).collect();
+                    if rest.len() == 4 && rest.chars().all(|h| h.is_ascii_hexdigit()) { out.push(c); } else { out.push_str("\\\\"); }
+                }
+                // \n \t \r \b \f: keep as escapes only when the next char isn't a letter (\new_folder is a path)
+                Some(e @ ('n' | 't' | 'r' | 'b' | 'f')) => {
+                    let after = chars.clone().nth(1);
+                    if after.is_some_and(|a| a.is_ascii_alphanumeric() || a == '_') && e != 'n' { out.push_str("\\\\"); } else { out.push(c); }
+                }
+                _ => out.push_str("\\\\"),
+            },
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Strict parse, then a forgiving pass (Windows paths, raw newlines, trailing commas, single quotes).
 pub fn parse_json_lenient(s: &str) -> Option<Value> {
     if let Ok(v) = serde_json::from_str::<Value>(s) {
         return Some(v);
     }
+    let fixed = fix_json(s);
+    if let Ok(v) = serde_json::from_str::<Value>(&fixed) {
+        return Some(v);
+    }
+    let s = fixed.as_str();
     let fixed = s.replace(",}", "}").replace(",]", "]").replace(", }", "}").replace(", ]", "]");
     if let Ok(v) = serde_json::from_str::<Value>(&fixed) {
         return Some(v);
@@ -359,6 +402,17 @@ mod tests {
         assert_eq!(repair_call(r#"{"path":"a.py","content":"x"}"#).unwrap().name, "write_file");
         assert_eq!(repair_call(r#"{"command":"blender -b","why":"render"}"#).unwrap().name, "run");
         assert!(repair_call(r#"{"foo":1}"#).is_none());
+    }
+
+    #[test]
+    fn windows_paths_and_raw_newlines_in_text_calls() {
+        let t = "{\"args\":{\"path\":\"D:\\loki\\harness_data\\work\\scripts\\chest.py\",\"content\":\"import os\nprint(1)\"}}";
+        let c = repair_call(t).expect("repaired");
+        assert_eq!(c.name, "write_file");
+        assert_eq!(c.args["path"], "D:\\loki\\harness_data\\work\\scripts\\chest.py");
+        assert_eq!(c.args["content"], "import os\nprint(1)");
+        let u = "{\"tool\":\"read_file\",\"args\":{\"path\":\"C:\\users\\macul\\x.txt\"}}";
+        assert_eq!(repair_call(u).unwrap().args["path"], "C:\\users\\macul\\x.txt");
     }
 
     #[test]

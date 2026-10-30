@@ -325,7 +325,7 @@ hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, ma
             let Some(call) = reply.call else {
                 silent_turns += 1;
                 idle_turns += 1;
-                j.log_step(&json!({"step": info.steps, "provider": reply.provider, "text": short(&reply.text, 400)}));
+                j.log_step(&json!({"step": info.steps, "provider": reply.provider, "text": short(&reply.text, 3000)}));
                 nudge = Some(if silent_turns >= 3 {
                     "You have answered 3 times without a tool call. Reply ONLY with JSON like {\"tool\":\"note\",\"args\":{\"text\":\"...\"}}.".into()
                 } else {
