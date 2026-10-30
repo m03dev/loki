@@ -9,12 +9,15 @@
 //!   lokid probe            check which free providers answer on this machine
 //!   lokid run "<goal>"     run one job in the foreground (handy over SSH)
 
+mod link;
+
 use axum::{
     body::Body,
-    extract::{Path as AxPath, Query, State},
-    http::{header, StatusCode},
+    extract::{Path as AxPath, Query, Request, State},
+    http::{header, HeaderMap, Method, StatusCode, Uri},
+    middleware::{self, Next},
     response::{Html, IntoResponse, Response},
-    routing::{get, post},
+    routing::{any, get, post},
     Json, Router,
 };
 use loki_core::agent::Driver;
@@ -41,6 +44,8 @@ struct App {
     live: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     /// model name -> download progress (Ollama pulls started from the window)
     pulls: Arc<Mutex<HashMap<String, Value>>>,
+    /// The Mac <-> PC link (None when this machine has no LOKI_PEER_SECRET).
+    link: Option<link::Link>,
 }
 
 fn default_settings() -> Value {
@@ -215,6 +220,8 @@ impl App {
         for a in list {
             let src = if let Some(u) = a["upload"].as_str() {
                 confine(&self.home.join("uploads"), u).ok()
+            } else if let Some(m) = a["mirror"].as_str() {
+                confine(&self.home.join("mirror"), m).ok()
             } else if let (Some(run), Some(p)) = (a["run"].as_str(), a["path"].as_str()) {
                 Journal::open(&self.runs_dir().join(safe_name(run))).info().ok().and_then(|i| confine(&i.workspace, p).ok())
             } else {
@@ -325,6 +332,8 @@ async fn chat_run(State(app): State<App>, AxPath(id): AxPath<String>) -> Result<
 struct Page {
     page: Option<usize>,
     per: Option<usize>,
+    /// only this machine's own pictures (what the other machine mirrors)
+    own: Option<u8>,
 }
 
 /// Every image every job made, newest first, in pages.
@@ -340,10 +349,98 @@ async fn library(State(app): State<App>, Query(q): Query<Page>) -> Json<Value> {
             }
         }
     }
+    if q.own.unwrap_or(0) == 0 {
+        all.extend(mirror_items(&app.home.join("mirror")));
+    }
     all.sort_by(|a, b| b["modified"].as_u64().cmp(&a["modified"].as_u64()));
     let total = all.len();
     let items: Vec<Value> = all.into_iter().skip(page * per).take(per).collect();
     Json(json!({"total": total, "page": page, "per": per, "items": items}))
+}
+
+/// Pictures copied from the other machines: `<mirror>/<machine>/<run>/<path>`.
+fn mirror_items(root: &Path) -> Vec<Value> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(root) else { return out };
+    for m in rd.flatten().filter(|e| e.path().is_dir()) {
+        let machine = m.file_name().to_string_lossy().to_string();
+        let titles: HashMap<String, String> = std::fs::read_to_string(m.path().join("titles.json")).ok()
+            .and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        for f in list_files(&m.path(), 5000) {
+            let lower = f.path.to_ascii_lowercase();
+            if ![".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|e| lower.ends_with(e)) { continue; }
+            let (run, path) = f.path.split_once('/').unwrap_or(("", &f.path));
+            let rel = format!("{machine}/{}", f.path);
+            out.push(json!({"run": run, "title": titles.get(run).cloned().unwrap_or_default(), "path": path, "bytes": f.bytes,
+                "modified": f.modified, "machine": machine, "mirror": rel, "src": format!("/mirror/file?path={}", link::enc(&rel))}));
+        }
+    }
+    out
+}
+
+async fn mirror_file(State(app): State<App>, Query(q): Query<FileQuery>) -> Response {
+    let Ok(p) = confine(&app.home.join("mirror"), &q.path) else { return StatusCode::FORBIDDEN.into_response() };
+    match tokio::fs::read(&p).await {
+        Ok(bytes) => ([(header::CONTENT_TYPE, mime(&q.path)), (header::CACHE_CONTROL, "max-age=3600")], Body::from(bytes)).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+// ------------------------------------------------------------- the link (Mac <-> PC)
+
+/// Every request on the peer port must carry this machine pair's signature.
+async fn peer_auth(State(app): State<App>, req: Request, next: Next) -> Response {
+    let Some(l) = app.link.clone() else { return StatusCode::NOT_FOUND.into_response() };
+    let (parts, body) = req.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, 512 * 1024 * 1024).await else { return StatusCode::PAYLOAD_TOO_LARGE.into_response() };
+    let h = |k: &str| parts.headers.get(k).and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    let pq = parts.uri.path_and_query().map(|p| p.as_str().to_string()).unwrap_or_else(|| "/".into());
+    match l.verify(parts.method.as_str(), &pq, &h(link::H_NAME), &h(link::H_TIME), &h(link::H_SIG), &bytes) {
+        Ok(_) => next.run(Request::from_parts(parts, Body::from(bytes))).await,
+        Err(e) => {
+            tracing::warn!("link: refused {} {pq}: {e}", parts.method);
+            (StatusCode::UNAUTHORIZED, e).into_response()
+        }
+    }
+}
+
+async fn hello(State(app): State<App>) -> Json<Value> {
+    let gpu = std::env::var("LOKI_GPU").ok();
+    Json(json!({"name": app.link.as_ref().map(|l| l.name.clone()), "version": env!("CARGO_PKG_VERSION"), "os": std::env::consts::OS,
+        "active_runs": app.live.lock().await.len(), "gpu": gpu}))
+}
+
+async fn link_status(State(app): State<App>) -> Json<Value> {
+    match &app.link {
+        Some(l) => Json(l.status().await),
+        None => Json(json!({"off": true, "why": "LOKI_PEER_SECRET is not set in harness_data/.env on this machine"})),
+    }
+}
+
+/// The window talks to the other machine through here: /peer/<name>/<any peer path>.
+async fn peer_proxy(State(app): State<App>, AxPath((name, _rest)): AxPath<(String, String)>, method: Method, uri: Uri, headers: HeaderMap, body: axum::body::Bytes) -> Response {
+    let Some(l) = app.link.clone() else { return (StatusCode::NOT_FOUND, "the link is off").into_response() };
+    // keep the raw (still encoded) path so the signature matches what is sent
+    let raw = uri.path();
+    let after = raw.trim_start_matches("/peer/");
+    let rest = after.find('/').map(|i| &after[i..]).unwrap_or("/");
+    let mut pq = rest.to_string();
+    if let Some(q) = uri.query() {
+        pq.push('?');
+        pq.push_str(q);
+    }
+    let ctype = headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).map(str::to_string);
+    match l.call(&name, method.as_str(), &pq, body.to_vec(), ctype.as_deref()).await {
+        Ok(r) => {
+            let st = StatusCode::from_u16(r.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+            let ct = r.headers().get(reqwest::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("application/octet-stream").to_string();
+            match r.bytes().await {
+                Ok(b) => (st, [(header::CONTENT_TYPE, ct)], Body::from(b)).into_response(),
+                Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+            }
+        }
+        Err(e) => (StatusCode::BAD_GATEWAY, e).into_response(),
+    }
 }
 
 async fn get_settings(State(app): State<App>) -> Json<Value> {
@@ -963,7 +1060,8 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
     let mut driver = Driver::new(pool);
     driver.knowledge = loki_core::knowledge::Knowledge::load(repo_dir().map(|r| r.join("playbooks")).as_deref(), Some(&home.join("lessons.md")));
     tracing::info!("playbooks: {}, lessons: {}", driver.knowledge.playbooks.len(), driver.knowledge.lessons().len());
-    let app = App { home: home.clone(), driver: Arc::new(driver), live: Arc::new(Mutex::new(HashMap::new())), pulls: Arc::new(Mutex::new(HashMap::new())) };
+    let link = link::Link::from_env(&home);
+    let app = App { home: home.clone(), driver: Arc::new(driver), live: Arc::new(Mutex::new(HashMap::new())), pulls: Arc::new(Mutex::new(HashMap::new())), link: link.clone() };
     let router = Router::new()
         .route("/", get(|| async { Html(UI) }))
         .route("/health", get(|| async { Json(json!({"ok": true, "service": "lokid", "version": env!("CARGO_PKG_VERSION")})) }))
@@ -988,7 +1086,45 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
         .route("/settings", get(get_settings).put(put_settings))
         .route("/system", get(system))
         .route("/knowledge", get(knowledge))
+        .route("/link", get(link_status))
+        .route("/mirror/file", get(mirror_file))
+        .route("/peer/:name/*rest", any(peer_proxy).layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024)))
         .with_state(app.clone());
+    if let Some(l) = link {
+        // The peer port: only what the other machine needs, every request signed.
+        let peer = Router::new()
+            .route("/hello", get(hello))
+            .route("/status", get(status))
+            .route("/models", get(models))
+            .route("/runs", get(list_runs).post(create_run))
+            .route("/runs/:id", get(get_run))
+            .route("/runs/:id/file", get(run_file))
+            .route("/runs/:id/stop", post(stop_run))
+            .route("/runs/:id/resume", post(resume_run))
+            .route("/runs/:id/reply", post(reply_run))
+            .route("/runs/:id/say", post(say_run))
+            .route("/runs/:id/chat", get(chat_run))
+            .route("/library", get(library))
+            .route("/upload", post(upload))
+            .layer(middleware::from_fn_with_state(app.clone(), peer_auth))
+            .layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024))
+            .with_state(app.clone());
+        let pport: u16 = std::env::var("LOKI_LINK_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7718);
+        match tokio::net::TcpListener::bind(("127.0.0.1", pport)).await {
+            Ok(pl) => {
+                tracing::info!("link: {} serving the other machine on 127.0.0.1:{pport}", l.name);
+                tokio::spawn(async move { let _ = axum::serve(pl, peer).await; });
+                if std::env::var("LOKI_LINK_TUNNEL").map(|v| v != "0").unwrap_or(true) {
+                    tokio::spawn(l.clone().run_tunnel(pport));
+                }
+                tokio::spawn(l.clone().run_discovery());
+                tokio::spawn(l.clone().run_mirror());
+            }
+            Err(e) => tracing::warn!("link: port {pport} is busy ({e}); the link is off"),
+        }
+    } else {
+        tracing::info!("link: off (no LOKI_PEER_SECRET)");
+    }
     tokio::spawn(inbox_loop(app.clone()));
     let port: u16 = std::env::var("LOKI_DRIVER_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7717);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;

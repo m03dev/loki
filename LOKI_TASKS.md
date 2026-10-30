@@ -46,6 +46,16 @@ Done 2026-10-30 (owner: "make sure the mac and windows are synced", "modular as 
 - [x] Two docks (left + right) at once; layout presets (Focus, Classic, Studio, Gallery, Tuning); drag a panel's title
   to the other side; Library pictures drag into the chat as references.
 
+Done 2026-10-30 (owner: "are they helping each other?", "folders not yet synced"):
+
+- [x] Mac <-> PC link back, in Rust inside `lokid` (crates/lokid/src/link.rs): each machine serves a signed peer API on
+  127.0.0.1:7718 through a free Cloudflare quick tunnel and finds the other through a private ntfy topic made from
+  `LOKI_PEER_SECRET` (same pairing as the previous LOKI - no new setup). Every peer request is HMAC-signed.
+- [x] The other machine's jobs show in Jobs with its name; its questions ring the bell here and are answered here;
+  "Run on" in the composer starts a job on the other machine (references are copied over).
+- [x] Library mirror: every picture the other machine makes is copied into `<home>/mirror/<machine>/` every 2 minutes
+  and shows in the Library with the machine's name; deleted there = deleted here.
+
 Next, in order (owner's direction 2026-10-29: art, production, creation; long runs; free models;
 owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local
 models; drive real Maya/Blender rather than rebuilding Forge; then ads & social and the phone app):

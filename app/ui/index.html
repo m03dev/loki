@@ -192,6 +192,8 @@ svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 .lib .it{position:relative}.lib img{cursor:grab}
 .lib .cap{position:absolute;inset:auto 6px 6px 6px;font-size:10.5px;padding:2px 7px;border-radius:7px;background:rgba(12,12,14,.74);color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:.15s;cursor:pointer}
 .lib .it:hover .cap{opacity:1}
+.mtag{font-size:10px;padding:1px 7px;border-radius:99px;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent);margin-right:6px;white-space:nowrap}
+.lib .mtag{position:absolute;top:6px;left:6px}
 .pager{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--dim)}
 .sec{margin-bottom:18px}.sec>h3{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 8px;font-weight:700;display:flex;align-items:center;gap:6px}
 .themes{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
@@ -265,7 +267,10 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const api = async (p, o) => { const r = await fetch(p, o); if (!r.ok) throw new Error(r.status); const t = await r.text(); return t ? JSON.parse(t) : null; };
 const post = (p, b, m='POST') => api(p, {method:m, headers:{'content-type':'application/json'}, body: b === undefined ? undefined : JSON.stringify(b)});
 const IMG = /\.(png|jpe?g|webp|gif)$/i;
-const fileUrl = (run, p) => `/runs/${encodeURIComponent(run)}/file?path=${encodeURIComponent(p)}`;
+/* a job on the other machine has the id "<id>@<machine>"; its calls go through /peer/<machine> */
+const where = id => { const i = String(id || '').lastIndexOf('@'); return i < 0 ? ['', id] : [id.slice(i + 1), id.slice(0, i)]; };
+const rb = id => { const [m, x] = where(id); return (m ? `/peer/${encodeURIComponent(m)}` : '') + `/runs/${encodeURIComponent(x)}`; };
+const fileUrl = (run, p) => `${rb(run)}/file?path=${encodeURIComponent(p)}`;
 const ago = t => { const s = (Date.now() - (typeof t === 'number' ? t*1000 : Date.parse(t))) / 1000; return s < 50 ? 'now' : s < 3600 ? Math.round(s/60)+'m' : s < 86400 ? Math.round(s/3600)+'h' : Math.round(s/86400)+'d'; };
 const cap = s => (s = String(s || '').trim()) ? s[0].toUpperCase() + s.slice(1) : s;
 function md(t) {
@@ -275,7 +280,7 @@ function md(t) {
 let toastT; function toast(t, onclick) { const e = $('#toast'); e.textContent = t; e.onclick = () => { e.classList.remove('show'); onclick && onclick(); }; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('show'), 4200); }
 
 /* ---------- state + settings ---------- */
-const S = { sel:null, runs:[], chat:null, models:[], mode:'agent', prefer:'', atts:[], open:new Set(), libPage:0, seenWaiting:null, planOpen:true, answers:{} };
+const S = { sel:null, runs:[], local:[], peerRuns:{}, link:null, target:'', tick:0, chat:null, models:[], mode:'agent', prefer:'', atts:[], open:new Set(), libPage:0, seenWaiting:null, planOpen:true, answers:{} };
 let CFG = { theme:'glass', accent:null, interview:'always', scale:1, thumb:110, notify:true, wl:22, wr:26, home:{} };
 const THEMES = { glass:['#8ccfc4','#8aa4b8','#a596c4','#141417'], midnight:['#7aa2ff','#8f8cf0','#c08cff','#0d1120'], ember:['#f0a868','#e88a6a','#e46f8f','#16110e'],
   forest:['#8fd19e','#b7cf86','#d9c47a','#0f1511'], mono:['#e4e4e7','#b4b4ba','#8f8f96','#141414'], light:['#3f9e90','#5b7d99','#7b68b0','#f3f4f6'] };
@@ -376,7 +381,7 @@ function fillDrawer(force) {
     const q = (S.jobQ || '').toLowerCase(), list = S.runs.filter(r => !q || (r.title || r.goal).toLowerCase().includes(q));
     const keep = document.activeElement?.id === 'jobQ';
     jb.innerHTML = `<input class="search" id="jobQ" placeholder="Find a job…" value="${esc(S.jobQ || '')}">` + (list.length ? list.map(r => `<button class="job ${r.id === S.sel ? 'cur' : ''}" data-run="${esc(r.id)}">
-      <div class="g">${esc(r.title || r.goal)}</div><div class="m"><span class="st ${esc(r.status)}">${esc(r.status)}</span>${r.active && r.status !== 'waiting' ? '<span class="live"></span>' : ''}<span class="sp"></span>${ago(r.updated)}</div></button>`).join('')
+      <div class="g">${esc(r.title || r.goal)}</div><div class="m">${r.machine ? `<span class="mtag" data-tip="Runs on ${esc(r.machine)}">${esc(r.machine)}</span>` : ''}<span class="st ${esc(r.status)}">${esc(r.status)}</span>${r.active && r.status !== 'waiting' ? '<span class="live"></span>' : ''}<span class="sp"></span>${ago(r.updated)}</div></button>`).join('')
       : `<div class="empty">No jobs yet.</div>`);
     const jq = $('#jobQ'); jq.oninput = () => { S.jobQ = jq.value; fillDrawer(); }; if (keep) { jq.focus(); jq.setSelectionRange(jq.value.length, jq.value.length); }
   }
@@ -387,7 +392,8 @@ async function loadLibrary() {
   S.libShown = true; const db = bodyOf('library'); if (!db) return;
   let d; try { d = await api(`/library?page=${S.libPage}&per=40`); } catch (e) { return; }
   const pages = Math.max(1, Math.ceil(d.total / d.per));
-  db.innerHTML = d.items.length ? `<div class="lib">${d.items.map(x => `<div class="it"><img loading="lazy" draggable="true" data-ref="${esc(JSON.stringify({run:x.run, path:x.path}))}" src="${fileUrl(x.run, x.path)}" data-zoom="${esc(x.title + ' — ' + x.path)}" alt="${esc(x.path)}" title="Drag into the chat to use as a reference"><span class="cap" data-run="${esc(x.run)}">${esc(x.title)}</span></div>`).join('')}</div>
+  db.innerHTML = d.items.length ? `<div class="lib">${d.items.map(x => { const src = x.src || fileUrl(x.run, x.path), rid = x.machine ? x.run + '@' + x.machine : x.run;
+      return `<div class="it"><img loading="lazy" draggable="true" data-ref="${esc(JSON.stringify({run:x.run, path:x.path, mirror:x.mirror, src}))}" src="${src}" data-zoom="${esc((x.machine ? x.machine + ' · ' : '') + x.title + ' — ' + x.path)}" alt="${esc(x.path)}" title="Drag into the chat to use as a reference">${x.machine ? `<span class="mtag" data-tip="Made on ${esc(x.machine)} — copied here by the link">${esc(x.machine)}</span>` : ''}<span class="cap" data-run="${esc(rid)}">${esc(x.title)}</span></div>`; }).join('')}</div>
     <div class="pager"><button class="ib" id="lp" data-tip="Previous page">${ic('left')}</button>${S.libPage + 1} / ${pages} · ${d.total} images<button class="ib" id="ln" data-tip="Next page">${ic('right')}</button></div>`
     : `<div class="empty">Images LOKI makes show up here.</div>`;
   if ($('#lp')) { $('#lp').onclick = () => { S.libPage = Math.max(0, S.libPage - 1); loadLibrary(); }; $('#ln').onclick = () => { S.libPage = Math.min(pages - 1, S.libPage + 1); loadLibrary(); }; }
@@ -403,10 +409,17 @@ async function paintSettings() {
     <div class="sec"><h3>${ic('msg')} Working</h3>
       <div class="row"><label>Interview me</label><span class="seg">${['always','big','off'].map(v => `<button data-iv-set="${v}" class="${CFG.interview === v ? 'on' : ''}">${{always:'Every job', big:'Big jobs', off:'Never'}[v]}</button>`).join('')}</span></div>
       <div class="row"><label>Notifications</label><span class="seg"><button data-nt="1" class="${CFG.notify ? 'on' : ''}">On</button><button data-nt="0" class="${CFG.notify ? '' : 'on'}">Off</button></span></div></div>
+    <div class="sec"><h3>${ic('swap')} Mac ↔ PC link</h3><div id="linkBox"><div class="empty">…</div></div></div>
     <div class="sec"><h3>${ic('monitor')} This machine <span class="sp"></span><button class="btn sm" id="scanB">Scan again</button></h3><div id="sysBox"><div class="empty">Scanning…</div></div></div>
     <div class="sec"><h3>${ic('chip')} Local models</h3><div id="localBox"><div class="empty">…</div></div></div>
     <div class="sec"><h3>${ic('refresh')} Free online models <span class="sp"></span><button class="btn sm" id="probeB">Check all</button></h3><div id="freeBox"></div></div>
     <div class="sec"><h3>${ic('book')} What LOKI knows</h3><div id="knowBox"><div class="empty">…</div></div></div>`;
+  api('/link').then(l => { const el = $('#linkBox'); if (!el) return;
+    if (l.off) { el.innerHTML = `<div class="empty">Off — ${esc(l.why)}</div>`; return; }
+    el.innerHTML = `<div style="font-size:12px;color:var(--dim);margin-bottom:6px">This machine is <b>${esc(l.name)}</b> · ${l.reachable_at ? 'reachable' : 'opening its tunnel…'}${l.error ? ' · ' + esc(l.error) : ''}</div>`
+      + ((l.peers || []).length ? l.peers.map(p => `<div class="row"><label><span class="st ${p.online ? 'done' : 'failed'}">${p.online ? 'online' : 'offline'}</span> ${esc(p.name)}</label><span style="font-size:12px;color:var(--dim)">${p.hello?.version ? 'v' + esc(p.hello.version) + ' · ' : ''}${p.hello?.active_runs ?? 0} working · checked ${p.checked ? ago(p.checked) : '—'}</span></div>`).join('')
+        : `<div class="empty">Looking for the other machine…</div>`)
+      + `<div style="font-size:11.5px;color:var(--dim);margin-top:6px">Its jobs show in Jobs with its name, its questions ring the bell here, and its pictures are copied into the Library every 2 minutes.</div>`; }).catch(() => {});
   api('/knowledge').then(k => { const el = $('#knowBox'); if (!el) return;
     el.innerHTML = `<div style="font-size:12px;color:var(--dim);margin-bottom:6px">${k.playbooks.length} playbooks · ${k.lessons.length} lessons learned from real errors</div>`
       + k.lessons.slice().reverse().slice(0, 12).map(l => `<div class="lesson">${esc(l)}</div>`).join('')
@@ -464,6 +477,7 @@ function chatShell() {
       <textarea id="inp" rows="1" placeholder="Describe what to make, or talk to the job…"></textarea>
       <div class="cb"><span class="seg"><button data-mode="agent" class="tu" data-tip="Agent — fast free models, local model as backup">Agent</button><button data-mode="hard" class="tu" data-tip="Hard — strongest free model only; waits instead of dropping to the local model">Hard</button></span>
         <select class="sel tu" id="modelSel" data-tip="Model — which free provider to try first"></select>
+        <select class="sel tu" id="runOn" style="display:none" data-tip="Run on — this machine, or the other one (heavy Blender / GPU work belongs on the PC)"></select>
         <button class="ib tu" id="bAtt" data-tip="Attach — add files as references (or drop / paste them)">${ic('plus')}</button><input type="file" id="pick" multiple hidden>
         <span class="sp"></span><span class="ctx tu" id="ctx" data-tip="Context — how much of the model's window this job uses"></span>
         <button class="send tu" id="sendB" data-tip="Send (Enter) · new line: Shift+Enter">${ic('send')}</button></div></div></div>`;
@@ -474,13 +488,14 @@ function chatShell() {
   $('#sendB').onclick = () => $('#sendB').classList.contains('stop') ? stopJob() : send();
   document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { S.mode = b.dataset.mode; paintComposer(); });
   $('#modelSel').onchange = e => S.prefer = e.target.value;
+  $('#runOn').onchange = e => S.target = e.target.value; paintTarget();
   $('#bAtt').onclick = () => $('#pick').click(); $('#pick').onchange = e => { [...e.target.files].forEach(upload); e.target.value = ''; };
   const cw = $('#chatw'); let depth = 0; const isDrag = e => [...(e.dataTransfer?.types || [])].some(t => t === 'Files' || t === 'application/x-loki-ref');
   cw.addEventListener('dragenter', e => { if (!isDrag(e)) return; e.preventDefault(); depth++; cw.classList.add('dropping'); });
   cw.addEventListener('dragover', e => { if (isDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
   cw.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) cw.classList.remove('dropping'); });
   cw.addEventListener('drop', e => { if (!isDrag(e)) return; e.preventDefault(); depth = 0; cw.classList.remove('dropping');
-    const ref = e.dataTransfer.getData('application/x-loki-ref'); if (ref) { try { const r = JSON.parse(ref); addAtt({kind:'ref', run:r.run, path:r.path, name:r.path.split('/').pop(), thumb:fileUrl(r.run, r.path)}); } catch (x) {} return; }
+    const ref = e.dataTransfer.getData('application/x-loki-ref'); if (ref) { try { const r = JSON.parse(ref), src = r.src || fileUrl(r.run, r.path); addAtt({kind:'ref', run:r.run, path:r.path, mirror:r.mirror, src, name:r.path.split('/').pop(), thumb:src}); } catch (x) {} return; }
     [...e.dataTransfer.files].forEach(upload); });
   paintAtts(); paintComposer(); paintChat(true);
 }
@@ -569,7 +584,7 @@ function paintChat(force) {
   head.innerHTML = `<span class="ttl">${esc(r.title || r.goal)}</span><span class="st ${esc(r.status)}">${esc(r.status)}</span>${live ? '<span class="live"></span>' : ''}<span class="sp"></span>
     ${tasks.length ? `<span class="prog" id="progPill" data-tip="Plan — jump to the plan">${done}/${tasks.length}<span class="bar"><i style="width:${done / tasks.length * 100}%"></i></span></span>` : ''}
     ${['stopped','failed'].includes(r.status) ? `<button class="ib" id="bRes" data-tip="Resume — carry on from where it stopped">${ic('play')}</button>` : ''}`;
-  if ($('#bRes')) $('#bRes').onclick = () => post(`/runs/${r.id}/resume`).then(() => poll(true));
+  if ($('#bRes')) $('#bRes').onclick = () => post(`${rb(S.sel)}/resume`).then(() => poll(true));
   if ($('#progPill')) $('#progPill').onclick = () => { S.planOpen = true; paintChat(true); $('#planCard')?.scrollIntoView({behavior:'smooth', block:'start'}); };
   const sig = `${r.id}|${r.status}|${c.items.length}|${r.steps}|${c.active}|${done}|${tasks.length}|${S.planOpen}|${JSON.stringify(S.answers[r.id] || {})}`;
   if (!force && col.dataset.sig === sig) return;
@@ -636,7 +651,7 @@ document.addEventListener('click', async e => {
     const parts = qs.map((q, i) => { const other = (ans['o' + i] || '').trim(); const pick = [...(ans[i] || []), ...(other ? [other] : [])]; return pick.length ? `${q.header}: ${pick.join(', ')}` : ''; }).filter(Boolean);
     body = parts.length ? {approve:true, note:parts.join('; ')} : {approve:false, note:''};
   }
-  try { await post(`/runs/${run}/reply`, body); delete S.answers[run]; } catch (x) { toast('That did not go through'); }
+  try { await post(`${rb(run)}/reply`, body); delete S.answers[run]; } catch (x) { toast('That did not go through'); }
   poll(true);
 });
 document.addEventListener('input', e => { const o = e.target.dataset?.other; if (o !== undefined) { const id = e.target.dataset.runO; (S.answers[id] = S.answers[id] || {})['o' + o] = e.target.value; } });
@@ -650,7 +665,7 @@ function paintAtts() {
 }
 async function upload(f) {
   if (f.size > 512 * 1024 * 1024) { toast(f.name + ' is over 512 MB'); return; }
-  const a = addAtt({kind:'upload', name:f.name, busy:true, thumb:/^image\//.test(f.type) ? URL.createObjectURL(f) : ''});
+  const a = addAtt({kind:'upload', file:f, name:f.name, busy:true, thumb:/^image\//.test(f.type) ? URL.createObjectURL(f) : ''});
   try { const r = await api('/upload?name=' + encodeURIComponent(f.name), {method:'POST', body:f}); a.upload = r.upload; a.busy = false; } catch (e) { S.atts = S.atts.filter(x => x !== a); toast('Could not upload ' + f.name); }
   paintAtts(); paintComposer();
 }
@@ -660,18 +675,31 @@ document.addEventListener('dragstart', e => { const im = e.target.closest?.('img
 async function send() {
   const inp = $('#inp'); let text = inp.value.trim();
   if (S.atts.some(a => a.busy)) { toast('Still uploading…'); return; }
-  const attach = S.atts.map(a => a.kind === 'ref' ? {run:a.run, path:a.path} : {upload:a.upload});
+  const attach = S.atts.map(a => a.mirror ? {mirror:a.mirror} : a.kind === 'ref' ? {run:a.run, path:a.path} : {upload:a.upload});
   if (!text && !attach.length) return; if (!text) text = 'Here are references for this job.';
   try {
-    if (!S.sel) { const r = await post('/runs', {goal:text, mode:S.mode, prefer:S.prefer, attach}); select(r.id); }
-    else await post(`/runs/${S.sel}/say`, {text, attach});
+    const m = S.sel ? where(S.sel)[0] : S.target;
+    // references from the other machine's job are copied over first
+    const att = m ? await sendAtts(m) : S.atts.some(a => a.run && where(a.run)[0] && !a.mirror) ? await sendAtts('') : attach;   // the other machine gets its own copies of the references
+    if (!S.sel) { const r = await post((m ? `/peer/${encodeURIComponent(m)}` : '') + '/runs', {goal:text, mode:S.mode, prefer:m ? '' : S.prefer, attach:att}); select(m ? r.id + '@' + m : r.id); }
+    else await post(`${rb(S.sel)}/say`, {text, attach:att});
     inp.value = ''; inp.style.height = 'auto'; S.atts = []; paintAtts();
   } catch (e) { toast('Could not send — is the driver running?'); }
   poll(true);
 }
-async function stopJob() { if (S.sel) { await post(`/runs/${S.sel}/stop`).catch(() => {}); toast('Stopped — send a message to carry on'); poll(true); } }
-function newJob() { S.sel = null; S.chat = null; paintChat(true); fillDrawer(); $('#inp')?.focus(); }
-function select(id) { S.sel = id; S.chat = null; S.open.clear(); S.planOpen = true; poll(true); }
+async function sendAtts(m) {
+  const out = [];
+  for (const a of S.atts) {
+    const blob = a.file || await fetch(a.kind === 'ref' ? (a.src || fileUrl(a.run, a.path)) : '').then(r => r.blob()).catch(() => null);
+    if (!blob) continue;
+    const r = await api(`${m ? '/peer/' + encodeURIComponent(m) : ''}/upload?name=${encodeURIComponent(a.name)}`, {method:'POST', body:blob}).catch(() => null);
+    if (r) out.push({upload:r.upload});
+  }
+  return out;
+}
+async function stopJob() { if (S.sel) { await post(`${rb(S.sel)}/stop`).catch(() => {}); toast('Stopped — send a message to carry on'); poll(true); } }
+function newJob() { S.sel = null; S.chat = null; paintChat(true); fillDrawer(); paintTarget(); $('#inp')?.focus(); }
+function select(id) { S.sel = id; S.chat = null; S.open.clear(); S.planOpen = true; paintTarget(); poll(true); }
 $('#bUpd').onclick = async () => { try { await post('/update'); toast('Updating… LOKI restarts in a moment; jobs carry on'); } catch (e) { toast('Update request failed'); } };
 
 /* ---------- bell: For you as a notification ---------- */
@@ -709,12 +737,31 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { $('#lb').classList.remove('show'); $('#pop').classList.remove('show'); $('#lmenu').classList.remove('show'); }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); newJob(); }
 });
-let busy = false;
+let busy = false, peerT = 0;
+/* the other machines: their jobs appear in the list (and their questions in the bell) with the machine's name */
+async function peers() {
+  if (Date.now() - peerT < 8000) return; peerT = Date.now();
+  S.link = await api('/link').catch(() => null);
+  const on = (S.link?.peers || []).filter(p => p.online);
+  await Promise.all(on.map(async p => { const rs = await api(`/peer/${encodeURIComponent(p.name)}/runs`).catch(() => null);
+    if (rs) S.peerRuns[p.name] = rs.map(r => Object.assign(r, {id: r.id + '@' + p.name, machine: p.name})); }));
+  for (const k of Object.keys(S.peerRuns)) if (!on.some(p => p.name === k)) delete S.peerRuns[k];
+  paintTarget();
+}
+function mergeRuns() { S.runs = S.local.concat(...Object.values(S.peerRuns)).sort((a, b) => String(b.updated).localeCompare(String(a.updated))); }
+function paintTarget() {
+  const el = $('#runOn'); if (!el) return; const on = (S.link?.peers || []).filter(p => p.online);
+  if (S.target && !on.some(p => p.name === S.target)) S.target = '';
+  el.style.display = on.length && !S.sel ? '' : 'none';
+  el.innerHTML = `<option value="">This machine</option>` + on.map(p => `<option value="${esc(p.name)}">${esc(p.name)}${p.hello?.gpu ? ' · ' + esc(p.hello.gpu) : ''}</option>`).join('');
+  el.value = S.target;
+}
 async function poll(force) {
   if (busy && !force) return; busy = true;
   try {
-    S.runs = await api('/runs') || [];
-    if (S.sel) { const c = await api(`/runs/${encodeURIComponent(S.sel)}/chat`).catch(() => null); if (c) S.chat = c; }
+    S.local = await api('/runs') || []; await peers(); mergeRuns();
+    if (S.sel) { const remote = !!where(S.sel)[0];
+      if (!remote || force || ++S.tick % 2 === 0) { const c = await api(`${rb(S.sel)}/chat`).catch(() => null); if (c) S.chat = c; } }
     paintChat(force); paintBell(); notifyNew(); if (bodyOf('jobs')) fillDrawer();
   } catch (e) { $('#mach').innerHTML = '<b style="color:var(--bad)">driver offline</b>'; }
   busy = false;
@@ -753,7 +800,7 @@ async function boot() {
     if (s.commit && CFG.seen_commit && CFG.seen_commit !== s.commit) toast(`Updated to ${s.commit}: ${s.commit_subject || 'new version'}`);
     if (s.commit && CFG.seen_commit !== s.commit) { CFG.seen_commit = s.commit; saveCfg(); }
   }).catch(() => {});
-  S.runs = await api('/runs').catch(() => []) || [];
+  S.local = await api('/runs').catch(() => []) || []; mergeRuns();
   const pick = S.runs.find(r => r.active) || S.runs.find(r => r.status === 'waiting');
   if (pick) select(pick.id); else poll(true);
   loadModels(false);

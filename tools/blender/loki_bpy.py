@@ -13,21 +13,27 @@ framed by a camera computed from the scene's bounds. Use them instead of guessin
     body = box("Body", (0.8, 0.5, 0.45), wood, bevel=0.02)
     lid = box("Lid", (0.82, 0.52, 0.12), wood, bevel=0.02)
     place_on(lid, body)                          # lid sits exactly on the body
-    hinge(lid, edge="-y", angle=40)              # opens 40 deg on its back edge
+    hinge(lid, edge="+y", angle=40)              # opens 40 deg on its back edge (+y = back; the camera looks from -y)
     band = box("Band", (0.84, 0.54, 0.05), gold); place_on(band, body, z=-0.1)   # 0.1 m below the body's top
     coins(body, 40, gold)                        # a pile of coins inside the body
     frame(); lights(); finish("chest")           # camera, three-point light, save scenes/chest.blend, render renders/chest.png
+                                                 # + renders/chest_views.png (front / side / back / top) for the vision check
+Real surfaces (free CC0 scans from Poly Haven, cached on this machine; flat colour if offline):
+    wood = pbr("Wood", "wood_planks")            # also: "rusty_metal_02", "brick_wall_001", "rock_face", "forest_ground_01" ...
+    hdri("studio_small_09")                      # real studio light + reflections (lights() does this for you)
 """
+import json
 import math
 import os
 import random
+import urllib.request
 
 import bpy
 from mathutils import Matrix, Vector
 
 __all__ = ["start", "mat", "box", "cyl", "sphere", "cone", "ground", "bounds", "size_of", "place_on", "place_beside",
            "place_inside", "center_on", "hinge", "array", "coins", "planks", "join", "parent", "bevel", "frame", "lights",
-           "world", "finish", "render", "save", "ROOT"]
+           "world", "finish", "render", "save", "hdri", "pbr", "views", "tray", "ring", "dome", "chest", "ROOT"]
 
 ROOT = os.getcwd()
 _parts = []
@@ -83,6 +89,208 @@ def mat(name, color="#bbbbbb", metal=0.0, rough=0.5, emit=0.0, emit_color=None):
     return m
 
 
+# ---------------------------------------------------------------- real surfaces + light (Poly Haven, CC0)
+
+UA = "LOKI/0.19 (+https://github.com/m03dev/loki; art pipeline)"   # Poly Haven asks for a unique User-Agent
+
+
+def _cache():
+    base = os.environ.get("LOKI_HOME") or os.path.join(ROOT, ".assets")
+    d = os.path.join(base, "assets", "polyhaven")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _credit(asset, kind):
+    """Poly Haven assets are CC0; LOKI still credits them next to the renders."""
+    try:
+        p = os.path.join(ROOT, "renders", "CREDITS.txt")
+        line = f"{kind} '{asset}' by Poly Haven (CC0) - https://polyhaven.com/a/{asset}\n"
+        if not os.path.exists(p) or line not in open(p, encoding="utf-8").read():
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(line)
+    except Exception:
+        pass
+
+
+def _get(url, dest):
+    if os.path.exists(dest) and os.path.getsize(dest) > 0:
+        return dest
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        data = r.read()
+    tmp = dest + ".part"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, dest)
+    return dest
+
+
+def _resolve(asset, kind):
+    """A close real asset id when the asked one doesn't exist ("rock_face" -> "rock_face_03"), from the cached catalogue."""
+    cat = os.path.join(_cache(), f"_{kind}.json")
+    if not os.path.exists(cat) or os.path.getsize(cat) < 100:
+        _get(f"https://api.polyhaven.com/assets?t={kind}", cat)
+    with open(cat, encoding="utf-8") as f:
+        ids = list(json.load(f).keys())
+    if asset in ids:
+        return asset
+    words = [w for w in asset.lower().replace("-", "_").split("_") if w and not w.isdigit()]
+    hits = [i for i in ids if all(w in i for w in words)] or [i for i in ids if any(w in i for w in words)]
+    if not hits:
+        raise ValueError(f"no Poly Haven {kind} like '{asset}'")
+    hits.sort(key=lambda i: (-sum(w in i for w in words), len(i)))
+    return hits[0]
+
+
+def _files(asset, kind="textures"):
+    """The asset's file list (cached); a near name is matched to a real asset."""
+    asset = _resolve(asset, kind)
+    d = os.path.join(_cache(), asset)
+    os.makedirs(d, exist_ok=True)
+    meta = os.path.join(d, "files.json")
+    if not os.path.exists(meta):
+        _get(f"https://api.polyhaven.com/files/{asset}", meta)
+    with open(meta, encoding="utf-8") as f:
+        return d, json.load(f)
+
+
+def hdri(asset="studio_small_09", strength=1.0, res="1k", rotate=0.0, show=False):
+    """Light the scene with a real HDRI (studio, sky, interior). Returns the World, or None when offline.
+    show=False keeps a plain dark backdrop behind the object while the HDRI still lights it and fills reflections."""
+    try:
+        d, files = _files(asset, "hdris")
+        asset = os.path.basename(d)
+        f = files["hdri"][res]
+        ext = "hdr" if "hdr" in f else "exr"
+        path = _get(f[ext]["url"], os.path.join(d, f"{asset}_{res}.{ext}"))
+    except Exception as e:
+        print(f"LOKI_WARN hdri {asset} unavailable ({e}); using the studio grey world")
+        return None
+    w = bpy.context.scene.world or bpy.data.worlds.new("World")
+    bpy.context.scene.world = w
+    try:
+        w.use_nodes = True
+    except Exception:
+        pass
+    nt = w.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputWorld")
+    env = nt.nodes.new("ShaderNodeTexEnvironment")
+    env.image = bpy.data.images.load(path, check_existing=True)
+    coord = nt.nodes.new("ShaderNodeTexCoord")
+    mp = nt.nodes.new("ShaderNodeMapping")
+    mp.inputs["Rotation"].default_value[2] = math.radians(rotate)
+    nt.links.new(coord.outputs["Generated"], mp.inputs["Vector"])
+    nt.links.new(mp.outputs["Vector"], env.inputs["Vector"])
+    bg = nt.nodes.new("ShaderNodeBackground")
+    bg.inputs["Strength"].default_value = strength
+    nt.links.new(env.outputs["Color"], bg.inputs["Color"])
+    if show:
+        nt.links.new(bg.outputs[0], out.inputs[0])
+    else:
+        # camera rays see a dark backdrop; everything else (light, reflections) sees the HDRI
+        plain = nt.nodes.new("ShaderNodeBackground")
+        plain.inputs["Color"].default_value = _hex("#202329")
+        lp = nt.nodes.new("ShaderNodeLightPath")
+        mix = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(lp.outputs["Is Camera Ray"], mix.inputs[0])
+        nt.links.new(bg.outputs[0], mix.inputs[1])
+        nt.links.new(plain.outputs[0], mix.inputs[2])
+        nt.links.new(mix.outputs[0], out.inputs[0])
+    _credit(asset, "HDRI")
+    return w
+
+
+def _pick(files, *names):
+    low = {k.lower(): k for k in files}
+    for n in names:
+        if n in low:
+            return low[n]
+    return None
+
+
+def pbr(name, asset, scale=1.0, tint=None, res="1k", fallback="#9a8a78", metal=None):
+    """A real scanned material from Poly Haven (wood_planks, rusty_metal_02, brick_wall_001, rock_face ...).
+    Mapped by object position in metres (`scale` = texture repeats per metre), so it never stretches on
+    resized parts. `tint` multiplies the colour. Offline or unknown asset -> a plain mat() in `fallback`."""
+    try:
+        d, files = _files(asset)
+        asset = os.path.basename(d)
+        maps = {}
+        for role, names in (("color", ("diffuse", "diff", "albedo", "color")), ("normal", ("nor_gl", "normal", "nor")),
+                            ("rough", ("rough", "roughness")), ("arm", ("arm",)), ("metal", ("metal", "metallic"))):
+            k = _pick(files, *names)
+            if not k or res not in files[k]:
+                continue
+            fm = files[k][res]
+            ext = "jpg" if "jpg" in fm else "png" if "png" in fm else None
+            if ext:
+                maps[role] = _get(fm[ext]["url"], os.path.join(d, f"{asset}_{k}_{res}.{ext}"))
+        if "color" not in maps:
+            raise ValueError("no colour map")
+    except Exception as e:
+        print(f"LOKI_WARN texture {asset} unavailable ({e}); flat colour instead")
+        return mat(name, fallback, metal=metal or 0.0, rough=0.6)
+    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    try:
+        m.use_nodes = True
+    except Exception:
+        pass
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    nt.links.new(bsdf.outputs[0], out.inputs["Surface"])
+    coord = nt.nodes.new("ShaderNodeTexCoord")
+    mp = nt.nodes.new("ShaderNodeMapping")
+    mp.inputs["Scale"].default_value = (scale, scale, scale)
+    nt.links.new(coord.outputs["Object"], mp.inputs["Vector"])
+
+    def tex(path, data):
+        t = nt.nodes.new("ShaderNodeTexImage")
+        t.image = bpy.data.images.load(path, check_existing=True)
+        if data:
+            try:
+                t.image.colorspace_settings.name = "Non-Color"
+            except Exception:
+                pass
+        t.projection = "BOX"          # no UVs needed: projected from the three axes, blended at the seams
+        t.projection_blend = 0.25
+        nt.links.new(mp.outputs["Vector"], t.inputs["Vector"])
+        return t
+
+    col = tex(maps["color"], False).outputs["Color"]
+    if tint:
+        mix = nt.nodes.new("ShaderNodeMix") if hasattr(bpy.types, "ShaderNodeMix") else None
+        if mix is not None:
+            mix.data_type = "RGBA"
+            mix.blend_type = "MULTIPLY"
+            mix.inputs[0].default_value = 1.0
+            nt.links.new(col, mix.inputs[6])
+            mix.inputs[7].default_value = _hex(tint)
+            col = mix.outputs[2]
+    nt.links.new(col, bsdf.inputs["Base Color"])
+    if "arm" in maps:
+        sep = nt.nodes.new("ShaderNodeSeparateColor") if hasattr(bpy.types, "ShaderNodeSeparateColor") else nt.nodes.new("ShaderNodeSeparateRGB")
+        nt.links.new(tex(maps["arm"], True).outputs["Color"], sep.inputs[0])
+        nt.links.new(sep.outputs[1], bsdf.inputs["Roughness"])
+        nt.links.new(sep.outputs[2], bsdf.inputs["Metallic"])
+    elif "rough" in maps:
+        nt.links.new(tex(maps["rough"], True).outputs["Color"], bsdf.inputs["Roughness"])
+    if "metal" in maps and "arm" not in maps:
+        nt.links.new(tex(maps["metal"], True).outputs["Color"], bsdf.inputs["Metallic"])
+    if metal is not None and "arm" not in maps and "metal" not in maps:
+        bsdf.inputs["Metallic"].default_value = metal
+    if "normal" in maps:
+        nm = nt.nodes.new("ShaderNodeNormalMap")
+        nt.links.new(tex(maps["normal"], True).outputs["Color"], nm.inputs["Color"])
+        nt.links.new(nm.outputs["Normal"], bsdf.inputs["Normal"])
+    m.diffuse_color = _hex(tint or fallback)
+    _credit(asset, "Texture")
+    return m
+
+
 # ---------------------------------------------------------------- parts (metres, origin at bottom centre)
 
 def _finish_part(o, name, material, bevel_w, segments=2):
@@ -109,6 +317,31 @@ def box(name, size=(1, 1, 1), material=None, at=(0, 0, 0), bevel=0.0):
     o.scale = size
     o = _finish_part(o, name, material, bevel)
     o.location = Vector(at)
+    return o
+
+
+def tray(name, size=(1, 1, 1), wall=0.03, material=None, at=(0, 0, 0), bevel=0.0):
+    """An open-top box (a chest body, crate, drawer, planter): floor + four walls `wall` m thick, one object.
+    Things put in it with place_inside() / coins() sit inside, not on a solid lid."""
+    x, y, z = size
+    parts = [box(f"{name}_floor", (x, y, wall), None, at)]
+    for sx, sy, w, d in ((0, -(y - wall) / 2, x, wall), (0, (y - wall) / 2, x, wall),
+                         (-(x - wall) / 2, 0, wall, y - 2 * wall), ((x - wall) / 2, 0, wall, y - 2 * wall)):
+        parts.append(box(f"{name}_w", (w, d, z - wall), None, (at[0] + sx, at[1] + sy, at[2] + wall)))
+    o = join(parts, name)
+    _finish_part(o, name, material, bevel)
+    return o
+
+
+def ring(name, size=(1, 1, 0.05), wall=0.01, material=None, at=(0, 0, 0)):
+    """A rectangular band with no floor or lid (iron bands round a chest, a frame round a door): four thin walls."""
+    x, y, z = size
+    parts = []
+    for sx, sy, w, d in ((0, -(y - wall) / 2, x, wall), (0, (y - wall) / 2, x, wall),
+                         (-(x - wall) / 2, 0, wall, y - 2 * wall), ((x - wall) / 2, 0, wall, y - 2 * wall)):
+        parts.append(box(f"{name}_w", (w, d, z), None, (at[0] + sx, at[1] + sy, at[2])))
+    o = join(parts, name)
+    _finish_part(o, name, material, 0)
     return o
 
 
@@ -225,8 +458,9 @@ def center_on(o, target):
     return o
 
 
-def hinge(o, edge="-y", angle=40.0):
-    """Open `o` by `angle` degrees around its bottom edge on side `edge` ("-y" = back, "+y" = front, "-x", "+x").
+def hinge(o, edge="+y", angle=40.0):
+    """Open `o` by `angle` degrees around its bottom edge on side `edge` ("+y" = back, "-y" = front - Blender's
+    front view and frame() look from -y - "-x", "+x").
     Positive angles open upward. The part stays attached at the hinge edge."""
     lo, hi = bounds(o)
     axis = edge[1]
@@ -299,6 +533,18 @@ def coins(container, n=30, material=None, radius=0.03, thickness=0.006, fill=0.7
     out = []
     span_x, span_y = (hi.x - lo.x) * fill / 2, (hi.y - lo.y) * fill / 2
     top = hi.z
+    # a hollow container (tray()) gets a bed of the same metal first, so the heap rests on something
+    bpy.context.view_layer.update()
+    c0 = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, hi.z + 0.01))
+    inv = container.matrix_world.inverted()
+    hit, lloc, *_ = container.ray_cast(inv @ c0, (inv.to_3x3() @ Vector((0, 0, -1))).normalized())   # this container only
+    loc = container.matrix_world @ lloc
+    if hit and (c0.z - loc.z) > (hi.z - lo.z) * 0.3:
+        bed = box(f"{container.name}_hoard", ((hi.x - lo.x) * 0.9, (hi.y - lo.y) * 0.9, max(0.01, top - 0.03 - loc.z)), material,
+                  (c0.x, c0.y, loc.z))
+        out_bed = [bed]
+    else:
+        out_bed = []
     for k in range(n):
         x = rnd.uniform(-span_x, span_x)
         y = rnd.uniform(-span_y, span_y)
@@ -309,7 +555,7 @@ def coins(container, n=30, material=None, radius=0.03, thickness=0.006, fill=0.7
         c.rotation_euler = (rnd.uniform(-0.6, 0.6), rnd.uniform(-0.6, 0.6), rnd.uniform(0, 6.28))
         out.append(c)
     bpy.context.view_layer.update()
-    return out
+    return out_bed + out
 
 
 # ---------------------------------------------------------------- camera, light, output
@@ -363,7 +609,9 @@ def lights(power=1.0, warm="#ffd2a1", cool="#a8c4ff"):
         lo_.location = centre + Vector(d) * r
         lo_.rotation_euler = (centre - lo_.location).to_track_quat("-Z", "Y").to_euler()
         out.append(lo_)
-    world("#3a3f4a", 1.0)    # a soft studio grey: metals need something to reflect, or gold reads black
+    # a real studio HDRI for reflections (metals need something to reflect, or gold reads black); grey if offline
+    if hdri("studio_small_09", strength=0.8) is None:
+        world("#3a3f4a", 1.0)
     return out
 
 
@@ -428,8 +676,52 @@ def render(name_or_path, size=(1024, 1024), engine=None, samples=64):
     return p
 
 
-def finish(name, size=(1024, 1024), engine=None, samples=64):
-    """Camera and lights if missing, then save scenes/<name>.blend and render renders/<name>.png."""
+def views(name, size=512, engine=None, samples=32):
+    """One sheet of four views - front, right side, back, from above - as renders/<name>_views.png, so a reviewer
+    (the vision check, or you) sees what one hero angle hides: floating parts, missing backs, wrong proportions."""
+    sc = bpy.context.scene
+    old_cam = sc.camera
+    lo, hi = _scene_bounds()
+    shots = [("front", 0, 12), ("right", 90, 12), ("back", 200, 18), ("top", 35, 70)]
+    tiles = []
+    for label, az, el in shots:
+        cam = frame(azimuth=az, elevation=el, fill=1.1)
+        cam.name = f"View_{label}"
+        p = render(os.path.join(ROOT, "renders", f".{name}_{label}.png"), (size, size), engine, samples)
+        tiles.append(p)
+        bpy.data.objects.remove(cam, do_unlink=True)
+    sc.camera = old_cam
+    try:
+        import numpy as np
+        px = []
+        for p in tiles:
+            im = bpy.data.images.load(p)
+            a = np.array(im.pixels[:], dtype=np.float32).reshape(size, size, 4)
+            px.append(a)
+            bpy.data.images.remove(im)
+        # Blender pixels start bottom-left: top row = front, right; bottom row = back, top
+        sheet = np.concatenate([np.concatenate([px[2], px[3]], axis=1), np.concatenate([px[0], px[1]], axis=1)], axis=0)
+        out = bpy.data.images.new(f"{name}_views", size * 2, size * 2, alpha=True)
+        out.pixels[:] = sheet.ravel()
+        dest = os.path.join(ROOT, "renders", f"{name}_views.png")
+        out.filepath_raw = dest
+        out.file_format = "PNG"
+        out.save()
+        bpy.data.images.remove(out)
+        for p in tiles:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        return dest
+    except Exception as e:
+        print(f"LOKI_WARN views sheet not made ({e}); single views kept")
+        return tiles[0]
+
+
+def finish(name, size=(1024, 1024), engine=None, samples=64, sheet=True):
+    """Camera and lights if missing, then save scenes/<name>.blend, render renders/<name>.png and the four-view
+    sheet renders/<name>_views.png (sheet=False skips it)."""
     sc = bpy.context.scene
     sc.render.resolution_x, sc.render.resolution_y = size
     if not sc.camera:
@@ -438,5 +730,102 @@ def finish(name, size=(1024, 1024), engine=None, samples=64):
         lights()
     blend = save(name)
     png = render(name, size, engine, samples)
-    print(f"LOKI_OUT {blend} {png}")
+    extra = ""
+    if sheet:
+        extra = " " + views(name, engine=engine)
+        sc.render.resolution_x, sc.render.resolution_y = size
+    print(f"LOKI_OUT {blend} {png}{extra}")
     return blend, png
+
+
+# ---------------------------------------------------------------- shapes for kits
+
+def dome(name, size=(1, 0.5, 0.2), material=None, at=(0, 0, 0), segments=16, bevel=0.0):
+    """A half-round (barrel-top) lid: a half ellipse in Y/Z run along X. size = (length x, width y, rise z)."""
+    import bmesh
+    x, y, z = size
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    prof = [(y / 2 * math.cos(math.pi * i / segments), z * math.sin(math.pi * i / segments)) for i in range(segments + 1)]
+    left = [bm.verts.new((-x / 2, py, pz)) for py, pz in prof]
+    right = [bm.verts.new((x / 2, py, pz)) for py, pz in prof]
+    for i in range(segments):
+        bm.faces.new((left[i], left[i + 1], right[i + 1], right[i]))
+    bm.faces.new(list(reversed(left)))
+    bm.faces.new(right)
+    bm.faces.new((left[0], right[0], right[-1], left[-1]))     # the flat bottom
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    for p in me.polygons:
+        p.use_smooth = True
+    o = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(o)
+    bpy.ops.object.select_all(action="DESELECT")
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    o = _finish_part(o, name, material, bevel)
+    o.location = Vector(at)
+    return o
+
+
+def _turn(objs, pivot, axis, degrees):
+    """Rotate several objects together about a line through `pivot` along `axis` ("X"/"Y"/"Z")."""
+    rot = Matrix.Translation(pivot) @ Matrix.Rotation(math.radians(degrees), 4, axis) @ Matrix.Translation(-pivot)
+    for o in objs:
+        o.matrix_world = rot @ o.matrix_world
+    bpy.context.view_layer.update()
+
+
+# ---------------------------------------------------------------- kits: whole objects, tested from four sides
+
+def chest(name="Chest", width=0.8, depth=0.5, height=0.42, lid_rise=0.16, open_deg=105, domed=True, hoard=80,
+          wood=None, metal=None, gold=None, at=(0, 0, 0)):
+    """A complete treasure chest - use this, never build a chest from loose boxes.
+    Open-top body, barrel (domed=True) or flat lid on two real hinges at the back, iron bands round body and lid,
+    lock plate on the front, a hoard of coins resting on a gold bed inside. open_deg 0 = shut, 105 = lid resting
+    open behind the body. Returns {"body", "lid", "parts"} (every object)."""
+    wood = wood or pbr(f"{name}_Wood", "wood_planks", scale=2, fallback="#7a4e2a")
+    metal = metal or mat(f"{name}_Iron", "#3a3f45", metal=1.0, rough=0.42)
+    gold = gold or mat(f"{name}_Gold", "#d9a521", metal=1.0, rough=0.25)
+    ax, ay, az = at
+    w, d, h = width, depth, height
+    band_t, band_h = 0.012, min(0.05, h * 0.12)
+    parts = []
+    body = tray(f"{name}_Body", (w, d, h), wall=max(0.025, w * 0.045), material=wood, at=at, bevel=0.006)
+    parts.append(body)
+    for k, z in enumerate((h * 0.08, h - band_h - h * 0.06)):
+        parts.append(ring(f"{name}_BodyBand{k}", (w + 2 * band_t, d + 2 * band_t, band_h), band_t, metal, (ax, ay, az + z)))
+    # lid, built shut on top of the body, then opened round the hinge line
+    lw, ld = w + 2 * band_t, d + 2 * band_t
+    lid = dome(f"{name}_Lid", (lw, ld, lid_rise), wood, (ax, ay, az + h)) if domed else \
+        box(f"{name}_Lid", (lw, ld, lid_rise * 0.6), wood, (ax, ay, az + h), bevel=0.01)
+    swing = [lid]
+    for k, x in enumerate((-0.32 * w, 0.32 * w)):
+        if domed:
+            b = dome(f"{name}_LidBand{k}", (band_h, ld + 2 * band_t, lid_rise + band_t), metal, (ax + x, ay, az + h))
+        else:
+            b = box(f"{name}_LidBand{k}", (band_h, ld + 2 * band_t, lid_rise * 0.6 + band_t), metal, (ax + x, ay, az + h))
+        swing.append(b)
+    # hinges: a fixed leaf on the body's back, a leaf on the lid's back, a knuckle (pin) between them on the hinge line
+    r = 0.018
+    py = ay + d / 2 + band_t + r * 0.7
+    pivot = Vector((ax, py, az + h))
+    for k, x in enumerate((-0.3 * w, 0.3 * w)):
+        knuckle = cyl(f"{name}_Hinge{k}", r, 0.1, metal, (ax + x - 0.05, py, az + h - r), axis="X", verts=16)
+        parts.append(knuckle)
+        parts.append(box(f"{name}_HingeLeafBody{k}", (0.09, 0.006, 0.075), metal, (ax + x, py - r * 0.4, az + h - 0.075 - r * 0.2)))
+        leaf = box(f"{name}_HingeLeafLid{k}", (0.09, 0.006, 0.06), metal, (ax + x, py - r * 0.4, az + h + r * 0.2))
+        swing.append(leaf)
+    # lock plate on the body's front, against the face (a hasp on a barrel lid's thin front edge would hang in the air)
+    parts.append(box(f"{name}_Lock", (0.1, 0.014, 0.12), gold, (ax, ay - d / 2 - band_t - 0.007, az + h - 0.13), bevel=0.004))
+    if open_deg:
+        _turn(swing, pivot, "X", -open_deg)     # front lifts, lid rolls back over the hinge line
+    parts += swing
+    if hoard:
+        parts += coins(body, hoard, gold, radius=min(0.03, w * 0.04), fill=0.8)
+    # check the kit's own promise: every swinging part still meets the hinge line
+    for o in swing:
+        lo, hi = bounds(o)
+        assert lo.y - 0.05 <= py <= hi.y + 0.05, f"{o.name} came off the hinge"
+    return {"body": body, "lid": lid, "parts": parts}

@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/loki-core", "crates/lokid"]
 
 [workspace.package]
-version = "0.18.0"
+version = "0.19.0"
 edition = "2021"
 license = "AGPL-3.0-only"
 
@@ -22,6 +22,9 @@ tracing-subscriber = "0.3"
 regex = "1"
 sysinfo = "0.33"
 base64 = "0.22"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [profile.release]

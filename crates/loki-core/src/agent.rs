@@ -464,9 +464,17 @@ hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, ma
     /// A vision model scores an image against the brief: (score, its notes).
     pub async fn look(&self, ws: &std::path::Path, path: &str, brief: &str) -> Result<(f64, String), String> {
         let file = tools::confine(ws, path)?;
-        let bytes = std::fs::read(&file).map_err(|_| format!("{path} does not exist"))?;
+        if !file.is_file() {
+            return Err(format!("{path} does not exist"));
+        }
+        // loki_bpy's finish() also writes <name>_views.png (front / right / back / above): judge all four angles,
+        // so a lid floating at the back or a missing side can't hide behind one hero shot
+        let sheet = file.with_file_name(format!("{}_views.png", file.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
+        let use_sheet = sheet.is_file() && !path.contains("_views");
+        let bytes = std::fs::read(if use_sheet { &sheet } else { &file }).map_err(|_| format!("{path} could not be read"))?;
         let (img, mime) = shrink(&bytes).unwrap_or((bytes, if path.to_ascii_lowercase().ends_with(".png") { "image/png" } else { "image/jpeg" }));
-        let prompt = format!("You are a strict art director reviewing a 3D render.\nBRIEF: {brief}\n\
+        let what = if use_sheet { "a sheet of four views of one 3D render (top-left: front, top-right: right side, bottom-left: from behind, bottom-right: from above)" } else { "a 3D render" };
+        let prompt = format!("You are a strict art director reviewing {what}.\nBRIEF: {brief}\n\
             Look at the image. List concrete visible problems (floating or disconnected parts, wrong proportions, anything the brief asks for that is missing or out of frame, \
             blocky placeholder shapes, bad lighting or exposure, clipping). Then score 1-10 how well it meets the brief (7 = good enough to show, 9 = portfolio).\n\
             Reply only JSON: {{\"score\": n, \"problems\": [\"...\"], \"good\": [\"...\"]}}");
@@ -724,7 +732,7 @@ pub fn describe_inspection(r: &Value) -> String {
 /// Make an image small enough for a vision API: at most 768 px, JPEG.
 fn shrink(bytes: &[u8]) -> Option<(Vec<u8>, &'static str)> {
     let img = image::load_from_memory(bytes).ok()?;
-    let img = if img.width().max(img.height()) > 768 { img.resize(768, 768, image::imageops::FilterType::Triangle) } else { img };
+    let img = if img.width().max(img.height()) > 1024 { img.resize(1024, 1024, image::imageops::FilterType::Triangle) } else { img };
     let mut out = std::io::Cursor::new(Vec::new());
     img.to_rgb8().write_to(&mut out, image::ImageFormat::Jpeg).ok()?;
     Some((out.into_inner(), "image/jpeg"))

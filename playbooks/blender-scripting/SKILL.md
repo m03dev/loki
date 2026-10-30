@@ -6,6 +6,18 @@ description: Build, light and render a prop or scene from scratch with a Blender
 
 Written from what went wrong in LOKI's first real jobs (floating lids, flames outside the frame, crashes on Blender 5.2).
 
+**Kits first.** If loki_bpy has a kit for the object, use it - kits are whole objects built and checked from four
+sides, with real hinges and joints: `chest(...)` (open_deg, domed, hoard, size, your own materials). Only build from
+parts what no kit covers, and never a hinged thing without hinge hardware.
+
+```python
+from loki_bpy import *
+start(__file__)
+ground(6, pbr("Floor", "rough_concrete", fallback="#4a4744"))
+chest("Chest", width=0.8, open_deg=105, domed=True, hoard=80)
+frame(); lights(); finish("chest")
+```
+
 **Use loki_bpy** (it is in every job's scripts/ folder): it places parts by their measured bounds, hinges lids on a
 real edge, frames the camera from the scene's bounds and renders with the right engine for this Blender. A whole chest:
 
@@ -13,17 +25,28 @@ real edge, frames the camera from the scene's bounds and renders with the right 
 import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from loki_bpy import *
 start(__file__)
-wood, gold = mat("Wood", "#8a5a2b", rough=0.75), mat("Gold", "#d4a017", metal=1.0, rough=0.28)
-ground(6, mat("Floor", "#4a4744", rough=0.9))
-body = box("Body", (0.8, 0.5, 0.42), wood, bevel=0.015)
-lid = box("Lid", (0.82, 0.52, 0.12), wood, bevel=0.02); place_on(lid, body)
-for i, x in enumerate((-0.3, 0.3)):
-    b = box(f"Band{i}", (0.05, 0.53, 0.43), gold); center_on(b, body); b.location.x += x
-plate = box("LockPlate", (0.12, 0.02, 0.14), gold, bevel=0.005); place_beside(plate, body, side="-y", align="center")
-coins(body, 45, gold)
-hinge(lid, edge="+y", angle=40)        # back hinge (+y), front lifts; the camera looks from -y
-frame(); lights(); finish("chest")
+wood = pbr("Wood", "wood_planks", scale=2)              # a real scanned surface (Poly Haven, CC0), never a flat colour
+iron = pbr("Iron", "rusty_metal_02", fallback="#4a4f55", metal=1.0)
+gold = mat("Gold", "#d4a017", metal=1.0, rough=0.25)
+ground(6, pbr("Floor", "rough_concrete", fallback="#4a4744"))
+body = tray("Body", (0.8, 0.5, 0.45), wall=0.04, material=wood, bevel=0.01)   # open-top: things go IN it
+lid = box("Lid", (0.82, 0.52, 0.1), wood, bevel=0.015); place_on(lid, body)
+for z in (0.08, 0.32):
+    ring(f"Band{z}", (0.82, 0.52, 0.05), wall=0.012, material=iron, at=(0, 0, z))  # bands wrap the sides only
+plate = box("Lock", (0.1, 0.02, 0.12), gold, bevel=0.004); place_beside(plate, body, side="-y", align="top")
+coins(body, 60, gold, fill=0.8)          # in a tray it lays a gold bed first, so the heap rests on something
+hinge(lid, edge="+y", angle=55)          # back hinge (+y), front lifts; the camera looks from -y (the front)
+frame(); lights(); finish("chest")       # lights() = studio HDRI + three-point; finish() also writes chest_views.png
 ```
+
+**Quality, in order of what matters** (from research on LLM-made 3D: LL3M, BlenderLLM, BlenderRAG):
+- Real surfaces: `pbr(name, asset)` loads a Poly Haven scan (wood_planks, rusty_metal_02, brick_wall_001,
+  rock_face, forest_ground_01, rough_concrete, painted_plaster_wall ...); unknown or offline -> a flat `fallback`.
+  `hdri("studio_small_09")` (in lights()) gives real reflections; outdoors try "kloofendal_48d_partly_cloudy".
+- Real shapes: tray() for anything that holds things, ring() for bands and frames, planks() for wood panels,
+  bevel every hard edge. A solid block with things on top reads as a toy.
+- Check every side: `renders/<name>_views.png` (front, right, back, above) is what the `look:` check scores - a part
+  floating at the back fails it. Look at the sheet yourself before you call a step done.
 
 **Script shape without the helpers** (one script makes everything; run: `blender --background --python scripts/x.py`)
 1. Start clean: `bpy.ops.wm.read_factory_settings(use_empty=True)`; real units (metres): a chest ~0.8 x 0.5 x 0.5.
@@ -49,4 +72,5 @@ frame(); lights(); finish("chest")
 **Prove it** (the driver checks these; plan tasks with them):
 - `blend:scenes/x.blend` - LOKI's inspector: fails on floating parts, no camera, empty scene; reports parts outside
   the frame and missing materials. Fix every error it lists.
-- `look:renders/x.png` - a vision model compares the render with the brief and scores it; fix what it lists.
+- `look:renders/x.png` - a vision model scores the four-view sheet (renders/x_views.png) against the brief; fix
+  everything it lists, then render again.
