@@ -26,7 +26,7 @@ impl Default for Policy {
     fn default() -> Self {
         let auto = [
             "ls", "cat", "head", "tail", "wc", "echo", "mkdir", "touch", "cp", "mv", "find", "grep",
-            "git", "python", "python3", "node", "cargo", "blender", "ffmpeg", "ffprobe", "magick", "convert",
+            "git", "python", "python3", "node", "cargo", "blender", "ffmpeg", "ffprobe", "magick", "convert", "freecadcmd",
             "dir", "type", "where", "findstr", "tree", "copy", "move", "xcopy", "robocopy", "ren", "md", "mv", "cp",
         ];
         Self {
@@ -153,9 +153,18 @@ pub fn command_allowed(policy: &Policy, command: &str) -> bool {
     if ["&", "||", ";", "|", "`", "$(", ">", "<", "\n"].iter().any(|t| unquoted(command).contains(t)) {
         return false;
     }
-    let first = command.split_whitespace().next().unwrap_or("");
-    let prog = Path::new(first).file_name().and_then(|s| s.to_str()).unwrap_or(first);
-    policy.auto_commands.iter().any(|a| a == prog)
+    let prog = program_name(command);
+    policy.auto_commands.iter().any(|a| *a == prog)
+}
+
+/// The program a command runs, as a bare lower-case name: `"D:\cad\b123\Scripts\python.exe" x.py` -> `python`,
+/// `/Applications/Blender.app/Contents/MacOS/Blender -b` -> `blender`. A quoted first word may hold spaces.
+pub fn program_name(command: &str) -> String {
+    let c = command.trim_start();
+    let first = if let Some(rest) = c.strip_prefix('"') { rest.split('"').next().unwrap_or("") } else { c.split_whitespace().next().unwrap_or("") };
+    let base = first.rsplit(['/', '\\']).next().unwrap_or(first);       // either separator, on any machine
+    let base = base.to_ascii_lowercase();
+    base.strip_suffix(".exe").or_else(|| base.strip_suffix(".cmd")).or_else(|| base.strip_suffix(".bat")).unwrap_or(&base).to_string()
 }
 
 /// The command with everything inside '...' or "..." blanked out (backticks and $( stay visible
@@ -192,8 +201,7 @@ pub async fn run(ws: &Path, policy: &Policy, args: &Value, approved: bool) -> Ou
 /// Make known tools report failure honestly. Blender exits 0 even when its Python script
 /// crashes, so a broken render looked like success; `--python-exit-code 1` fixes that.
 pub fn harden(cmd: &str) -> String {
-    let first = cmd.split_whitespace().next().unwrap_or("");
-    let prog = Path::new(first).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+    let prog = program_name(cmd);
     if prog == "blender" && cmd.contains("--python") && !cmd.contains("--python-exit-code") {
         return cmd.replacen("--python", "--python-exit-code 1 --python", 1);
     }
@@ -288,6 +296,16 @@ mod tests {
             Outcome::Ok(t) => assert!(t.contains("a b; c"), "{t}"),
             Outcome::Err(t) | Outcome::NeedsOwner(t) => panic!("{t}"),
         }
+    }
+
+    #[test]
+    fn quoted_tool_paths_are_recognised() {
+        let p = Policy::default();
+        assert!(command_allowed(&p, r#""D:\loki\harness_data\cad\b123\Scripts\python.exe" scripts/model.py"#));
+        assert!(command_allowed(&p, r#""D:\loki\harness_data\cad\freecad\FreeCAD 1.0\bin\freecadcmd.exe" scripts/model.py"#));
+        assert!(command_allowed(&p, "/Applications/Blender.app/Contents/MacOS/Blender -b --python s.py"));
+        assert!(!command_allowed(&p, r#""C:\evil\python.exe" x.py & del *"#));
+        assert_eq!(harden(r#""D:\Blender\blender.exe" --background --python s.py"#), r#""D:\Blender\blender.exe" --background --python-exit-code 1 --python s.py"#);
     }
 
     #[test]

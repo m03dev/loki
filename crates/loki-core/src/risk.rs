@@ -110,7 +110,7 @@ fn outside_paths(cmd: &str, ws: &Path) -> Vec<String> {
             continue;
         }
         // program paths (blender.exe, python) are what runs, not what it touches
-        if m.start() == 0 || cmd[..m.start()].trim().is_empty() {
+        if m.start() == 0 || cmd[..m.start()].trim().trim_matches(|c| c == '"' || c == '\'').is_empty() {
             continue;
         }
         if !out.contains(&p.to_string()) {
@@ -185,6 +185,9 @@ mod tests {
         assert_eq!(assess("rm -rf build", ws).risk, Risk::High);
         assert_eq!(assess("pip install pillow", ws).risk, Risk::Medium);
         assert!(assess("blender --background --python scripts/x.py", ws).what.contains("x.py"));
+        // a quoted program path (LOKI's own CAD python) is what runs, not something it touches
+        let q = assess(r#""D:\loki\harness_data\cad\b123\Scripts\python.exe" scripts/model.py"#, ws);
+        assert!(q.outside.is_empty(), "{:?}", q.outside);
         assert_eq!(assess("r\u{200b}m -rf /", ws).risk, Risk::High, "invisible characters don't hide it");
     }
 }
