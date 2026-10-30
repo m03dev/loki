@@ -63,6 +63,15 @@ svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 .chatw{min-width:0;min-height:0;display:flex;flex-direction:column;position:relative}
 @media (max-width:820px){.frame{grid-template-columns:52px 0 0 1fr!important;padding-right:6px}.drawer.open{position:fixed;z-index:40;inset:56px 8px 8px 62px}.split{display:none}}
 
+/* one bar: the page's top bar is the window's title bar (frameless window) */
+.winc{display:flex;gap:2px;margin-left:6px}
+.wb{width:40px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;color:var(--muted)}
+.wb:hover{background:var(--g3);color:var(--text)}.wb.x:hover{background:#c2423f;color:#fff}
+.wb svg.i{width:15px;height:15px}
+.rz{position:fixed;z-index:200;display:none}.framed .rz{display:block}
+.rz-r{top:0;right:0;width:6px;height:100%;cursor:ew-resize}.rz-b{left:0;bottom:0;height:6px;width:100%;cursor:ns-resize}.rz-c{right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize}
+.tps{font-size:10.5px;color:var(--accent);margin-left:4px}
+.lesson{font-size:12.5px;padding:6px 8px;border-radius:9px;background:var(--g2);margin-bottom:4px;line-height:1.4}
 /* chat */
 .ch{display:flex;align-items:center;gap:8px;height:48px;padding:0 10px 0 18px;border-bottom:1px solid var(--edge)}
 .ch .ttl{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -202,12 +211,14 @@ svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 </style>
 </head>
 <body>
-<div class="top">
+<div class="top pywebview-drag-region" id="top">
   <span class="brand">LOKI</span><span class="crumb" id="crumb"></span><span class="sp"></span>
   <button class="ib bell" id="bBell" data-tip="For you — what is waiting for your OK or answer"></button>
   <span class="chipm" id="mach" data-tip="This machine and its driver version">…</span>
   <button class="ib" id="bUpd" data-tip="Update everything — pull master and restart LOKI here; jobs carry on"></button>
+  <span class="winc" id="winc"></span>
 </div>
+<div class="rz rz-r" data-rz="r"></div><div class="rz rz-b" data-rz="b"></div><div class="rz rz-c" data-rz="c"></div>
 <div class="frame" id="frame">
   <nav class="rail" id="rail"></nav>
   <aside class="drawer glass" id="drawer"></aside>
@@ -222,7 +233,8 @@ svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 "use strict";
 const P = {
   plus:'<path d="M12 5v14M5 12h14"/>', jobs:'<path d="M4 6h16M4 12h16M4 18h10"/>', image:'<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>',
-  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+  gear:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  winmin:'<path d="M5 12h14"/>', winmax:'<rect x="5" y="5" width="14" height="14" rx="2"/>', winres:'<rect x="8" y="4" width="12" height="12" rx="2"/><path d="M16 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2"/>', book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M8 7h8M8 11h6"/>',
   bell:'<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 20a2 2 0 0 0 4 0"/>', refresh:'<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
   send:'<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>', stop:'<rect x="7" y="7" width="10" height="10" rx="2"/>', play:'<path d="M8 5l11 7-11 7z"/>', check:'<path d="M20 6L9 17l-5-5"/>',
   x:'<path d="M18 6L6 18M6 6l12 12"/>', chev:'<path d="M6 9l6 6 6-6"/>', file:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
@@ -324,7 +336,12 @@ async function paintSettings() {
       <div class="row"><label>Notifications</label><span class="seg"><button data-nt="1" class="${CFG.notify ? 'on' : ''}">On</button><button data-nt="0" class="${CFG.notify ? '' : 'on'}">Off</button></span></div></div>
     <div class="sec"><h3>${ic('monitor')} This machine <span class="sp"></span><button class="btn sm" id="scanB">Scan again</button></h3><div id="sysBox"><div class="empty">Scanning…</div></div></div>
     <div class="sec"><h3>${ic('chip')} Local models</h3><div id="localBox"><div class="empty">…</div></div></div>
-    <div class="sec"><h3>${ic('refresh')} Free online models <span class="sp"></span><button class="btn sm" id="probeB">Check all</button></h3><div id="freeBox"></div></div>`;
+    <div class="sec"><h3>${ic('refresh')} Free online models <span class="sp"></span><button class="btn sm" id="probeB">Check all</button></h3><div id="freeBox"></div></div>
+    <div class="sec"><h3>${ic('book')} What LOKI knows</h3><div id="knowBox"><div class="empty">…</div></div></div>`;
+  api('/knowledge').then(k => { const el = $('#knowBox'); if (!el) return;
+    el.innerHTML = `<div style="font-size:12px;color:var(--dim);margin-bottom:6px">${k.playbooks.length} playbooks · ${k.lessons.length} lessons learned from real errors</div>`
+      + k.lessons.slice().reverse().slice(0, 12).map(l => `<div class="lesson">${esc(l)}</div>`).join('')
+      + `<div class="chips" style="margin-top:8px">${k.playbooks.map(p => `<span class="chip" title="${esc(p.description)}">${esc(p.name)}</span>`).join('')}</div>`; }).catch(() => {});
   db.querySelectorAll('[data-theme-pick]').forEach(b => b.onclick = () => { CFG.theme = b.dataset.themePick; CFG.accent = null; applyLook(); saveCfg(); paintSettings(); });
   $('#accent').oninput = e => { CFG.accent = e.target.value; applyLook(); saveCfg(); };
   $('#accReset').onclick = () => { CFG.accent = null; applyLook(); saveCfg(); paintSettings(); };
@@ -337,7 +354,7 @@ async function paintSettings() {
 function paintFree() {
   const el = $('#freeBox'); if (!el) return;
   el.innerHTML = S.models.length ? S.models.map(m => `<div class="mrow"><span class="risk ${m.ok ? '' : 'high'}"></span><div class="nm"><b>${esc(m.provider)} · ${esc(m.role)}</b><small>${esc(m.model)}</small></div>
-    <span style="font-size:11.5px;color:var(--dim);max-width:40%;text-align:right">${m.ok ? m.ms + ' ms' : esc(m.note).slice(0, 60)}</span></div>`).join('') : '<div class="empty">Not checked yet.</div>';
+    <span style="font-size:11.5px;color:var(--dim);max-width:44%;text-align:right">${m.ok ? (m.tps ? `<span class="tps">${Math.round(m.tps)} tok/s</span> · ` : '') + (m.latency_ms ? (m.latency_ms / 1000).toFixed(1) + ' s/answer' : m.ms + ' ms reply') : esc(m.note).slice(0, 60)}</span></div>`).join('') + '<div style="font-size:11.5px;color:var(--dim);margin-top:6px">tok/s is measured on this machine\'s real jobs.</div>' : '<div class="empty">Not checked yet.</div>';
 }
 async function scan() {
   const box = $('#sysBox'), lbox = $('#localBox'); if (!box) return;
@@ -354,7 +371,8 @@ async function scan() {
   const row = (m, fam) => { const p = pulls[m.tag]; return `<div class="mrow"><div class="nm"><span class="fam">${fam}</span><b>${esc(m.tag)}</b><small>${esc(m.why)} · ${m.size} GB</small>
     ${p ? `<small style="color:var(--accent);display:block">${esc(p.status)} ${p.pct > 0 ? p.pct + '%' : ''}</small>` : ''}</div>
     ${m.installed ? `<span class="chip">installed</span>` : `<button class="ib" data-pull="${esc(m.tag)}" data-tip="Download — get this model onto this machine">${ic('down')}</button>`}</div>`; };
-  lbox.innerHTML = `${inst.length ? inst.map(n => `<div class="mrow"><span class="risk"></span><div class="nm"><b>${esc(n)}</b></div><button class="ib" data-rm="${esc(n)}" data-tip="Remove — delete this model from this machine">${ic('trash')}</button></div>`).join('') : '<div class="empty">No local models yet.</div>'}
+  const sp = n => { const m = S.models.find(x => x.provider === 'ollama' && x.model === n && x.tps); return m ? `<small><span class="tps">${Math.round(m.tps)} tok/s</span> measured</small>` : ''; };
+  lbox.innerHTML = `${inst.length ? inst.map(n => `<div class="mrow"><span class="risk"></span><div class="nm"><b>${esc(n)}</b>${sp(n)}</div><button class="ib" data-rm="${esc(n)}" data-tip="Remove — delete this model from this machine">${ic('trash')}</button></div>`).join('') : '<div class="empty">No local models yet.</div>'}
     <div style="margin-top:10px;font-size:12px;color:var(--dim)">Recommended for this machine</div>
     ${(rec.standard || []).slice(0, 3).map(m => row(m, 'best all-round')).join('')}${(rec.uncensored || []).slice(0, 4).map(m => row(m, 'abliterated · uncensored')).join('')}${(rec.fast || []).slice(0, 2).map(m => row(m, 'fast')).join('')}`;
   lbox.querySelectorAll('[data-pull]').forEach(b => b.onclick = async () => {
@@ -401,7 +419,7 @@ function paintComposer() {
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
   const sel = $('#modelSel'); if (!sel) return;
   const brains = S.models.filter(m => m.role === 'brain' && m.ok);
-  sel.innerHTML = `<option value="">Auto · best free</option>` + brains.map(m => `<option value="${esc(m.provider)}">${esc(m.provider)} · ${esc(m.model.split('/').pop())}</option>`).join('');
+  sel.innerHTML = `<option value="">Auto · best free</option>` + brains.map(m => `<option value="${esc(m.provider)}">${esc(m.provider)} · ${esc(m.model.split('/').pop())}${m.tps ? ` · ${Math.round(m.tps)} tok/s` : ''}</option>`).join('');
   sel.value = brains.some(m => m.provider === S.prefer) ? S.prefer : '';
   const r = S.chat?.run, used = r?.ctx_tokens || 0, pct = Math.min(100, used / 1280);
   $('#ctx').innerHTML = used ? `<span class="ring" style="background:conic-gradient(var(--accent) ${pct}%,var(--g3) 0)"></span>${(used/1000).toFixed(1)}k` : '';
@@ -628,7 +646,30 @@ async function poll(force) {
   } catch (e) { $('#mach').innerHTML = '<b style="color:var(--bad)">driver offline</b>'; }
   busy = false;
 }
+/* window: our bar is the title bar; buttons call the launcher (pywebview js_api) */
+function windowControls() {
+  const api = window.pywebview && window.pywebview.api; if (!api || !api.minimize) return;
+  document.body.classList.add('framed');
+  $('#winc').innerHTML = `<button class="wb" id="wMin" data-tip="Minimise">${ic('winmin')}</button><button class="wb" id="wMax" data-tip="Maximise">${ic('winmax')}</button><button class="wb x" id="wCls" data-tip="Close the window — LOKI keeps working in the background">${ic('x')}</button>`;
+  const setMax = m => { $('#wMax').innerHTML = ic(m ? 'winres' : 'winmax'); $('#wMax').dataset.tip = m ? 'Restore' : 'Maximise'; };
+  $('#wMin').onclick = () => api.minimize();
+  $('#wMax').onclick = async () => setMax(await api.toggle_max());
+  $('#wCls').onclick = () => api.close();
+  $('#top').addEventListener('dblclick', async e => { if (!e.target.closest('button')) setMax(await api.toggle_max()); });
+  // edges: drag to resize (pointer capture keeps the drag going outside the window)
+  document.querySelectorAll('[data-rz]').forEach(h => h.addEventListener('pointerdown', async e => {
+    e.preventDefault(); h.setPointerCapture(e.pointerId);
+    const [w0, h0] = await api.size(), x0 = e.screenX, y0 = e.screenY, k = h.dataset.rz; let pend = null, t = 0;
+    const move = ev => { pend = [k === 'b' ? w0 : w0 + ev.screenX - x0, k === 'r' ? h0 : h0 + ev.screenY - y0];
+      const now = Date.now(); if (now - t > 40) { t = now; api.resize(pend[0], pend[1]); pend = null; } };
+    const up = () => { if (pend) api.resize(pend[0], pend[1]); h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); };
+    h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
+  }));
+}
+window.addEventListener('pywebviewready', windowControls);
+
 async function boot() {
+  windowControls();
   try { const s = await api('/settings'); if (s) CFG = Object.assign(CFG, s); } catch (e) {}
   if (!('drawer' in CFG)) CFG.drawer = 'jobs';
   applyLook(); layout(); chatShell(); paintBell();

@@ -7,6 +7,7 @@
 //! the task's check.
 
 use crate::journal::{Journal, RunInfo, Status, Task, TaskState};
+use crate::knowledge::Knowledge;
 use crate::llm::{Llm, LlmError, Msg, ToolCall};
 use crate::pool::{ModelPool, Role};
 use crate::tools::{self, Outcome, Policy};
@@ -58,7 +59,16 @@ pub struct Driver {
     pub cfg: DriverConfig,
     /// What this machine is and which programs it has (OS, shell, Blender, Python...).
     pub machine: String,
+    /// Playbooks and the lessons notebook.
+    pub knowledge: Knowledge,
+    /// Blender for the scene inspector.
+    pub blender: Option<String>,
+    /// A `look:` check passes at this vision score or above.
+    pub look_pass: f64,
 }
+
+/// LOKI's scene inspector, shipped inside the driver so every machine has the same one.
+const INSPECT_SCRIPT: &str = include_str!("../../../tools/blender/inspect_scene.py");
 
 struct Exchange {
     call: ToolCall,
@@ -85,7 +95,9 @@ fn render_tasks(tasks: &[Task]) -> String {
 
 impl Driver {
     pub fn new(pool: Arc<Mutex<ModelPool>>) -> Self {
-        Self { pool, llm: Llm::new(), cfg: DriverConfig::default(), machine: machine_note() }
+        let blender = std::env::var("LOKI_BLENDER").ok().filter(|b| std::path::Path::new(b).is_file())
+            .or_else(|| which("blender").map(|p| p.to_string_lossy().to_string()));
+        Self { pool, llm: Llm::new(), cfg: DriverConfig::default(), machine: machine_note(), knowledge: Knowledge::default(), blender, look_pass: 7.0 }
     }
 
     fn context(&self, j: &Journal, info: &RunInfo, tasks: &[Task], recent: &[Exchange], nudge: Option<&str>) -> Vec<Msg> {
@@ -117,6 +129,16 @@ image: Style, Framing, Shape (16:9 / 1:1 / 9:16); turnaround: Views, Pose (T / A
 blockout), Start from (concept / Blender from scratch); video: Length, Shape, Look; writing: Length, Tone. {}\n",
                 info.interview,
                 if info.interview == "big" { "Only for big jobs (several outputs or hours of work)." } else { "Plain questions are never interviewed." }));
+        }
+        system.push_str("\n- 3D / render work: after building, call inspect_scene on the .blend and fix every error; plan checks as \
+'blend:<file.blend>' and 'look:<render.png>' so the work is judged on what it made. After fixing a real error, call `learn`.\n");
+        for pb in self.knowledge.pick(&info.goal, 2) {
+            let body: String = pb.body.chars().take(2800).collect();
+            system.push_str(&format!("\nPLAYBOOK {} - {}\n{}\n", pb.name, pb.description, body));
+        }
+        let lessons = self.knowledge.lessons_for(&info.goal, 14);
+        if !lessons.is_empty() {
+            system.push_str(&format!("\nLESSONS (learned from real errors - follow them):\n- {}\n", lessons.join("\n- ")));
         }
         let mut msgs = vec![Msg::system(system), Msg::user(state)];
         for ex in recent {
@@ -165,6 +187,8 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
         // Turns in a row that changed nothing (notes, looking around, errors, no tool call),
         // kept in run.json so pauses and approvals don't reset it.
         let mut idle_turns = info.idle_turns;
+        // the first error line of the last failed run, to ask for a lesson once it is fixed
+        let mut fixed_error: Option<String> = None;
 
         // Coming back from a pause: apply the owner's answer first.
         if let Some(reply) = info.owner_reply.take() {
@@ -332,7 +356,17 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
             j.log_step(&json!({"step": info.steps, "provider": reply.provider, "model": reply.model,
                 "tool": call.name, "args": call.args, "result": short(&result, 2000)}));
             let productive = !result.starts_with("ERROR")
-                && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish" | "interview");
+                && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish" | "interview" | "inspect_scene" | "look" | "learn");
+            if call.name == "run" {
+                if result.starts_with("ERROR") {
+                    let line = result.lines().rev().find(|l| l.contains("Error") || l.contains("error")).unwrap_or("").trim().to_string();
+                    if !line.is_empty() { fixed_error = Some(line); }
+                } else if let Some(err) = fixed_error.take() {
+                    if nudge.is_none() {
+                        nudge = Some(format!("That fixed the earlier error ({}). Call `learn` with a one-line rule so no future job repeats it, then carry on.", short(&err, 200)));
+                    }
+                }
+            }
             let repeat = recent.iter().rev().take(4).any(|e| e.call == call);
             idle_turns = if productive && !repeat { 0 } else { idle_turns + 1 };
             info.idle_turns = idle_turns;
@@ -368,6 +402,82 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
         }
         j.save_info(&info)?;
         Ok(info)
+    }
+
+    /// Run LOKI's inspector on a .blend in this machine's Blender; the JSON report.
+    pub async fn inspect(&self, ws: &std::path::Path, blend: &str) -> Result<Value, String> {
+        let file = tools::confine(ws, blend)?;
+        if !file.is_file() {
+            return Err(format!("{blend} does not exist"));
+        }
+        let Some(blender) = &self.blender else { return Err("Blender is not installed on this machine (or LOKI_BLENDER is not set)".into()) };
+        let dir = ws.join(".loki");
+        let _ = std::fs::create_dir_all(&dir);
+        let script = dir.join("inspect_scene.py");
+        let out = dir.join("inspect.json");
+        let _ = std::fs::remove_file(&out);
+        std::fs::write(&script, INSPECT_SCRIPT).map_err(|e| e.to_string())?;
+        let mut c = tokio::process::Command::new(blender);
+        c.arg("--background").arg(&file).arg("--python-exit-code").arg("1").arg("--python").arg(&script).arg("--").arg(&out)
+            .current_dir(ws).kill_on_drop(true).stdin(std::process::Stdio::null());
+        #[cfg(windows)]
+        {
+            c.creation_flags(0x0800_0000);
+        }
+        let run = tokio::time::timeout(std::time::Duration::from_secs(240), c.output()).await;
+        match run {
+            Err(_) => return Err("the inspector timed out".into()),
+            Ok(Err(e)) => return Err(format!("could not start Blender: {e}")),
+            Ok(Ok(o)) if !o.status.success() => {
+                let err = String::from_utf8_lossy(&o.stderr);
+                return Err(format!("the inspector failed: {}", short(err.trim(), 600)));
+            }
+            _ => {}
+        }
+        let text = std::fs::read_to_string(&out).map_err(|_| "the inspector wrote no report".to_string())?;
+        serde_json::from_str(&text).map_err(|e| e.to_string())
+    }
+
+    async fn check_blend(&self, ws: &std::path::Path, blend: &str) -> Result<String, String> {
+        let r = self.inspect(ws, blend).await?;
+        let errors: Vec<String> = r["problems"].as_array().map(|a| a.iter().filter(|p| p["level"] == "error").filter_map(|p| p["text"].as_str().map(String::from)).collect()).unwrap_or_default();
+        if errors.is_empty() {
+            Ok(describe_inspection(&r))
+        } else {
+            Err(format!("the inspector found errors in {blend}: {}", errors.join("; ")))
+        }
+    }
+
+    /// A vision model scores an image against the brief: (score, its notes).
+    pub async fn look(&self, ws: &std::path::Path, path: &str, brief: &str) -> Result<(f64, String), String> {
+        let file = tools::confine(ws, path)?;
+        let bytes = std::fs::read(&file).map_err(|_| format!("{path} does not exist"))?;
+        let (img, mime) = shrink(&bytes).unwrap_or((bytes, if path.to_ascii_lowercase().ends_with(".png") { "image/png" } else { "image/jpeg" }));
+        let prompt = format!("You are a strict art director reviewing a 3D render.\nBRIEF: {brief}\n\
+            Look at the image. List concrete visible problems (floating or disconnected parts, wrong proportions, anything the brief asks for that is missing or out of frame, \
+            blocky placeholder shapes, bad lighting or exposure, clipping). Then score 1-10 how well it meets the brief (7 = good enough to show, 9 = portfolio).\n\
+            Reply only JSON: {{\"score\": n, \"problems\": [\"...\"], \"good\": [\"...\"]}}");
+        match self.llm.vision(&self.pool, &prompt, &img, mime).await {
+            Ok(r) => {
+                let v = crate::llm::extract_json(&r.text).unwrap_or(json!({}));
+                let score = v["score"].as_f64().unwrap_or(0.0);
+                let probs: Vec<String> = v["problems"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+                let good: Vec<String> = v["good"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+                let text = format!("problems: {}\ngood: {}\n(by {} {})", if probs.is_empty() { "none".into() } else { probs.join("; ") }, good.join("; "), r.provider, r.model);
+                Ok((score, text))
+            }
+            Err(e) => Err(format!("no vision model answered: {e}")),
+        }
+    }
+
+    async fn check_look(&self, ws: &std::path::Path, path: &str, brief: &str) -> Result<String, String> {
+        match self.look(ws, path, brief).await {
+            Ok((score, text)) if score >= self.look_pass => Ok(format!("vision score {score}/10. {text}")),
+            Ok((score, text)) => Err(format!("vision score {score}/10 (needs {}). Fix these and render again: {text}", self.look_pass)),
+            // Don't hold a job hostage to a busy free tier: pass, but say it was not seen.
+            Err(e) if e.starts_with("no vision model") => Ok(format!("NOT visually checked ({e}); file exists")),
+            Err(e) => Err(e),
+        }
     }
 
     /// The closing chat message: the summary plus the images this job made.
@@ -449,7 +559,17 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 let mut tasks = j.tasks();
                 let id = a["task_id"].as_u64().unwrap_or(0) as u32;
                 let Some(t) = tasks.iter_mut().find(|t| t.id == id) else { return Outcome::Err(format!("no task #{id}")) };
-                match tools::verify(&ws, &self.cfg.policy, &t.check).await {
+                let check = t.check.clone();
+                let title = t.title.clone();
+                let verdict = if let Some(p) = check.strip_prefix("blend:") {
+                    self.check_blend(&ws, p.trim()).await
+                } else if let Some(p) = check.strip_prefix("look:") {
+                    self.check_look(&ws, p.trim(), &format!("{}\nThis step: {title}", info.goal)).await
+                } else {
+                    tools::verify(&ws, &self.cfg.policy, &check).await
+                };
+                let Some(t) = tasks.iter_mut().find(|t| t.id == id) else { return Outcome::Err(format!("no task #{id}")) };
+                match verdict {
                     Ok(proof) => {
                         t.state = TaskState::Passed;
                         t.evidence = format!("{} | verified: {}", a["evidence"].as_str().unwrap_or(""), short(&proof, 200));
@@ -470,6 +590,30 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 let _ = j.save_tasks(&tasks);
                 j.progress(&format!("blocked #{id}: {}", a["reason"].as_str().unwrap_or("")));
                 Outcome::Ok(format!("task #{id} blocked; moving on"))
+            }
+            "inspect_scene" => {
+                let Some(p) = a["path"].as_str() else { return Outcome::Err("missing 'path'".into()) };
+                match self.inspect(&ws, p).await {
+                    Ok(r) => Outcome::Ok(describe_inspection(&r)),
+                    Err(e) => Outcome::Err(e),
+                }
+            }
+            "look" => {
+                let Some(p) = a["path"].as_str() else { return Outcome::Err("missing 'path'".into()) };
+                let brief = a["brief"].as_str().map(String::from).unwrap_or_else(|| info.goal.clone());
+                match self.look(&ws, p, &brief).await {
+                    Ok((score, text)) => Outcome::Ok(format!("score {score}/10\n{text}")),
+                    Err(e) => Outcome::Err(e),
+                }
+            }
+            "learn" => {
+                let l = a["lesson"].as_str().unwrap_or("");
+                if self.knowledge.learn(l) {
+                    j.progress(&format!("learned: {}", short(l, 160)));
+                    Outcome::Ok("saved to the lessons notebook".into())
+                } else {
+                    Outcome::Ok("already known (or too short)".into())
+                }
             }
             "tell_owner" => {
                 let text = a["text"].as_str().unwrap_or("").trim();
@@ -536,9 +680,32 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 let again = a["command"].as_str().is_some_and(|c| info.approved_commands.iter().any(|x| x == c));
                 tools::run(&ws, &self.cfg.policy, a, approved || again).await
             }
-            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, interview, finish")),
+            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, interview, inspect_scene, look, learn, finish")),
         }
     }
+}
+
+/// A short text version of an inspector report for the model and the chat.
+pub fn describe_inspection(r: &Value) -> String {
+    let c = &r["counts"];
+    let mut s = format!("{} meshes, {} triangles, {} lights, {} camera(s), engine {}.",
+        c["meshes"], c["triangles"], c["lights"], c["cameras"], r["engine"].as_str().unwrap_or("?"));
+    let probs: Vec<String> = r["problems"].as_array().map(|a| a.iter().map(|p| format!("[{}] {}", p["level"].as_str().unwrap_or(""), p["text"].as_str().unwrap_or(""))).collect()).unwrap_or_default();
+    if probs.is_empty() {
+        s.push_str(" No problems found.");
+    } else {
+        s.push_str(&format!(" Problems: {}", probs.join("; ")));
+    }
+    s
+}
+
+/// Make an image small enough for a vision API: at most 768 px, JPEG.
+fn shrink(bytes: &[u8]) -> Option<(Vec<u8>, &'static str)> {
+    let img = image::load_from_memory(bytes).ok()?;
+    let img = if img.width().max(img.height()) > 768 { img.resize(768, 768, image::imageops::FilterType::Triangle) } else { img };
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.to_rgb8().write_to(&mut out, image::ImageFormat::Jpeg).ok()?;
+    Some((out.into_inner(), "image/jpeg"))
 }
 
 /// Workspace-relative files from a tool's `files` argument that really exist.

@@ -115,6 +115,7 @@ impl Llm {
             if let Some(k) = &pick.api_key {
                 req = req.bearer_auth(k);
             }
+            let started = std::time::Instant::now();
             match req.send().await {
                 Ok(resp) => {
                     let status = resp.status();
@@ -136,13 +137,61 @@ impl Llm {
                     let msg = &v["choices"][0]["message"];
                     let text = msg["content"].as_str().unwrap_or("").to_string();
                     let call = parse_native_call(msg).or_else(|| repair_call_with(&text, tools));
-                    pool.lock().await.report_ok(&name);
+                    let mut p = pool.lock().await;
+                    if let Some(n) = v["usage"]["completion_tokens"].as_u64() {
+                        p.report_speed(&name, &pick.model, n, started.elapsed().as_secs_f64());
+                    }
+                    p.report_ok(&name);
+                    drop(p);
                     return Ok(Reply { text, call, provider: name, model: pick.model });
                 }
                 Err(_) => {
                     pool.lock().await.report_fail(&name, false);
                     continue;
                 }
+            }
+        }
+    }
+}
+
+impl Llm {
+    /// Ask a vision model about one image. `image` is JPEG/PNG bytes (send small: ~768 px JPEG).
+    pub async fn vision(&self, pool: &tokio::sync::Mutex<ModelPool>, prompt: &str, image: &[u8], mime: &str) -> Result<Reply, LlmError> {
+        use base64::Engine;
+        let data = base64::engine::general_purpose::STANDARD.encode(image);
+        let content = json!([
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": format!("data:{mime};base64,{data}")}}
+        ]);
+        let mut tried: Vec<String> = Vec::new();
+        loop {
+            let pick = { pool.lock().await.pick(Role::Vision, &tried) };
+            let Some(pick) = pick else { return Err(LlmError::AllBusy { retry_in_secs: 60 }) };
+            let name = pick.provider.name.clone();
+            tried.push(name.clone());
+            let url = format!("{}/chat/completions", pick.provider.base_url.trim_end_matches('/'));
+            let body = json!({"model": pick.model, "temperature": 0.1, "max_tokens": 700,
+                "messages": [{"role": "user", "content": content}]});
+            let mut req = self.http.post(&url).json(&body);
+            if let Some(k) = &pick.api_key {
+                req = req.bearer_auth(k);
+            }
+            match req.send().await {
+                Ok(r) if r.status().is_success() => {
+                    let v: Value = r.json().await.unwrap_or(json!({}));
+                    let text = v["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string();
+                    if text.trim().is_empty() {
+                        pool.lock().await.report_fail(&name, false);
+                        continue;
+                    }
+                    pool.lock().await.report_ok(&name);
+                    return Ok(Reply { text, call: None, provider: name, model: pick.model });
+                }
+                Ok(r) => {
+                    let limited = matches!(r.status().as_u16(), 429 | 402);
+                    pool.lock().await.report_fail(&name, limited);
+                }
+                Err(_) => pool.lock().await.report_fail(&name, false),
             }
         }
     }
@@ -261,6 +310,11 @@ fn json_candidates(text: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// The first JSON object in a model's text answer (fenced or bare).
+pub fn extract_json(text: &str) -> Option<Value> {
+    json_candidates(text).into_iter().find_map(|c| parse_json_lenient(&c))
 }
 
 /// Strict parse, then a forgiving pass (trailing commas, single quotes).

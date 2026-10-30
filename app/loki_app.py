@@ -122,6 +122,7 @@ def driver_env() -> dict:
     load_env_file(DATA / ".env", env)       # the old app's keys (NVIDIA_API_KEY ...) keep working
     load_env_file(HOME / ".env", env)
     env["LOKI_HOME"] = str(HOME)
+    env["LOKI_REPO"] = str(REPO)
     env["LOKI_DRIVER_PORT"] = str(PORT)
     extra = [str(Path(sys.executable).parent)]  # `python` for the driver = this machine's LOKI python
     blender = find_blender()
@@ -511,9 +512,64 @@ def boot() -> None:
         show(error=True)
 
 
-WAIT_HTML = """<html><body style="background:#0f1115;color:#e8eaf0;font:15px system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-<div style="text-align:center"><div style="font-weight:700;letter-spacing:.12em;font-size:20px">LOKI</div>
-<p style="color:#9aa3b2">Starting the driver&hellip; the first start builds it on this machine and can take a few minutes.</p></div></body></html>"""
+WAIT_HTML = """<html><body style="background:#141417;color:#e4e4e7;font:15px system-ui;height:100vh;margin:0;display:flex;flex-direction:column">
+<div class="pywebview-drag-region" style="height:44px;display:flex;align-items:center;padding:0 10px 0 16px;gap:6px">
+<b style="letter-spacing:.18em;font-size:13px;color:#8ccfc4">LOKI</b><span style="flex:1"></span>
+<button onclick="window.pywebview&&pywebview.api.minimize()" style="width:40px;height:30px;border:0;background:none;color:#a1a1aa;font-size:16px;cursor:pointer">&#8211;</button>
+<button onclick="window.pywebview&&pywebview.api.close()" style="width:40px;height:30px;border:0;background:none;color:#a1a1aa;font-size:16px;cursor:pointer">&#10005;</button></div>
+<div style="flex:1;display:flex;align-items:center;justify-content:center"><div style="text-align:center">
+<p style="color:#a1a1aa">Starting the driver&hellip; the first start builds it on this machine and can take a few minutes.</p></div></div></body></html>"""
+
+
+class WindowApi:
+    """What the page's own title bar calls (the window has no system frame: one bar, not two)."""
+
+    def __init__(self):
+        self.maxed = False
+
+    def _w(self):
+        return STATE.get("window") or (webview_windows()[0] if webview_windows() else None)
+
+    def minimize(self):
+        w = self._w()
+        if w:
+            w.minimize()
+
+    def toggle_max(self):
+        w = self._w()
+        if not w:
+            return False
+        try:
+            (w.restore if self.maxed else w.maximize)()
+        except AttributeError:          # older pywebview: fullscreen is the closest
+            w.toggle_fullscreen()
+        self.maxed = not self.maxed
+        return self.maxed
+
+    def close(self):
+        w = self._w()
+        if w:
+            w.destroy()                 # LOKI keeps working in the background
+
+    def size(self):
+        w = self._w()
+        return [w.width, w.height] if w else [0, 0]
+
+    def resize(self, width, height):
+        w = self._w()
+        if w:
+            w.resize(max(720, int(width)), max(520, int(height)))
+
+    def platform(self):
+        return sys.platform
+
+
+def webview_windows() -> list:
+    try:
+        import webview  # type: ignore
+        return list(webview.windows)
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def show(error: bool = False) -> None:
@@ -551,7 +607,7 @@ def main(argv: list[str]) -> int:
         if "--background" not in argv and health():
             try:
                 import webview  # type: ignore
-                webview.create_window("LOKI", URL, width=1320, height=880, min_size=(720, 520))
+                webview.create_window("LOKI", URL, width=1320, height=880, min_size=(720, 520), frameless=True, easy_drag=False, js_api=WindowApi())
                 webview.start()
             except Exception:  # noqa: BLE001
                 import webbrowser
@@ -570,7 +626,8 @@ def main(argv: list[str]) -> int:
             webview = None
     if webview is not None:
         STATE["webview"] = True
-        STATE["window"] = webview.create_window("LOKI", html=WAIT_HTML, width=1320, height=880, min_size=(720, 520))
+        STATE["window"] = webview.create_window("LOKI", html=WAIT_HTML, width=1320, height=880, min_size=(720, 520),
+                                                frameless=True, easy_drag=False, js_api=WindowApi())
         webview.start(boot)
         STATE["window"] = None          # window closed: the driver keeps working, this keeps it updated
         log("window closed; LOKI keeps working in the background")

@@ -59,6 +59,17 @@ struct Usage {
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct PoolState {
     usage: HashMap<String, Usage>,
+    /// "provider|model" -> measured generation speed
+    #[serde(default)]
+    speeds: HashMap<String, Speed>,
+}
+
+/// Tokens per second measured on real answers (exponential average), and the wait before the first byte.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Speed {
+    pub tps: f64,
+    pub latency_ms: f64,
+    pub samples: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -188,6 +199,23 @@ impl ModelPool {
             return Some(Pick { provider: p, model, api_key: key });
         }
         None
+    }
+
+    /// Record a real answer's speed: `tokens` generated in `secs` (whole request).
+    pub fn report_speed(&mut self, provider: &str, model: &str, tokens: u64, secs: f64) {
+        if tokens < 8 || secs <= 0.0 {
+            return;
+        }
+        let tps = tokens as f64 / secs;
+        let sp = self.state.speeds.entry(format!("{provider}|{model}")).or_default();
+        let a = if sp.samples == 0 { 1.0 } else { 0.3 };
+        sp.tps = sp.tps * (1.0 - a) + tps * a;
+        sp.latency_ms = sp.latency_ms * (1.0 - a) + secs * 1000.0 * a;
+        sp.samples += 1;
+    }
+
+    pub fn speeds(&self) -> HashMap<String, Speed> {
+        self.state.speeds.clone()
     }
 
     pub fn report_ok(&mut self, name: &str) {

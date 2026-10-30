@@ -71,6 +71,15 @@ fn home() -> PathBuf {
     PathBuf::from(base).join(".loki")
 }
 
+/// The LOKI checkout (playbooks, tools): LOKI_REPO from the launcher, else two levels above the binary's build dir.
+fn repo_dir() -> Option<PathBuf> {
+    if let Ok(r) = std::env::var("LOKI_REPO") {
+        return Some(PathBuf::from(r));
+    }
+    let exe = std::env::current_exe().ok()?;
+    exe.ancestors().find(|a| a.join("playbooks").is_dir() && a.join("crates").is_dir()).map(Path::to_path_buf)
+}
+
 fn load_pool(home: &Path) -> anyhow::Result<ModelPool> {
     std::fs::create_dir_all(home)?;
     let p = home.join("providers.toml");
@@ -140,6 +149,9 @@ struct NewRun {
     prefer: Option<String>,
     #[serde(default)]
     attach: Vec<Value>,
+    /// Override the interview setting for this job ("always" | "big" | "off").
+    #[serde(default)]
+    interview: Option<String>,
 }
 
 async fn create_run(State(app): State<App>, Json(req): Json<NewRun>) -> Result<Json<Value>, (StatusCode, String)> {
@@ -158,7 +170,8 @@ impl App {
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     info.workspace = req.workspace.unwrap_or_else(|| ws_root.join(&info.id));
     info.mode = req.mode.filter(|m| !m.is_empty()).unwrap_or_else(|| "agent".into());
-    info.interview = app.settings()["interview"].as_str().unwrap_or("always").to_string();
+    info.interview = req.interview.clone().filter(|v| matches!(v.as_str(), "always" | "big" | "off"))
+        .unwrap_or_else(|| app.settings()["interview"].as_str().unwrap_or("always").to_string());
     info.prefer = req.prefer.filter(|p| !p.is_empty());
     let _ = std::fs::create_dir_all(&info.workspace);
     let files = app.attach(&info.workspace, &req.attach);
@@ -557,7 +570,7 @@ async fn inbox_loop(app: App) {
                 Ok(v) => {
                     if let Some(goal) = v["goal"].as_str() {
                         let req = NewRun { goal: goal.into(), mode: v["mode"].as_str().map(String::from), prefer: v["prefer"].as_str().map(String::from),
-                            max_hours: v["max_hours"].as_f64(), max_steps: v["max_steps"].as_u64(), workspace: None, attach: vec![] };
+                            max_hours: v["max_hours"].as_f64(), max_steps: v["max_steps"].as_u64(), workspace: None, attach: vec![], interview: v["interview"].as_str().map(String::from) };
                         match app.new_run(req).await {
                             Ok(info) => json!({"ok": true, "run": info["id"]}),
                             Err((_, e)) => json!({"ok": false, "error": e}),
@@ -771,13 +784,33 @@ async fn probe_all(home: &Path) -> anyhow::Result<Vec<ProbeRow>> {
 
 async fn models(State(app): State<App>, Query(q): Query<HashMap<String, String>>) -> Json<Value> {
     let cached = std::fs::read_to_string(app.home.join("probe.json")).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok());
-    if q.contains_key("refresh") || cached.is_none() {
-        return match probe_all(&app.home).await {
-            Ok(rows) => Json(json!(rows)),
-            Err(e) => Json(json!({"error": e.to_string()})),
-        };
+    let mut rows = if q.contains_key("refresh") || cached.is_none() {
+        match probe_all(&app.home).await {
+            Ok(rows) => json!(rows),
+            Err(e) => return Json(json!({"error": e.to_string()})),
+        }
+    } else {
+        cached.unwrap_or(json!([]))
+    };
+    // real speed measured on this machine's jobs (tokens/s), when known
+    let speeds = app.driver.pool.lock().await.speeds();
+    if let Some(a) = rows.as_array_mut() {
+        for r in a.iter_mut() {
+            let key = format!("{}|{}", r["provider"].as_str().unwrap_or(""), r["model"].as_str().unwrap_or(""));
+            if let Some(sp) = speeds.get(&key) {
+                r["tps"] = json!((sp.tps * 10.0).round() / 10.0);
+                r["latency_ms"] = json!(sp.latency_ms.round());
+                r["samples"] = json!(sp.samples);
+            }
+        }
     }
-    Json(cached.unwrap_or(json!([])))
+    Json(rows)
+}
+
+async fn knowledge(State(app): State<App>) -> Json<Value> {
+    let k = &app.driver.knowledge;
+    Json(json!({"playbooks": k.playbooks.iter().map(|p| json!({"name": p.name, "description": p.description})).collect::<Vec<_>>(),
+        "lessons": k.lessons()}))
 }
 
 /// "Update everything": the launcher watches for this file and does the update.
@@ -826,7 +859,10 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
     let mut pool = load_pool(&home)?;
     fit_local_models(&mut pool).await;
     let pool = Arc::new(Mutex::new(pool));
-    let app = App { home: home.clone(), driver: Arc::new(Driver::new(pool)), live: Arc::new(Mutex::new(HashMap::new())), pulls: Arc::new(Mutex::new(HashMap::new())) };
+    let mut driver = Driver::new(pool);
+    driver.knowledge = loki_core::knowledge::Knowledge::load(repo_dir().map(|r| r.join("playbooks")).as_deref(), Some(&home.join("lessons.md")));
+    tracing::info!("playbooks: {}, lessons: {}", driver.knowledge.playbooks.len(), driver.knowledge.lessons().len());
+    let app = App { home: home.clone(), driver: Arc::new(driver), live: Arc::new(Mutex::new(HashMap::new())), pulls: Arc::new(Mutex::new(HashMap::new())) };
     let router = Router::new()
         .route("/", get(|| async { Html(UI) }))
         .route("/health", get(|| async { Json(json!({"ok": true, "service": "lokid", "version": env!("CARGO_PKG_VERSION")})) }))
@@ -850,6 +886,7 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
         .route("/local-models/pulls", get(pulls))
         .route("/settings", get(get_settings).put(put_settings))
         .route("/system", get(system))
+        .route("/knowledge", get(knowledge))
         .with_state(app.clone());
     tokio::spawn(inbox_loop(app.clone()));
     let port: u16 = std::env::var("LOKI_DRIVER_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7717);

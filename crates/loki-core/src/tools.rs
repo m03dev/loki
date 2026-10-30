@@ -43,7 +43,7 @@ pub fn schemas() -> Value {
             "parameters":{"type":"object","properties":props,"required":req}}})
     }
     json!([
-        f("plan", "Write the task checklist for the goal. Each task needs a concrete check: 'file:<path>' (must exist, non-empty) or 'cmd:<command>' (must exit 0) or a short description.",
+        f("plan", "Write the task checklist for the goal. Each task needs a concrete check: 'file:<path>' (must exist, non-empty), 'blend:<scene.blend>' (LOKI's inspector finds no errors), 'look:<image>' (a vision model scores it against the brief), or 'cmd:<command>' (must exit 0).",
           json!({"tasks":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"check":{"type":"string"}},"required":["title","check"]}}}), &["tasks"]),
         f("list_dir", "List files in a workspace folder.", json!({"path":{"type":"string"}}), &[]),
         f("read_file", "Read a text file from the workspace.", json!({"path":{"type":"string"}}), &["path"]),
@@ -65,6 +65,12 @@ pub fn schemas() -> Value {
               "header":{"type":"string"},"question":{"type":"string"},"multi":{"type":"boolean"},
               "options":{"type":"array","items":{"type":"object","properties":{"label":{"type":"string"},"description":{"type":"string"}},"required":["label"]}}},
               "required":["header","question","options"]}}}), &["questions"]),
+        f("inspect_scene", "Open a saved .blend with LOKI's inspector and get real facts: meshes, triangles, materials, and errors such as floating parts, parts outside the camera view, no camera. Use it after every Blender build.",
+          json!({"path":{"type":"string"}}), &["path"]),
+        f("look", "Have a vision model compare an image (a render) with the brief. Returns a score 1-10 and the visible problems.",
+          json!({"path":{"type":"string"},"brief":{"type":"string"}}), &["path"]),
+        f("learn", "Save a one-line rule to LOKI's lessons notebook after you fixed a real error (e.g. an API change), so no future job repeats it.",
+          json!({"lesson":{"type":"string"}}), &["lesson"]),
         f("finish", "End the job with a short summary for the owner. Allowed when no task is still todo, or for a question that needed no work.",
           json!({"summary":{"type":"string"},"files":{"type":"array","items":{"type":"string"}}}), &["summary"])
     ])

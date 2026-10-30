@@ -21,6 +21,8 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 regex = "1"
 sysinfo = "0.33"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [profile.release]
 lto = "thin"

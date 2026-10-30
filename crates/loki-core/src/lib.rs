@@ -8,6 +8,7 @@
 
 pub mod agent;
 pub mod journal;
+pub mod knowledge;
 pub mod llm;
 pub mod pool;
 pub mod risk;

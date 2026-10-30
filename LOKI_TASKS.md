@@ -29,6 +29,14 @@ notification, simple approvals, interview, abliterated models, system scan, them
   (hardware, tools, advice) with model picks that fit this machine - standard, abliterated, fast - and one-click
   download / remove (catalog from the previous LOKI's model_setup.py).
 
+Done 2026-10-30 (owner: "have you given it real errors to check from, not just things it makes up?"):
+
+- [x] Real checks: `blend:` (LOKI's scene inspector, tools/blender/inspect_scene.py - floating parts, nothing in frame,
+  no camera, missing materials) and `look:` (a free vision model scores the render against the brief).
+- [x] Playbooks read per job (playbooks/, new blender-scripting written from real failures) and a lessons notebook
+  (<home>/lessons.md, `learn` tool) so a fixed error becomes a rule for every later job.
+- [x] One title bar (frameless window, own minimise / maximise / close, resize edges); a real cog; measured tok/s.
+
 Next, in order (owner's direction 2026-10-29: art, production, creation; long runs; free models;
 owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local
 models; drive real Maya/Blender rather than rebuilding Forge; then ads & social and the phone app):
