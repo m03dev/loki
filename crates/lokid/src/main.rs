@@ -756,6 +756,7 @@ struct ProbeRow {
 async fn probe_all(home: &Path) -> anyhow::Result<Vec<ProbeRow>> {
     let mut pool = load_pool(home)?;
     fit_local_models(&mut pool).await;
+    discover_vision(&mut pool, home).await;
     let http = reqwest::Client::builder().timeout(std::time::Duration::from_secs(40)).build()?;
     let mut jobs = Vec::new();
     for p in pool.providers().iter().cloned() {
@@ -858,6 +859,66 @@ async fn status(State(app): State<App>) -> Json<Value> {
     }))
 }
 
+/// Vision model families, best first (matched against the ids a provider really serves).
+const VISION_FAMILIES: &[&str] = &["qwen3-vl", "qwen3.5-vl", "qwen2.5-vl", "llama-4-maverick", "llama-4-scout", "gemma-4", "gemma-3-27b",
+    "pixtral", "nemotron-nano-vl", "nemotron-nano-12b-v2-vl", "phi-4-multimodal", "llama-3.2-90b-vision", "llama-3.2-11b-vision", "-vl", "vision"];
+
+/// Model ids drift: ask each online provider which models it serves (GET /models), and give the pool
+/// working vision models from that list (up to 2 per endpoint) when the configured one is gone.
+async fn discover_vision(pool: &mut ModelPool, home: &Path) {
+    use loki_core::pool::{Provider, Role};
+    let http = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build() { Ok(c) => c, Err(_) => return };
+    let mut seen: HashMap<String, Vec<String>> = HashMap::new();
+    let base: Vec<Provider> = pool.providers().iter().filter(|p| !p.local).cloned().collect();
+    for p in &base {
+        let key = if p.key_env.is_empty() { None } else { match std::env::var(&p.key_env) { Ok(k) if !k.trim().is_empty() => Some(k), _ => continue } };
+        if seen.contains_key(&p.base_url) { continue; }
+        let mut req = http.get(format!("{}/models", p.base_url.trim_end_matches('/')));
+        if let Some(k) = &key { req = req.bearer_auth(k); }
+        let ids: Vec<String> = match req.send().await {
+            Ok(r) if r.status().is_success() => r.json::<Value>().await.ok().and_then(|v| v["data"].as_array().map(|a| a.iter().filter_map(|m| m["id"].as_str().map(String::from)).collect())).unwrap_or_default(),
+            _ => vec![],
+        };
+        seen.insert(p.base_url.clone(), ids);
+    }
+    let _ = std::fs::write(home.join("models_available.json"), serde_json::to_string_pretty(&seen).unwrap_or_default());
+    for (url, ids) in &seen {
+        if ids.is_empty() { continue; }
+        let lower: Vec<(String, String)> = ids.iter().map(|i| (i.to_ascii_lowercase(), i.clone())).collect();
+        let mut picks: Vec<String> = Vec::new();
+        for fam in VISION_FAMILIES {
+            for (l, id) in &lower {
+                if l.contains(fam) && !l.contains("embed") && !l.contains("guard") && !picks.contains(id) {
+                    picks.push(id.clone());
+                }
+            }
+            if picks.len() >= 2 { break; }
+        }
+        picks.truncate(2);
+        let Some(tpl) = base.iter().find(|p| &p.base_url == url).cloned() else { continue };
+        let configured: Vec<String> = pool.providers().iter().filter(|p| &p.base_url == url).filter_map(|p| p.models.get(&Role::Vision).cloned()).collect();
+        // drop configured vision models this endpoint no longer serves
+        for p in pool.providers_mut().iter_mut().filter(|p| &p.base_url == url) {
+            if let Some(m) = p.models.get(&Role::Vision).cloned() {
+                if !ids.contains(&m) {
+                    tracing::info!("vision model {m} is gone from {}", p.name);
+                    p.models.remove(&Role::Vision);
+                }
+            }
+        }
+        for (i, id) in picks.into_iter().enumerate() {
+            if configured.contains(&id) && ids.contains(&id) { continue; }
+            let mut np = tpl.clone();
+            np.name = format!("{}-vision{}", tpl.name, i + 1);
+            np.models = HashMap::from([(Role::Vision, id.clone())]);
+            np.priority = tpl.priority + 1 + i as i32;
+            tracing::info!("vision model found: {} ({})", id, np.name);
+            pool.providers_mut().retain(|p| p.name != np.name);
+            pool.providers_mut().push(np);
+        }
+    }
+}
+
 /// Ask the local Ollama which models it has, so the offline fallback uses a real one.
 async fn fit_local_models(pool: &mut ModelPool) {
     let url = std::env::var("OLLAMA_HOST").map(|h| format!("{}/api/tags", h.trim_end_matches('/'))).unwrap_or_else(|_| "http://127.0.0.1:11434/api/tags".into());
@@ -878,6 +939,7 @@ async fn fit_local_models(pool: &mut ModelPool) {
 async fn serve(home: PathBuf) -> anyhow::Result<()> {
     let mut pool = load_pool(&home)?;
     fit_local_models(&mut pool).await;
+    discover_vision(&mut pool, &home).await;
     let pool = Arc::new(Mutex::new(pool));
     let mut driver = Driver::new(pool);
     driver.knowledge = loki_core::knowledge::Knowledge::load(repo_dir().map(|r| r.join("playbooks")).as_deref(), Some(&home.join("lessons.md")));

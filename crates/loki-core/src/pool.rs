@@ -112,6 +112,10 @@ impl ModelPool {
         Self { providers, state, state_path: Some(state_path.to_path_buf()) }
     }
 
+    pub fn providers_mut(&mut self) -> &mut Vec<Provider> {
+        &mut self.providers
+    }
+
     pub fn providers(&self) -> &[Provider] {
         &self.providers
     }

@@ -103,7 +103,25 @@ for o in meshes:
     near = [n for n, b in boxes.items() if n != o.name and touching((lo, hi), b)]
     if not on_floor and not near and not any(w in o.name.lower() for w in emissive_words):
         gap = lo.z - floor_z
-        problem("error", f"{o.name} is floating: it touches nothing (bottom is {gap:.2f} m above the floor)", o.name)
+        # the nearest other part, and how far / which way to move to touch it
+        best = None
+        for n, (blo, bhi) in boxes.items():
+            if n == o.name or (ground and n == ground.name):
+                continue
+            d = [max(blo[i] - hi[i], lo[i] - bhi[i], 0.0) for i in range(3)]
+            dist = (d[0] ** 2 + d[1] ** 2 + d[2] ** 2) ** 0.5
+            if best is None or dist < best[1]:
+                best = (n, dist, d, (blo, bhi))
+        hint = ""
+        if best:
+            n, dist, d, (blo, bhi) = best
+            axis = max(range(3), key=lambda i: d[i])
+            where = {0: "x", 1: "y", 2: "z"}[axis]
+            if axis == 2:
+                hint = f"; nearest part {n} is {dist:.2f} m away - move it {'down' if lo.z > bhi.z else 'up'} {d[2]:.2f} m so it sits on {n} (top at z={bhi.z:.2f})"
+            else:
+                hint = f"; nearest part {n} is {dist:.2f} m away along {where}"
+        problem("error", f"{o.name} is floating: it touches nothing (bottom {gap:.2f} m above the floor{hint})", o.name)
 
 cam = sc.camera
 if not cam:
