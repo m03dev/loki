@@ -363,7 +363,7 @@ def lights(power=1.0, warm="#ffd2a1", cool="#a8c4ff"):
         lo_.location = centre + Vector(d) * r
         lo_.rotation_euler = (centre - lo_.location).to_track_quat("-Z", "Y").to_euler()
         out.append(lo_)
-    world("#1a1c22", 0.6)
+    world("#3a3f4a", 1.0)    # a soft studio grey: metals need something to reflect, or gold reads black
     return out
 
 
@@ -410,9 +410,14 @@ def render(name_or_path, size=(1024, 1024), engine=None, samples=64):
             sc.cycles.device = "GPU"
         except Exception:
             pass
-    for attr, val in (("taa_render_samples", samples),):
+    # Eevee: metals (gold, iron) render black without ray-traced reflections; turn them on where they exist
+    for attr, val in (("taa_render_samples", samples), ("use_raytracing", True), ("use_shadows", True),
+                      ("use_gtao", True), ("use_ssr", True), ("use_ssr_refraction", False)):
         if hasattr(sc.eevee, attr):
-            setattr(sc.eevee, attr, val)
+            try:
+                setattr(sc.eevee, attr, val)
+            except Exception:
+                pass
     try:
         sc.view_settings.view_transform = "AgX"
     except TypeError:
