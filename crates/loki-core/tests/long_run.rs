@@ -110,3 +110,78 @@ fn local_models_follow_what_the_machine_has() {
     let changes = pool.fit_local("ollama", &have, Some("llama3:8b"));
     assert!(pool.providers()[0].models.values().all(|m| m == "llama3:8b"), "{changes:?}");
 }
+
+#[tokio::test]
+async fn chat_steering_edited_image_prompt_and_finish() {
+    let script: VecDeque<Value> = VecDeque::from(vec![
+        call("plan", json!({"tasks":[{"title":"Concept prompt","check":"self-check"}]})),
+        call("image_prompt", json!({"prompt":"a dragon","purpose":"concept art"})),          // pauses for the owner
+        call("mark_done", json!({"task_id":1,"evidence":"prompt approved"})),
+        call("add_task", json!({"title":"Shot list","check":"file:shots.md"})),              // after OWNER SAYS
+        call("write_file", json!({"path":"shots.md","content":"1. wide"})),
+        call("tell_owner", json!({"text":"Shot list ready","files":["shots.md","missing.png"]})),
+        call("mark_done", json!({"task_id":2,"evidence":"written"})),
+    ]);
+    let seen: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vec![]));
+    let st = (Arc::new(Mutex::new(script)), seen.clone());
+    let url = serve(Router::new().route("/v1/chat/completions", post(
+        |State((s, seen)): State<(Arc<Mutex<VecDeque<Value>>>, Arc<Mutex<Vec<String>>>)>, Json(b): Json<Value>| async move {
+            seen.lock().await.push(b["messages"].to_string());
+            Json(s.lock().await.pop_front().unwrap_or_else(|| text("nothing left")))
+        })).with_state(st)).await;
+    let driver = Driver::new(Arc::new(Mutex::new(ModelPool::new(vec![provider("good", &url, 1)]))));
+    let root = std::env::temp_dir().join(format!("lokichat-{}", std::process::id()));
+    let (j, _) = Journal::create(&root.join("runs"), "Make dragon concept art", &root.join("ws"), 50, 1.0).unwrap();
+
+    let info = driver.run(&j, Arc::new(AtomicBool::new(false))).await.unwrap();
+    assert_eq!(info.status, Status::Waiting);
+    assert_eq!(info.pending.as_ref().unwrap()["name"], "image_prompt");
+
+    // owner edits the prompt and also sends a chat message asking for more work
+    let mut info = j.info().unwrap();
+    info.owner_reply = Some(OwnerReply { approve: true, note: "a small red baby dragon guarding gold, painterly".into() });
+    j.save_info(&info).unwrap();
+    j.say("owner", "also write a shot list", vec![]);
+    let info = driver.run(&Journal::open(&j.dir), Arc::new(AtomicBool::new(false))).await.unwrap();
+    assert_eq!(info.status, Status::Done, "{}", j.progress_tail(40));
+    let prompts = seen.lock().await.join("\n");
+    assert!(prompts.contains("APPROVED PROMPT (use exactly): a small red baby dragon guarding gold, painterly"), "edited prompt reached the model");
+    assert!(prompts.contains("OWNER SAYS"), "owner message steered the job");
+    let chat = j.chat();
+    let tell = chat.iter().find(|c| c.text == "Shot list ready").unwrap_or_else(|| panic!("{:#?}\n{}", chat, j.progress_tail(40)));
+    assert_eq!(tell.files, vec!["shots.md".to_string()], "only files that exist are attached");
+    assert_eq!(chat.last().unwrap().from, "loki", "the job closes with a message");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn a_plain_question_finishes_without_a_plan() {
+    let script = Arc::new(Mutex::new(VecDeque::from(vec![
+        call("finish", json!({"summary":"I can model, render and approve-gate images."})),
+    ])));
+    let url = serve(Router::new().route("/v1/chat/completions", post(
+        |State(s): State<Arc<Mutex<VecDeque<Value>>>>, Json(_b): Json<Value>| async move {
+            Json(s.lock().await.pop_front().unwrap_or_else(|| text("nothing left")))
+        })).with_state(script)).await;
+    let driver = Driver::new(Arc::new(Mutex::new(ModelPool::new(vec![provider("good", &url, 1)]))));
+    let root = std::env::temp_dir().join(format!("lokiq-{}", std::process::id()));
+    let (j, _) = Journal::create(&root.join("runs"), "What can you do?", &root.join("ws"), 10, 1.0).unwrap();
+    let info = driver.run(&j, Arc::new(AtomicBool::new(false))).await.unwrap();
+    assert_eq!(info.status, Status::Done);
+    assert_eq!(info.steps, 1);
+    assert!(j.chat().last().unwrap().text.contains("I can model"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn a_model_that_never_progresses_pauses_and_asks() {
+    let url = serve(Router::new().route("/v1/chat/completions", post(|| async { Json(call("note", json!({"text":"thinking"}))) }))).await;
+    let driver = Driver::new(Arc::new(Mutex::new(ModelPool::new(vec![provider("good", &url, 1)]))));
+    let root = std::env::temp_dir().join(format!("lokistuck-{}", std::process::id()));
+    let (j, _) = Journal::create(&root.join("runs"), "Do something", &root.join("ws"), 500, 1.0).unwrap();
+    let info = driver.run(&j, Arc::new(AtomicBool::new(false))).await.unwrap();
+    assert_eq!(info.status, Status::Waiting);
+    assert!(info.steps <= 16, "stopped early, not after {} steps", info.steps);
+    assert!(info.waiting_for.unwrap().contains("stuck"));
+    let _ = std::fs::remove_dir_all(root);
+}

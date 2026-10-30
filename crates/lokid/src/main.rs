@@ -106,15 +106,27 @@ impl App {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct NewRun {
     goal: String,
     workspace: Option<PathBuf>,
     max_steps: Option<u64>,
     max_hours: Option<f64>,
+    #[serde(default)]
+    mode: Option<String>,
+    #[serde(default)]
+    prefer: Option<String>,
+    #[serde(default)]
+    attach: Vec<Value>,
 }
 
 async fn create_run(State(app): State<App>, Json(req): Json<NewRun>) -> Result<Json<Value>, (StatusCode, String)> {
+    app.new_run(req).await.map(Json)
+}
+
+impl App {
+    async fn new_run(&self, req: NewRun) -> Result<Value, (StatusCode, String)> {
+    let app = self;
     if req.goal.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "goal is empty".into()));
     }
@@ -123,10 +135,251 @@ async fn create_run(State(app): State<App>, Json(req): Json<NewRun>) -> Result<J
     let (j, mut info) = Journal::create(&app.runs_dir(), &req.goal, &ws_root, req.max_steps.unwrap_or(2000), req.max_hours.unwrap_or(12.0))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     info.workspace = req.workspace.unwrap_or_else(|| ws_root.join(&info.id));
+    info.mode = req.mode.filter(|m| !m.is_empty()).unwrap_or_else(|| "agent".into());
+    info.prefer = req.prefer.filter(|p| !p.is_empty());
     let _ = std::fs::create_dir_all(&info.workspace);
+    let files = app.attach(&info.workspace, &req.attach);
+    if !files.is_empty() {
+        // the goal message carries the attachments so the model and the chat both see them
+        let _ = std::fs::remove_file(j.dir.join("chat.jsonl"));
+        let goal = format!("{}\n\nAttached references: {}", req.goal.trim(), files.join(", "));
+        info.goal = goal.clone();
+        j.say("owner", &goal, files);
+    }
     j.save_info(&info).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     app.spawn(info.id.clone()).await;
-    Ok(Json(json!(info)))
+    Ok(json!(info))
+    }
+
+    /// Copy attachments into the job's `refs/` folder: `{"upload": "<id>/<name>"}` from a drop,
+    /// or `{"run": "<id>", "path": "..."}` for an image dragged from the library.
+    fn attach(&self, ws: &Path, list: &[Value]) -> Vec<String> {
+        let mut out = Vec::new();
+        let refs = ws.join("refs");
+        for a in list {
+            let src = if let Some(u) = a["upload"].as_str() {
+                confine(&self.home.join("uploads"), u).ok()
+            } else if let (Some(run), Some(p)) = (a["run"].as_str(), a["path"].as_str()) {
+                Journal::open(&self.runs_dir().join(safe_name(run))).info().ok().and_then(|i| confine(&i.workspace, p).ok())
+            } else {
+                None
+            };
+            let Some(src) = src.filter(|s| s.is_file()) else { continue };
+            let name = safe_name(&src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
+            let mut dest = refs.join(&name);
+            let mut n = 1;
+            while dest.exists() && std::fs::metadata(&dest).map(|m| m.len()).ok() != std::fs::metadata(&src).map(|m| m.len()).ok() {
+                n += 1;
+                dest = refs.join(format!("{n}-{name}"));
+            }
+            if std::fs::create_dir_all(&refs).is_ok() && (dest.exists() || std::fs::copy(&src, &dest).is_ok()) {
+                out.push(format!("refs/{}", dest.file_name().unwrap().to_string_lossy()));
+            }
+        }
+        out
+    }
+
+    async fn say(&self, id: &str, text: &str) -> StatusCode {
+        self.say_with(id, text, vec![]).await
+    }
+
+    /// An owner chat message: steer a working job, answer a question, or reopen a finished one.
+    async fn say_with(&self, id: &str, text: &str, files: Vec<String>) -> StatusCode {
+        let j = Journal::open(&self.runs_dir().join(id));
+        let Ok(mut info) = j.info() else { return StatusCode::NOT_FOUND };
+        let mut text = text.trim().to_string();
+        if !files.is_empty() {
+            text = format!("{text}\n\nAttached references: {}", files.join(", ")).trim().to_string();
+        }
+        if text.is_empty() {
+            return StatusCode::BAD_REQUEST;
+        }
+        let text = text.as_str();
+        j.say("owner", text, files);
+        if info.status == Status::Waiting {
+            let is_question = info.pending.as_ref().and_then(|p| p["name"].as_str()) == Some("ask_owner");
+            if is_question || info.pending.is_none() {
+                // typing in the chat answers the question; the message is also counted as read
+                info.owner_seen += 1;
+                info.owner_reply = Some(OwnerReply { approve: true, note: text.into() });
+                let _ = j.save_info(&info);
+                self.spawn(id.to_string()).await;
+            }
+            return StatusCode::OK; // an approval card still waits for its own button
+        }
+        if !self.live.lock().await.contains_key(id) {
+            info.status = Status::Running;
+            let _ = j.save_info(&info);
+            self.spawn(id.to_string()).await;
+        }
+        StatusCode::OK
+    }
+}
+
+#[derive(Deserialize)]
+struct SayReq {
+    text: String,
+    #[serde(default)]
+    attach: Vec<Value>,
+}
+
+async fn say_run(State(app): State<App>, AxPath(id): AxPath<String>, Json(r): Json<SayReq>) -> StatusCode {
+    let j = Journal::open(&app.runs_dir().join(&id));
+    let Ok(info) = j.info() else { return StatusCode::NOT_FOUND };
+    let files = app.attach(&info.workspace, &r.attach);
+    app.say_with(&id, &r.text, files).await
+}
+
+/// Raw file upload (drag and drop from the computer): POST /upload?name=<file name>, body = the bytes.
+async fn upload(State(app): State<App>, Query(q): Query<HashMap<String, String>>, body: axum::body::Bytes) -> Result<Json<Value>, StatusCode> {
+    let name = q.get("name").map(|n| safe_name(n)).filter(|n| !n.is_empty()).unwrap_or_else(|| "file".into());
+    let id = format!("{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0));
+    let dir = app.home.join("uploads").join(&id);
+    std::fs::create_dir_all(&dir).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    std::fs::write(dir.join(&name), &body).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({"upload": format!("{id}/{name}"), "name": name, "bytes": body.len()})))
+}
+
+fn safe_name(n: &str) -> String {
+    let base = n.rsplit(['/', '\\']).next().unwrap_or(n);
+    base.chars().map(|c| if c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' ') { c } else { '_' }).collect::<String>().trim().trim_start_matches('.').to_string()
+}
+
+/// The chat timeline: messages and tool cards in time order.
+async fn chat_run(State(app): State<App>, AxPath(id): AxPath<String>) -> Result<Json<Value>, StatusCode> {
+    let j = Journal::open(&app.runs_dir().join(&id));
+    let info = j.info().map_err(|_| StatusCode::NOT_FOUND)?;
+    let mut items: Vec<Value> = j.chat().into_iter().map(|c| json!({"kind": "msg", "t": c.t, "from": c.from, "text": c.text, "files": c.files})).collect();
+    for s in j.steps() {
+        let Some(tool) = s["tool"].as_str() else { continue };
+        if matches!(tool, "tell_owner" | "finish") {
+            continue; // shown as messages
+        }
+        let result = s["result"].as_str().unwrap_or("");
+        let ok = !result.starts_with("ERROR") && !result.contains("check failed");
+        items.push(json!({"kind": "tool", "t": s["t"], "step": s["step"], "tool": tool, "args": s["args"],
+            "result": result, "ok": ok, "model": s["model"], "provider": s["provider"], "owner": s["owner"]}));
+    }
+    items.sort_by(|a, b| a["t"].as_str().unwrap_or("").cmp(b["t"].as_str().unwrap_or("")));
+    let active = app.live.lock().await.contains_key(&id);
+    Ok(Json(json!({"run": info, "active": active, "tasks": j.tasks(), "items": items})))
+}
+
+#[derive(Deserialize)]
+struct Page {
+    page: Option<usize>,
+    per: Option<usize>,
+}
+
+/// Every image every job made, newest first, in pages.
+async fn library(State(app): State<App>, Query(q): Query<Page>) -> Json<Value> {
+    let per = q.per.unwrap_or(48).clamp(1, 200);
+    let page = q.page.unwrap_or(0);
+    let mut all: Vec<Value> = Vec::new();
+    for info in Journal::list(&app.runs_dir()) {
+        for f in list_files(&info.workspace, 2000) {
+            let lower = f.path.to_ascii_lowercase();
+            if [".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|e| lower.ends_with(e)) {
+                all.push(json!({"run": info.id, "title": info.title, "path": f.path, "bytes": f.bytes, "modified": f.modified}));
+            }
+        }
+    }
+    all.sort_by(|a, b| b["modified"].as_u64().cmp(&a["modified"].as_u64()));
+    let total = all.len();
+    let items: Vec<Value> = all.into_iter().skip(page * per).take(per).collect();
+    Json(json!({"total": total, "page": page, "per": per, "items": items}))
+}
+
+/// The owner's panel layout for this machine (pywebview does not keep browser storage).
+async fn get_layout(State(app): State<App>) -> Json<Value> {
+    Json(std::fs::read_to_string(app.home.join("ui_layout.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(json!(null)))
+}
+
+async fn put_layout(State(app): State<App>, Json(v): Json<Value>) -> StatusCode {
+    match serde_json::to_vec_pretty(&v).map(|b| loki_core::journal::atomic_write(&app.home.join("ui_layout.json"), &b)) {
+        Ok(Ok(())) => StatusCode::OK,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+fn ollama_base() -> String {
+    let h = std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://127.0.0.1:11434".into());
+    let h = if h.starts_with("http") { h } else { format!("http://{h}") };
+    h.trim_end_matches('/').to_string()
+}
+
+/// Local models on this machine (Ollama), with sizes.
+async fn local_models() -> Json<Value> {
+    let c = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().unwrap();
+    match c.get(format!("{}/api/tags", ollama_base())).send().await {
+        Ok(r) => Json(r.json::<Value>().await.unwrap_or(json!({"models": []}))),
+        Err(_) => Json(json!({"models": [], "error": "Ollama is not running on this machine"})),
+    }
+}
+
+#[derive(Deserialize)]
+struct ModelName {
+    name: String,
+}
+
+async fn remove_local_model(Json(m): Json<ModelName>) -> StatusCode {
+    let c = reqwest::Client::builder().timeout(std::time::Duration::from_secs(60)).build().unwrap();
+    match c.delete(format!("{}/api/delete", ollama_base())).json(&json!({"model": m.name, "name": m.name})).send().await {
+        Ok(r) if r.status().is_success() => StatusCode::OK,
+        Ok(r) => StatusCode::from_u16(r.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+        Err(_) => StatusCode::BAD_GATEWAY,
+    }
+}
+
+/// Jobs and messages dropped into <home>/inbox as JSON files (the other machine, a script, a phone):
+///   {"goal": "...", "mode": "hard"}            start a job
+///   {"run": "<id>", "say": "..."}              chat message
+///   {"run": "<id>", "reply": {"approve": true, "note": "..."}}
+///   {"run": "<id>", "stop": true}
+/// Each file moves to inbox/done/ with a .result.json next to it.
+async fn inbox_loop(app: App) {
+    let dir = app.home.join("inbox");
+    let done = dir.join("done");
+    let _ = std::fs::create_dir_all(&done);
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        let mut files: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+        files.sort();
+        for f in files {
+            let name = f.file_name().unwrap().to_string_lossy().to_string();
+            let Ok(text) = std::fs::read_to_string(&f) else { continue };
+            let result: Value = match serde_json::from_str::<Value>(&text) {
+                Err(e) => json!({"ok": false, "error": format!("not JSON: {e}")}),
+                Ok(v) => {
+                    if let Some(goal) = v["goal"].as_str() {
+                        let req = NewRun { goal: goal.into(), mode: v["mode"].as_str().map(String::from), prefer: v["prefer"].as_str().map(String::from),
+                            max_hours: v["max_hours"].as_f64(), max_steps: v["max_steps"].as_u64(), workspace: None, attach: vec![] };
+                        match app.new_run(req).await {
+                            Ok(info) => json!({"ok": true, "run": info["id"]}),
+                            Err((_, e)) => json!({"ok": false, "error": e}),
+                        }
+                    } else if let Some(id) = v["run"].as_str() {
+                        if let Some(t) = v["say"].as_str() {
+                            json!({"ok": app.say(id, t).await.is_success()})
+                        } else if v.get("reply").is_some() {
+                            let r: OwnerReply = serde_json::from_value(v["reply"].clone()).unwrap_or(OwnerReply { approve: false, note: String::new() });
+                            json!({"ok": reply_run(State(app.clone()), AxPath(id.to_string()), Json(r)).await.is_success()})
+                        } else if v["stop"].as_bool() == Some(true) {
+                            json!({"ok": stop_run(State(app.clone()), AxPath(id.to_string())).await.is_success()})
+                        } else {
+                            json!({"ok": false, "error": "nothing to do"})
+                        }
+                    } else {
+                        json!({"ok": false, "error": "need 'goal' or 'run'"})
+                    }
+                }
+            };
+            tracing::info!("inbox {name}: {result}");
+            let _ = std::fs::rename(&f, done.join(&name));
+            let _ = std::fs::write(done.join(format!("{name}.result.json")), result.to_string());
+        }
+    }
 }
 
 async fn list_runs(State(app): State<App>) -> Json<Value> {
@@ -343,6 +596,8 @@ async fn status(State(app): State<App>) -> Json<Value> {
         "version": env!("CARGO_PKG_VERSION"),
         "home": app.home,
         "active_runs": app.live.lock().await.len(),
+        "machine": std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default(),
+        "os": std::env::consts::OS,
         "launcher": launcher,
     }))
 }
@@ -381,7 +636,15 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
         .route("/runs/:id/stop", post(stop_run))
         .route("/runs/:id/resume", post(resume_run))
         .route("/runs/:id/reply", post(reply_run))
+        .route("/runs/:id/say", post(say_run))
+        .route("/runs/:id/chat", get(chat_run))
+        .route("/library", get(library))
+        .route("/upload", post(upload).layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024)))
+        .route("/layout", get(get_layout).put(put_layout))
+        .route("/local-models", get(local_models))
+        .route("/local-models/remove", post(remove_local_model))
         .with_state(app.clone());
+    tokio::spawn(inbox_loop(app.clone()));
     let port: u16 = std::env::var("LOKI_DRIVER_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(7717);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
     tracing::info!("lokid {} on http://127.0.0.1:{port}, home {}", env!("CARGO_PKG_VERSION"), home.display());

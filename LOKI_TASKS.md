@@ -7,7 +7,18 @@ Each machine's launcher does its own setup on first start (no one needs to do th
 - [x] **Both machines:** stop the previous LOKI's engine, start `lokid`, check every free model (`harness_data/home/probe.json`).
 - [x] **PC:** first-light job - a Blender campfire built and rendered from scratch (`renders/campfire.png`, `scenes/campfire.blend`).
 
-Next, in order (owner's direction 2026-10-29: art, production, creation; long runs; free models):
+Done 2026-10-29 (owner: "clean look like Ziva", "modular like ZBrush", "drag and drop"):
+
+- [x] Window rebuilt: Ziva-style chat (tool cards, inline images, Agent/Hard modes, model picker, context meter) in the
+  glass look; every panel docks left/right/bottom by dragging, resizes, folds, closes, comes back with Space; layout
+  saved per machine. Drop or paste files into the chat; drag Library images in as references.
+- [x] Chat steers running jobs; For you prompt approval with editing; Library (paged); local models list/remove;
+  `<home>/inbox` takes jobs and messages as JSON files.
+- [x] Driver pauses and asks when a model makes no progress for 16 turns.
+
+Next, in order (owner's direction 2026-10-29: art, production, creation; long runs; free models;
+owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local
+models; drive real Maya/Blender rather than rebuilding Forge; then ads & social and the phone app):
 
 1. MCP client in the driver, then a Blender MCP server from `tools/blender/loki_blender_core.py`.
 2. ComfyUI server on the PC (`tools/comfy/graphs/`): images, TRELLIS.2 / Pixal3D, Hunyuan3D-2.1, Wan video.

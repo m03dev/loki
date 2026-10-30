@@ -55,7 +55,13 @@ pub fn schemas() -> Value {
         f("block_task", "Give up on a task for now with the reason; the run moves on.", json!({"task_id":{"type":"integer"},"reason":{"type":"string"}}), &["task_id","reason"]),
         f("add_task", "Add a task you discovered is needed.", json!({"title":{"type":"string"},"check":{"type":"string"}}), &["title","check"]),
         f("note", "Write one line to the progress log (what you learned or decided).", json!({"text":{"type":"string"}}), &["text"]),
-        f("ask_owner", "Pause and ask the owner a question with 2-4 options.", json!({"question":{"type":"string"},"options":{"type":"array","items":{"type":"string"}}}), &["question"])
+        f("ask_owner", "Pause and ask the owner a question with 2-4 options.", json!({"question":{"type":"string"},"options":{"type":"array","items":{"type":"string"}}}), &["question"]),
+        f("tell_owner", "Send the owner a short chat message (progress worth knowing, a result, an answer). Attach result files to show them, e.g. renders.",
+          json!({"text":{"type":"string"},"files":{"type":"array","items":{"type":"string"}}}), &["text"]),
+        f("image_prompt", "REQUIRED before generating any AI image: submit the exact prompt. The owner approves or edits it; use the prompt that comes back, word for word.",
+          json!({"prompt":{"type":"string"},"purpose":{"type":"string"}}), &["prompt","purpose"]),
+        f("finish", "End the job with a short summary for the owner. Allowed when no task is still todo, or for a question that needed no work.",
+          json!({"summary":{"type":"string"},"files":{"type":"array","items":{"type":"string"}}}), &["summary"])
     ])
 }
 

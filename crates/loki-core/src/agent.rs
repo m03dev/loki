@@ -30,6 +30,10 @@ the files itself, so never list folders just to check your own work.\n\
 - If something fails, read the error, change your approach. Never repeat the exact same action.\n\
 - If a task is impossible right now, `block_task` with the reason and move on.\n\
 - Use `note` for decisions worth remembering. Use `ask_owner` only when a choice is truly the owner's.\n\
+- The owner chats with you while you work. OWNER SAYS messages come first: change course, add_task, or answer \
+with tell_owner. A plain question that needs no work: answer with `finish`.\n\
+- Before generating ANY AI image, call `image_prompt` and then use exactly the prompt it returns.\n\
+- When you produce something worth seeing (a render, an image, a model), `tell_owner` with the file attached.\n\
 - Never claim results you did not produce.";
 
 pub struct DriverConfig {
@@ -93,6 +97,14 @@ impl Driver {
         if !summary.trim().is_empty() {
             state.push_str(&format!("\nEARLIER WORK (compacted):\n{summary}\n"));
         }
+        let chat = j.chat();
+        if chat.len() > 1 {
+            let conv: Vec<String> = chat[chat.len().saturating_sub(8)..]
+                .iter()
+                .map(|c| format!("{}: {}", if c.from == "owner" { "OWNER" } else { "YOU" }, short(&c.text, 400)))
+                .collect();
+            state.push_str(&format!("\nCONVERSATION (latest last):\n{}\n", conv.join("\n")));
+        }
         let tail = j.progress_tail(12);
         if !tail.is_empty() {
             state.push_str(&format!("\nRECENT LOG:\n{tail}\n"));
@@ -139,17 +151,29 @@ impl Driver {
         let mut recent: Vec<Exchange> = Vec::new();
         let mut nudge: Option<String> = None;
         let mut silent_turns = 0u32;
+        // An owner request stays in front of the model until it acts on it.
+        let mut owner_request: Option<String> = None;
+        // Turns in a row that changed nothing (notes, looking around, errors, no tool call).
+        let mut idle_turns = 0u32;
 
         // Coming back from a pause: apply the owner's answer first.
         if let Some(reply) = info.owner_reply.take() {
             if let Some(p) = info.pending.take() {
-                let call = ToolCall { name: p["name"].as_str().unwrap_or("").into(), args: p["args"].clone() };
-                let result = if reply.approve {
+                let mut call = ToolCall { name: p["name"].as_str().unwrap_or("").into(), args: p["args"].clone() };
+                let note = reply.note.trim().to_string();
+                if call.name == "image_prompt" && reply.approve && !note.is_empty() {
+                    call.args["prompt"] = json!(note); // the owner edited the prompt
+                }
+                let result = if call.name == "ask_owner" {
+                    format!("OWNER ANSWERED: {}", if note.is_empty() { if reply.approve { "yes" } else { "no" } } else { &note })
+                } else if reply.approve {
                     match self.exec(j, &mut info, &call, true).await { Outcome::Ok(s) | Outcome::Err(s) | Outcome::NeedsOwner(s) => s }
                 } else {
                     format!("Owner declined. {}", reply.note)
                 };
                 j.progress(&format!("owner {} {}", if reply.approve { "approved" } else { "declined" }, call.name));
+                j.log_step(&json!({"step": info.steps, "provider": "owner", "model": "", "tool": call.name, "args": call.args,
+                    "result": short(&result, 2000), "owner": if reply.approve { "approved" } else { "declined" }}));
                 recent.push(Exchange { call, result });
             } else {
                 nudge = Some(format!("OWNER ANSWERED: {}", reply.note));
@@ -176,18 +200,44 @@ impl Driver {
                 j.progress(&format!("time budget reached ({}h)", info.max_hours));
                 break;
             }
+            // New chat messages from the owner steer the job right away.
+            let owner_msgs: Vec<String> = j.chat().into_iter().filter(|c| c.from == "owner").map(|c| c.text).collect();
+            let fresh: Vec<String> = owner_msgs.iter().skip(info.owner_seen as usize).cloned().collect();
+            if !fresh.is_empty() {
+                info.owner_seen = owner_msgs.len() as u64;
+                // the first message is the goal itself, already in the prompt
+                let new: Vec<String> = if info.steps == 0 && fresh.len() == owner_msgs.len() { fresh[1..].to_vec() } else { fresh };
+                if !new.is_empty() {
+                    let text = new.join("\n");
+                    j.progress(&format!("owner says: {}", short(&text, 200)));
+                    owner_request = Some(match owner_request.take() { Some(old) => format!("{old}\n{text}"), None => text });
+                    j.save_info(&info)?;
+                }
+            }
+            if let Some(req) = &owner_request {
+                let lead = format!("OWNER SAYS (act on it now: add_task for new work, tell_owner to answer, or finish if that is all): {req}");
+                nudge = Some(match nudge.take() { Some(n) => format!("{lead}\n{n}"), None => lead });
+            }
             let tasks = j.tasks();
-            if !tasks.is_empty() && current_task(&tasks).is_none() {
+            if !tasks.is_empty() && current_task(&tasks).is_none() && nudge.is_none() {
                 let blocked = tasks.iter().filter(|t| t.state == TaskState::Blocked).count();
                 info.status = Status::Done;
                 j.progress(&format!("all tasks finished ({} passed, {blocked} blocked)", tasks.len() - blocked));
+                self.wrap_up(j, &info, &tasks, None, vec![]);
                 break;
             }
 
             self.compact(j, &mut recent).await;
             let msgs = self.context(j, &info, &tasks, &recent, nudge.as_deref());
             nudge = None;
-            let reply = match self.llm.chat(&self.pool, Role::Brain, &msgs, &tools::schemas()).await {
+            let schemas = tools::schemas();
+            info.ctx_tokens = ((msgs.iter().map(|m| m.content.len()).sum::<usize>() + schemas.to_string().len()) / 4) as u64;
+            let exclude: Vec<String> = if info.mode == "hard" {
+                self.pool.lock().await.providers().iter().filter(|p| p.local).map(|p| p.name.clone()).collect()
+            } else {
+                vec![]
+            };
+            let reply = match self.llm.chat_pref(&self.pool, Role::Brain, &msgs, &schemas, info.prefer.as_deref(), &exclude).await {
                 Ok(r) => r,
                 Err(LlmError::AllBusy { retry_in_secs }) => {
                     info.status = Status::Resting;
@@ -209,6 +259,7 @@ impl Driver {
 
             let Some(call) = reply.call else {
                 silent_turns += 1;
+                idle_turns += 1;
                 j.log_step(&json!({"step": info.steps, "provider": reply.provider, "text": short(&reply.text, 400)}));
                 nudge = Some(if silent_turns >= 3 {
                     "You have answered 3 times without a tool call. Reply ONLY with JSON like {\"tool\":\"note\",\"args\":{\"text\":\"...\"}}.".into()
@@ -219,6 +270,9 @@ impl Driver {
                 continue;
             };
             silent_turns = 0;
+            if matches!(call.name.as_str(), "add_task" | "tell_owner" | "ask_owner" | "finish" | "plan" | "block_task") {
+                owner_request = None; // the model has acted on what the owner said
+            }
 
             // Stall guard: the same action three times in a row means it's stuck.
             let repeats = recent.iter().rev().take(2).filter(|e| e.call == call).count();
@@ -243,15 +297,54 @@ impl Driver {
             };
             j.log_step(&json!({"step": info.steps, "provider": reply.provider, "model": reply.model,
                 "tool": call.name, "args": call.args, "result": short(&result, 2000)}));
+            let productive = !result.starts_with("ERROR")
+                && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish");
+            idle_turns = if productive { 0 } else { idle_turns + 1 };
+            if !paused && j.tasks().is_empty() && info.steps >= 5 && call.name != "plan" {
+                nudge = Some("You still have no checklist. Call `plan` now, or `finish` if the goal needs no work.".into());
+            }
+            if !paused && idle_turns == 10 {
+                nudge = Some("10 turns without progress. Make a real change now (write a file, run a program, mark_done) or block_task the current task.".into());
+            }
+            if !paused && idle_turns >= 16 {
+                // Out of ideas: ask the owner instead of burning the free budget.
+                let mut last: Vec<String> = recent.iter().rev().take(6).map(|e| e.call.name.replace('_', " ")).collect();
+                last.dedup();
+                let task = current_task(&j.tasks()).map(|t| format!(" on \"{}\"", t.title)).unwrap_or_default();
+                let q = format!("I'm stuck{task}: 16 turns without real progress (mostly: {}). How should I continue?", last.join(", "));
+                info.pending = Some(json!({"name": "ask_owner", "args": {"question": q}}));
+                info.waiting_for = Some(q.clone());
+                info.status = Status::Waiting;
+                j.save_info(&info)?;
+                j.say("loki", &q, vec![]);
+                j.progress("paused: no progress for 16 turns");
+                return Ok(info);
+            }
             j.save_info(&info)?;
             if paused {
                 j.progress(&format!("waiting for owner: {}", short(&result, 200)));
                 return Ok(info);
             }
+            if info.status == Status::Done {
+                break; // `finish` was accepted
+            }
             recent.push(Exchange { call, result });
         }
         j.save_info(&info)?;
         Ok(info)
+    }
+
+    /// The closing chat message: the summary plus the images this job made.
+    fn wrap_up(&self, j: &Journal, info: &RunInfo, tasks: &[Task], summary: Option<String>, mut files: Vec<String>) {
+        if files.is_empty() {
+            files = recent_images(&info.workspace, 8);
+        }
+        let blocked: Vec<String> = tasks.iter().filter(|t| t.state == TaskState::Blocked).map(|t| format!("#{} {} ({})", t.id, t.title, t.evidence)).collect();
+        let mut text = summary.unwrap_or_else(|| format!("Done: {} of {} tasks passed.", tasks.len() - blocked.len(), tasks.len()));
+        if !blocked.is_empty() {
+            text.push_str(&format!("\nCould not finish: {}", blocked.join("; ")));
+        }
+        j.say("loki", &text, files);
     }
 
     fn bump_attempt(&self, j: &Journal) {
@@ -330,6 +423,37 @@ impl Driver {
                 j.progress(&format!("blocked #{id}: {}", a["reason"].as_str().unwrap_or("")));
                 Outcome::Ok(format!("task #{id} blocked; moving on"))
             }
+            "tell_owner" => {
+                let text = a["text"].as_str().unwrap_or("").trim();
+                if text.is_empty() {
+                    return Outcome::Err("tell_owner needs 'text'".into());
+                }
+                let files = existing_files(&ws, &a["files"]);
+                j.say("loki", text, files);
+                Outcome::Ok("sent to the owner".into())
+            }
+            "image_prompt" => {
+                let prompt = a["prompt"].as_str().unwrap_or("").trim();
+                if prompt.is_empty() {
+                    return Outcome::Err("image_prompt needs 'prompt'".into());
+                }
+                if approved {
+                    // the owner's edited prompt (the approval note) wins over the proposed one
+                    return Outcome::Ok(format!("APPROVED PROMPT (use exactly): {prompt}"));
+                }
+                Outcome::NeedsOwner(format!("Image prompt for {}: {prompt}", a["purpose"].as_str().unwrap_or("an image")))
+            }
+            "finish" => {
+                let tasks = j.tasks();
+                if let Some(t) = current_task(&tasks) {
+                    return Outcome::Err(format!("task #{} '{}' is still todo: do it, block_task it, or ask the owner", t.id, t.title));
+                }
+                let summary = a["summary"].as_str().unwrap_or("Done.").to_string();
+                let files = existing_files(&ws, &a["files"]);
+                self.wrap_up(j, info, &tasks, Some(summary), files);
+                info.status = Status::Done;
+                Outcome::Ok("finished".into())
+            }
             "note" => {
                 j.progress(&format!("note: {}", a["text"].as_str().unwrap_or("")));
                 Outcome::Ok("noted".into())
@@ -350,9 +474,36 @@ impl Driver {
                 r
             }
             "run" => tools::run(&ws, &self.cfg.policy, a, approved).await,
-            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner")),
+            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, finish")),
         }
     }
+}
+
+/// Workspace-relative files from a tool's `files` argument that really exist.
+fn existing_files(ws: &std::path::Path, v: &Value) -> Vec<String> {
+    v.as_array()
+        .map(|a| a.iter().filter_map(|x| x.as_str()).filter(|p| tools::confine(ws, p).map(|f| f.is_file()).unwrap_or(false)).map(|p| p.trim_start_matches("./").replace('\\', "/")).collect())
+        .unwrap_or_default()
+}
+
+/// Newest images under the workspace (for the closing message).
+fn recent_images(ws: &std::path::Path, n: usize) -> Vec<String> {
+    let mut found: Vec<(std::time::SystemTime, String)> = Vec::new();
+    let mut stack = vec![ws.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().and_then(|x| x.to_str()).is_some_and(|x| matches!(x.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp")) {
+                if let (Ok(m), Ok(rel)) = (e.metadata().and_then(|m| m.modified()), p.strip_prefix(ws)) {
+                    found.push((m, rel.to_string_lossy().replace('\\', "/")));
+                }
+            }
+        }
+    }
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.into_iter().take(n).map(|x| x.1).collect()
 }
 
 /// OS, shell and the creative tools found on PATH, so the model uses the right commands.

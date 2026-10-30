@@ -75,9 +75,21 @@ impl Llm {
         messages: &[Msg],
         tools: &Value,
     ) -> Result<Reply, LlmError> {
-        let mut tried: Vec<String> = Vec::new();
+        self.chat_pref(pool, role, messages, tools, None, &[]).await
+    }
+
+    pub async fn chat_pref(
+        &self,
+        pool: &tokio::sync::Mutex<ModelPool>,
+        role: Role,
+        messages: &[Msg],
+        tools: &Value,
+        prefer: Option<&str>,
+        exclude: &[String],
+    ) -> Result<Reply, LlmError> {
+        let mut tried: Vec<String> = exclude.to_vec();
         loop {
-            let pick = { pool.lock().await.pick(role, &tried) };
+            let pick = { pool.lock().await.pick_pref(role, &tried, prefer) };
             let Some(pick) = pick else {
                 let wait = pool
                     .lock()

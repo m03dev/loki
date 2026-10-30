@@ -136,10 +136,15 @@ impl ModelPool {
     /// Best provider for `role` that has a key, budget and is not cooling down.
     /// `skip` lets a caller exclude providers it already tried for this request.
     pub fn pick(&mut self, role: Role, skip: &[String]) -> Option<Pick> {
-        self.pick_at(role, skip, Utc::now())
+        self.pick_at(role, skip, Utc::now(), None)
     }
 
-    pub fn pick_at(&mut self, role: Role, skip: &[String], now: DateTime<Utc>) -> Option<Pick> {
+    /// Like `pick`, but `prefer` (a provider name) is tried first when it can serve.
+    pub fn pick_pref(&mut self, role: Role, skip: &[String], prefer: Option<&str>) -> Option<Pick> {
+        self.pick_at(role, skip, Utc::now(), prefer)
+    }
+
+    pub fn pick_at(&mut self, role: Role, skip: &[String], now: DateTime<Utc>, prefer: Option<&str>) -> Option<Pick> {
         let mut candidates: Vec<Provider> = self
             .providers
             .iter()
@@ -154,7 +159,8 @@ impl ModelPool {
                 .get(&p.name)
                 .map(|u| u.consecutive_failures)
                 .unwrap_or(0);
-            (p.priority, rel)
+            let first = prefer.is_some_and(|n| n == p.name);
+            (!first, p.priority, rel)
         });
         for p in candidates {
             let key = if p.key_env.is_empty() {

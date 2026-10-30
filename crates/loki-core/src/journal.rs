@@ -62,6 +62,32 @@ pub struct RunInfo {
     /// The owner's answer or approval, consumed on resume.
     #[serde(default)]
     pub owner_reply: Option<OwnerReply>,
+    /// "agent" (default) or "hard" (strongest model first).
+    #[serde(default)]
+    pub mode: String,
+    /// Provider the owner picked for this job (tried first).
+    #[serde(default)]
+    pub prefer: Option<String>,
+    /// Owner chat messages the driver has already read.
+    #[serde(default)]
+    pub owner_seen: u64,
+    /// Rough size of the last prompt, in tokens (for the context meter).
+    #[serde(default)]
+    pub ctx_tokens: u64,
+    /// Short title for the job list.
+    #[serde(default)]
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatLine {
+    pub t: DateTime<Utc>,
+    /// "owner" or "loki"
+    pub from: String,
+    pub text: String,
+    /// Files the message shows (workspace-relative), e.g. a render.
+    #[serde(default)]
+    pub files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +118,17 @@ pub struct Task {
     pub attempts: u32,
 }
 
+/// First line of the goal, cut to a short title.
+pub fn title_of(goal: &str) -> String {
+    let first = goal.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+    let mut t: String = first.chars().take(60).collect();
+    if first.chars().count() > 60 {
+        if let Some(i) = t.rfind(' ') { t.truncate(i); }
+        t.push('…');
+    }
+    t
+}
+
 pub struct Journal {
     pub dir: PathBuf,
 }
@@ -117,10 +154,16 @@ impl Journal {
             last_error: None,
             pending: None,
             owner_reply: None,
+            mode: "agent".into(),
+            prefer: None,
+            owner_seen: 0,
+            ctx_tokens: 0,
+            title: title_of(goal),
         };
         let j = Self { dir };
         j.save_info(&info)?;
         j.save_tasks(&[])?;
+        j.say("owner", goal, vec![]);
         Ok((j, info))
     }
 
@@ -165,9 +208,38 @@ impl Journal {
     }
 
     pub fn log_step(&self, v: &serde_json::Value) {
+        let mut v = v.clone();
+        if v.get("t").is_none() {
+            v["t"] = serde_json::json!(Utc::now());
+        }
         if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(self.dir.join("steps.jsonl")) {
             let _ = writeln!(f, "{v}");
         }
+    }
+
+    pub fn steps(&self) -> Vec<serde_json::Value> {
+        std::fs::read_to_string(self.dir.join("steps.jsonl"))
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| serde_json::from_str(l).ok())
+            .collect()
+    }
+
+    pub fn say(&self, from: &str, text: &str, files: Vec<String>) {
+        let line = ChatLine { t: Utc::now(), from: from.into(), text: text.into(), files };
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(self.dir.join("chat.jsonl")) {
+            if let Ok(s) = serde_json::to_string(&line) {
+                let _ = writeln!(f, "{s}");
+            }
+        }
+    }
+
+    pub fn chat(&self) -> Vec<ChatLine> {
+        std::fs::read_to_string(self.dir.join("chat.jsonl"))
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| serde_json::from_str(l).ok())
+            .collect()
     }
 
     pub fn summary(&self) -> String {
