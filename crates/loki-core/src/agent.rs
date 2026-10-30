@@ -37,6 +37,9 @@ with tell_owner. A plain question that needs no work: answer with `finish`.\n\
 - When you produce something worth seeing (a render, an image, a model), `tell_owner` with the file attached.\n\
 - Never claim results you did not produce.";
 
+/// Steps without a passed check before the job stops and asks the owner.
+const STALL_ASK: u32 = 30;
+
 pub struct DriverConfig {
     /// Recent tool exchanges kept verbatim; older ones are compacted.
     pub window: usize,
@@ -195,11 +198,20 @@ hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, ma
         // Turns in a row that changed nothing (notes, looking around, errors, no tool call),
         // kept in run.json so pauses and approvals don't reset it.
         let mut idle_turns = info.idle_turns;
+        // jobs from before this counter existed: count from the journal
+        if info.since_pass == 0 && info.steps > 0 {
+            let steps = j.steps();
+            let last = steps.iter().rposition(|s| s["tool"] == "mark_done" && s["result"].as_str().is_some_and(|r| r.contains("passed")));
+            info.since_pass = (steps.len() - last.map(|i| i + 1).unwrap_or(0)) as u32;
+        }
         // the first error line of the last failed run, to ask for a lesson once it is fixed
         let mut fixed_error: Option<String> = None;
 
         // Coming back from a pause: apply the owner's answer first.
         if let Some(reply) = info.owner_reply.take() {
+            if info.since_pass >= STALL_ASK {
+                info.since_pass = STALL_ASK / 2; // the owner answered the stall question: another round, not forever
+            }
             if let Some(p) = info.pending.take() {
                 let mut call = ToolCall { name: p["name"].as_str().unwrap_or("").into(), args: p["args"].clone() };
                 let note = reply.note.trim().to_string();
@@ -388,6 +400,25 @@ hinge(part, edge='+y', angle=40), array(part, n, offset), coins(container, n, ma
             }
             if !paused && idle_turns == 10 {
                 nudge = Some("10 turns without progress. Make a real change now (write a file, run a program, mark_done) or block_task the current task.".into());
+            }
+            let passed_now = call.name == "mark_done" && result.contains("passed");
+            info.since_pass = if passed_now { 0 } else { info.since_pass + 1 };
+            if !paused && info.since_pass == STALL_ASK * 2 / 3 {
+                nudge = Some(format!("{} steps since a step last passed its check. The same approach keeps failing: change the \
+                    approach (simpler shapes, a loki_bpy kit, fewer parts), or block_task this step with what you tried.", info.since_pass));
+            }
+            if !paused && info.since_pass >= STALL_ASK && idle_turns < 16 {
+                let task = current_task(&j.tasks()).map(|t| format!(" \"{}\"", t.title)).unwrap_or_default();
+                let last_fail = recent.iter().rev().find(|e| e.result.contains("check failed") || e.result.contains("score") || e.result.starts_with("ERROR"))
+                    .map(|e| short(&e.result, 220)).unwrap_or_default();
+                let q = format!("I've worked {} steps on{task} without passing its check. Latest: {last_fail}\nShould I keep trying a different way, accept it as it is, or stop?", info.since_pass);
+                info.pending = Some(json!({"name": "ask_owner", "args": {"question": q, "options": ["Try a different way", "Accept it as it is", "Stop this job"]}}));
+                info.waiting_for = Some(q.clone());
+                info.status = Status::Waiting;
+                j.save_info(&info)?;
+                j.say("loki", &q, vec![]);
+                j.progress(&format!("paused: {} steps without a passed check", info.since_pass));
+                return Ok(info);
             }
             if !paused && idle_turns >= 16 {
                 // Out of ideas: ask the owner instead of burning the free budget.

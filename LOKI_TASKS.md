@@ -56,7 +56,21 @@ Done 2026-10-30 (owner: "are they helping each other?", "folders not yet synced"
 - [x] Library mirror: every picture the other machine makes is copied into `<home>/mirror/<machine>/` every 2 minutes
   and shows in the Library with the machine's name; deleted there = deleted here.
 
-Next, in order (owner's direction 2026-10-29: art, production, creation; long runs; free models;
+Done 2026-10-30 (owner: "blender results are shit", "floating lids ... we need to completely rework this"):
+
+- [x] Kits: whole objects built and checked from four sides instead of boxes placed by guessed numbers. First kit:
+  `chest()` - open-top body, barrel lid on two real hinges at the back, iron bands, lock, coins on a gold bed.
+- [x] Real surfaces and light: `pbr()` Poly Haven scans (CC0, cached in <home>/assets, credited in renders/CREDITS.txt),
+  `hdri()` studio light in lights(); flat colours only when offline.
+- [x] Every finish() renders a four-view sheet (front, right, back, above); the `look:` check scores the sheet.
+
+Next, in order (owner 2026-10-30: rework the 3D):
+
+0. More kits, each proven with a four-view render before it ships: crate, barrel, door with frame, table + chairs,
+   bookshelf, lantern, campfire, tree, rock cluster, sword/shield. Then image-to-3D on the PC through ComfyUI
+   (Hunyuan3D-2 quantized first, TripoSR as the fast option) for anything no kit covers.
+
+Then (owner's direction 2026-10-29: art, production, creation; long runs; free models;
 owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local
 models; drive real Maya/Blender rather than rebuilding Forge; then ads & social and the phone app):
 

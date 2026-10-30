@@ -33,7 +33,7 @@ from mathutils import Matrix, Vector
 
 __all__ = ["start", "mat", "box", "cyl", "sphere", "cone", "ground", "bounds", "size_of", "place_on", "place_beside",
            "place_inside", "center_on", "hinge", "array", "coins", "planks", "join", "parent", "bevel", "frame", "lights",
-           "world", "finish", "render", "save", "hdri", "pbr", "views", "tray", "ring", "dome", "chest", "ROOT"]
+           "world", "finish", "render", "save", "hdri", "pbr", "views", "tray", "ring", "dome", "chest", "lathe", "barrel", "ROOT"]
 
 ROOT = os.getcwd()
 _parts = []
@@ -829,3 +829,53 @@ def chest(name="Chest", width=0.8, depth=0.5, height=0.42, lid_rise=0.16, open_d
         lo, hi = bounds(o)
         assert lo.y - 0.05 <= py <= hi.y + 0.05, f"{o.name} came off the hinge"
     return {"body": body, "lid": lid, "parts": parts}
+
+
+def lathe(name, profile, material=None, at=(0, 0, 0), segments=32, cap=True):
+    """Spin a profile [(radius, z), ...] (bottom to top) round Z: barrels, vases, bottles, columns, lamp bases."""
+    import bmesh
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    rings = []
+    for r, z in profile:
+        rings.append([bm.verts.new((r * math.cos(2 * math.pi * k / segments), r * math.sin(2 * math.pi * k / segments), z)) for k in range(segments)])
+    for a, b in zip(rings, rings[1:]):
+        for k in range(segments):
+            bm.faces.new((a[k], a[(k + 1) % segments], b[(k + 1) % segments], b[k]))
+    if cap:
+        bm.faces.new(list(reversed(rings[0])))
+        bm.faces.new(rings[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    for p in me.polygons:
+        p.use_smooth = True
+    o = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(o)
+    bpy.ops.object.select_all(action="DESELECT")
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    o = _finish_part(o, name, material, 0)
+    o.location = Vector(at)
+    return o
+
+
+def barrel(name="Barrel", height=0.9, radius=0.3, bulge=0.12, hoops=4, wood=None, metal=None, at=(0, 0, 0)):
+    """A complete wooden barrel: bulging body (radius grows by `bulge` x radius at the middle), iron hoops that sit ON
+    the curve, a lid set into the top. Returns {"body", "parts"}."""
+    wood = wood or pbr(f"{name}_Wood", "wood_planks", scale=3, fallback="#7a4e2a")
+    metal = metal or mat(f"{name}_Iron", "#3a3f45", metal=1.0, rough=0.42)
+    r_at = lambda z: radius * (1 + bulge * math.sin(math.pi * z / height))
+    prof = [(r_at(height * i / 16), height * i / 16) for i in range(17)]
+    ax, ay, az = at
+    body = lathe(f"{name}_Body", prof, wood, at)
+    parts = [body]
+    for k in range(hoops):
+        t = (0.1, 0.3, 0.7, 0.9)[k] if hoops == 4 else (k + 0.5) / hoops
+        z0, z1 = height * t - 0.025, height * t + 0.025
+        hoop = lathe(f"{name}_Hoop{k}", [(r_at(z0) + 0.006, 0), (r_at(z1) + 0.006, z1 - z0)], metal, (ax, ay, az + z0), cap=False)
+        hoop.modifiers.new("Solidify", "SOLIDIFY").thickness = 0.006
+        parts.append(hoop)
+    # the head: a disc a little below the rim
+    parts.append(cyl(f"{name}_Head", r_at(height) * 0.94, 0.02, wood, (ax, ay, az + height - 0.035), verts=32))
+    return {"body": body, "parts": parts}

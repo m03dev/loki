@@ -83,6 +83,10 @@ pub struct RunInfo {
     /// Turns in a row without progress, kept across pauses and approvals.
     #[serde(default)]
     pub idle_turns: u32,
+    /// Steps since a checklist step last passed its check: busy-but-going-nowhere (write, run, fail the
+    /// check, write again ...) counts here even though every single turn "did something".
+    #[serde(default)]
+    pub since_pass: u32,
     /// "always" | "big" | "off": ask the owner a few option questions before planning.
     #[serde(default)]
     pub interview: String,
@@ -176,6 +180,7 @@ impl Journal {
             title: title_of(goal),
             approved_commands: vec![],
             idle_turns: 0,
+            since_pass: 0,
             interview: "off".into(),
             interviewed: false,
             interview_asked: false,
