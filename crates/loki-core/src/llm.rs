@@ -135,7 +135,7 @@ impl Llm {
                     };
                     let msg = &v["choices"][0]["message"];
                     let text = msg["content"].as_str().unwrap_or("").to_string();
-                    let call = parse_native_call(msg).or_else(|| repair_call(&text));
+                    let call = parse_native_call(msg).or_else(|| repair_call_with(&text, tools));
                     pool.lock().await.report_ok(&name);
                     return Ok(Reply { text, call, provider: name, model: pick.model });
                 }
@@ -163,8 +163,21 @@ fn parse_native_call(msg: &Value) -> Option<ToolCall> {
 /// Free models often answer with a JSON blob (sometimes fenced) instead of a
 /// native tool call. Accept `{"tool": .., "args": ..}`, `{"name": .., "arguments": ..}`.
 pub fn repair_call(text: &str) -> Option<ToolCall> {
+    repair_call_with(text, &crate::tools::schemas())
+}
+
+/// Like `repair_call`, and when the JSON names no tool, infer it from which tool's
+/// required arguments it carries (`{"args":{"tasks":[...]}}` is a `plan`).
+pub fn repair_call_with(text: &str, schemas: &Value) -> Option<ToolCall> {
     for candidate in json_candidates(text) {
         if let Some(v) = parse_json_lenient(&candidate) {
+            if v.get("tool").or_else(|| v.get("name")).and_then(|n| n.as_str()).is_none() {
+                let args = v.get("args").or_else(|| v.get("arguments")).or_else(|| v.get("parameters")).cloned().unwrap_or_else(|| v.clone());
+                if let Some(name) = infer_tool(&args, schemas) {
+                    return Some(ToolCall { name, args });
+                }
+                continue;
+            }
             let name = v.get("tool").or_else(|| v.get("name")).and_then(|n| n.as_str());
             if let Some(name) = name {
                 let args = v
@@ -182,6 +195,31 @@ pub fn repair_call(text: &str) -> Option<ToolCall> {
         }
     }
     None
+}
+
+/// The one tool whose required arguments are all present (most required keys wins; ties = unknown).
+fn infer_tool(args: &Value, schemas: &Value) -> Option<String> {
+    let obj = args.as_object()?;
+    let mut best: Option<(usize, String)> = None;
+    let mut tie = false;
+    for t in schemas.as_array()? {
+        let f = &t["function"];
+        let req: Vec<&str> = f["parameters"]["required"].as_array().map(|a| a.iter().filter_map(|x| x.as_str()).collect()).unwrap_or_default();
+        let props = f["parameters"]["properties"].as_object();
+        if req.is_empty() || !req.iter().all(|k| obj.contains_key(*k)) {
+            continue;
+        }
+        if obj.keys().any(|k| props.map(|p| !p.contains_key(k)).unwrap_or(true)) {
+            continue; // carries keys this tool doesn't take
+        }
+        let score = req.len();
+        match &best {
+            Some((b, _)) if *b > score => {}
+            Some((b, _)) if *b == score => tie = true,
+            _ => { best = Some((score, f["name"].as_str()?.to_string())); tie = false; }
+        }
+    }
+    if tie { None } else { best.map(|b| b.1) }
 }
 
 fn json_candidates(text: &str) -> Vec<String> {
@@ -258,6 +296,15 @@ mod tests {
         let c = repair_call(t).unwrap();
         assert_eq!(c.name, "read_file");
         assert_eq!(c.args["path"], "x.md");
+    }
+
+    #[test]
+    fn infers_the_tool_from_its_arguments() {
+        let t = r#"{"args":{"tasks":[{"title":"Render","check":"file:r.png"}]}}"#;
+        assert_eq!(repair_call(t).unwrap().name, "plan");
+        assert_eq!(repair_call(r#"{"path":"a.py","content":"x"}"#).unwrap().name, "write_file");
+        assert_eq!(repair_call(r#"{"command":"blender -b","why":"render"}"#).unwrap().name, "run");
+        assert!(repair_call(r#"{"foo":1}"#).is_none());
     }
 
     #[test]

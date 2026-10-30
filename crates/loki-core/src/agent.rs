@@ -383,6 +383,14 @@ impl Driver {
                 if tasks.is_empty() {
                     return Outcome::Err("plan needs at least one task with a title".into());
                 }
+                let folder_only: Vec<String> = tasks.iter().filter(|t| {
+                    let c = t.check.trim().to_ascii_lowercase();
+                    ["cmd:dir", "cmd:mkdir", "cmd:ls", "cmd:test -d", "cmd:if exist"].iter().any(|p| c.starts_with(p))
+                }).map(|t| t.title.clone()).collect();
+                if !folder_only.is_empty() {
+                    return Outcome::Err(format!("these tasks only check folders: {}. Folders are made by write_file and your scripts; \
+                        plan tasks whose check is the real output (file:<path>). Send the plan again.", folder_only.join("; ")));
+                }
                 let _ = j.save_tasks(&tasks);
                 j.progress(&format!("planned {} tasks", tasks.len()));
                 info.status = Status::Running;

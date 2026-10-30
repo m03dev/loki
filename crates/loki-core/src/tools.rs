@@ -67,6 +67,17 @@ pub fn schemas() -> Value {
 
 /// Resolve a model-supplied path inside the workspace; refuse escapes.
 pub fn confine(workspace: &Path, p: &str) -> Result<PathBuf, String> {
+    // A full path inside the workspace is fine (models often echo the workspace path back).
+    let norm = |x: &str| x.replace('\\', "/").trim_end_matches('/').to_ascii_lowercase();
+    let ws_s = norm(&workspace.to_string_lossy());
+    let p_s = p.replace('\\', "/");
+    let p = if !ws_s.is_empty() && norm(&p_s).starts_with(&ws_s) {
+        p_s[ws_s.len()..].trim_start_matches('/').to_string()
+    } else {
+        p_s
+    };
+    let p = if p.is_empty() { ".".to_string() } else { p };
+    let p = p.as_str();
     let rel = Path::new(p.trim_start_matches('/'));
     let mut out = workspace.to_path_buf();
     for c in rel.components() {
@@ -205,6 +216,16 @@ pub async fn verify(ws: &Path, policy: &Policy, check: &str) -> Result<String, S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn confine_accepts_full_paths_inside_the_workspace() {
+        let ws = Path::new("/w/work/run1");
+        assert_eq!(confine(ws, "/w/work/run1").unwrap(), PathBuf::from("/w/work/run1"));
+        assert_eq!(confine(ws, "/w/work/run1/renders/a.png").unwrap(), PathBuf::from("/w/work/run1/renders/a.png"));
+        assert!(confine(ws, "/w/work/run2/x").unwrap().starts_with(ws), "other paths are re-rooted, never outside");
+        let win = Path::new(r"D:\loki\home\work\r1");
+        assert_eq!(confine(win, r"D:\loki\home\work\r1\scripts\a.py").unwrap(), win.join("scripts").join("a.py"));
+    }
 
     #[test]
     fn confine_blocks_escapes() {
