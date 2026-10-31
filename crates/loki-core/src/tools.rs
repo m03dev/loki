@@ -46,7 +46,7 @@ pub fn schemas() -> Value {
         f("plan", "Write the task checklist for the goal. Each task needs a concrete check: 'file:<path>' (must exist, non-empty), 'blend:<scene.blend>' (LOKI's inspector finds no errors), 'look:<image>' (a vision model scores it against the brief), or 'cmd:<command>' (must exit 0).",
           json!({"tasks":{"type":"array","items":{"type":"object","properties":{"title":{"type":"string"},"check":{"type":"string"}},"required":["title","check"]}}}), &["tasks"]),
         f("list_dir", "List files in a workspace folder.", json!({"path":{"type":"string"}}), &[]),
-        f("read_file", "Read a text file from the workspace.", json!({"path":{"type":"string"}}), &["path"]),
+        f("read_file", "Read a text file from the workspace (about 20 KB at a time; long files say where to read on with from_line).", json!({"path":{"type":"string"},"from_line":{"type":"integer"}}), &["path"]),
         f("write_file", "Create or overwrite a text file in the workspace.", json!({"path":{"type":"string"},"content":{"type":"string"}}), &["path","content"]),
         f("run", "Run a shell command in the workspace. Common tools run directly; anything else asks the owner first, so say what it does in 'why'.",
           json!({"command":{"type":"string"},"why":{"type":"string"}}), &["command","why"]),
@@ -125,11 +125,22 @@ pub fn list_dir(ws: &Path, args: &Value) -> Outcome {
 pub fn read_file(ws: &Path, args: &Value) -> Outcome {
     let Some(p) = args["path"].as_str() else { return Outcome::Err("missing 'path'".into()) };
     let f = match confine(ws, p) { Ok(f) => f, Err(e) => return Outcome::Err(e) };
-    match std::fs::read_to_string(&f) {
-        Ok(s) if s.len() > 20_000 => Outcome::Ok(format!("{}\n...[truncated, {} bytes total]", &s[..floor_char(&s, 20_000)], s.len())),
-        Ok(s) => Outcome::Ok(s),
-        Err(e) => Outcome::Err(format!("cannot read {p}: {e}")),
+    let text = match std::fs::read_to_string(&f) { Ok(s) => s, Err(e) => return Outcome::Err(format!("cannot read {p}: {e}")) };
+    // read in pages by line, so a long file never needs a shell command (which would ask the owner)
+    let lines: Vec<&str> = text.lines().collect();
+    let from = args["from_line"].as_u64().unwrap_or(1).max(1) as usize;
+    let mut out = String::new();
+    let mut last = from - 1;
+    for (i, l) in lines.iter().enumerate().skip(from - 1) {
+        if out.len() + l.len() > 20_000 { break; }
+        out.push_str(l);
+        out.push('\n');
+        last = i + 1;
     }
+    if last < lines.len() {
+        out.push_str(&format!("...[lines {from}-{last} of {}; read on with from_line={}]", lines.len(), last + 1));
+    }
+    Outcome::Ok(out)
 }
 
 fn floor_char(s: &str, mut i: usize) -> usize {

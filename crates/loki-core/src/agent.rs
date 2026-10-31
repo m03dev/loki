@@ -794,7 +794,7 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
                 let again = a["command"].as_str().is_some_and(|c| info.approved_commands.iter().any(|x| x == c));
                 tools::run(&ws, &self.cfg.policy, a, approved || again).await
             }
-            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, interview, inspect_scene, look, learn, finish")),
+            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, session, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, interview, inspect_scene, look, learn, finish")),
         }
     }
 }
