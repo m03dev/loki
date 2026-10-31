@@ -46,6 +46,8 @@ struct App {
     pulls: Arc<Mutex<HashMap<String, Value>>>,
     /// The Mac <-> PC link (None when this machine has no LOKI_PEER_SECRET).
     link: Option<link::Link>,
+    /// "What should we make?" ideas: (made at, ideas), refreshed in the background.
+    ideas: Arc<Mutex<(Option<std::time::Instant>, Vec<String>)>>,
 }
 
 fn default_settings() -> Value {
@@ -459,6 +461,61 @@ async fn peer_proxy(State(app): State<App>, AxPath((name, _rest)): AxPath<(Strin
         }
         Err(e) => (StatusCode::BAD_GATEWAY, e).into_response(),
     }
+}
+
+/// Fresh, contextual ideas for the empty chat: from the playbooks (what LOKI can do), the owner's recent jobs and
+/// pictures. The fast model writes them (new ones every 20 minutes, in the background); offline, a mix-and-match fallback.
+async fn suggestions(State(app): State<App>) -> Json<Value> {
+    let (fresh, cached) = { let g = app.ideas.lock().await; (g.0.map(|t| t.elapsed().as_secs() < 1200).unwrap_or(false), g.1.clone()) };
+    if !fresh {
+        { app.ideas.lock().await.0 = Some(std::time::Instant::now()); }   // one refresh at a time
+        let me = app.clone();
+        tokio::spawn(async move {
+            let ideas = make_ideas(&me).await;
+            if !ideas.is_empty() { *me.ideas.lock().await = (Some(std::time::Instant::now()), ideas); }
+        });
+    }
+    let list = if cached.is_empty() { fallback_ideas(&app) } else { cached };
+    Json(json!(list))
+}
+
+fn recent_titles(app: &App, n: usize) -> Vec<String> {
+    let mut runs = Journal::list(&app.runs_dir());
+    runs.sort_by(|a, b| b.updated.cmp(&a.updated));
+    runs.into_iter().take(n).map(|r| if r.title.is_empty() { r.goal } else { r.title }).map(|t| t.chars().take(80).collect()).collect()
+}
+
+async fn make_ideas(app: &App) -> Vec<String> {
+    use loki_core::llm::Msg;
+    let books: Vec<String> = app.driver.knowledge.playbooks.iter().map(|p| format!("- {}: {}", p.name, p.description.chars().take(140).collect::<String>())).collect();
+    let recent = recent_titles(app, 8);
+    let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() % 9973).unwrap_or(7);
+    let ask = vec![
+        Msg::system("You suggest what an art / production / creation studio app should make next. Reply ONLY with a JSON array of 10 strings."),
+        Msg::user(format!("Write 10 short, specific, varied prompts (each under 70 characters, imperative, no numbering) the owner could send. \
+Mix: a few that continue or build on their recent jobs, a few that use what the playbooks can do, a few surprising fresh ideas \
+(props, characters, environments, turnarounds, renders, short videos, ad copy). Never generic. Variation seed {seed}.\n\
+PLAYBOOKS:\n{}\nRECENT JOBS:\n{}", books.join("\n"), if recent.is_empty() { "(none yet)".into() } else { recent.join("\n") })),
+    ];
+    match app.driver.llm.chat(&app.driver.pool, loki_core::pool::Role::Fast, &ask, &json!([])).await {
+        Ok(r) => loki_core::llm::extract_json(&r.text).and_then(|v| v.as_array().cloned()).unwrap_or_default().into_iter()
+            .filter_map(|x| x.as_str().map(|s| s.trim().trim_matches('"').to_string())).filter(|s| s.len() > 8 && s.len() < 110).take(12).collect(),
+        Err(_) => vec![],
+    }
+}
+
+/// Without a model: recombine subjects and kinds of work, plus the latest job, so the list still changes.
+fn fallback_ideas(app: &App) -> Vec<String> {
+    let subjects = ["a red baby dragon", "a brass ship's lantern", "a mossy stone well", "a sci-fi supply crate", "a cosy reading nook",
+        "a witch's potion shelf", "a desert scout bike", "a carved wooden mask", "a glowing mushroom grove", "a knight's helmet"];
+    let kinds = ["Model and render {}", "Make a turnaround sheet for {}", "Render a 360° turntable of {}", "Light {} three ways and compare",
+        "Write ad captions for a render of {}", "Make a game-ready version of {}"];
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() / 600).unwrap_or(0) as usize;
+    let mut out: Vec<String> = (0..8).map(|i| kinds[(t + i * 5) % kinds.len()].replace("{}", subjects[(t * 3 + i * 7) % subjects.len()])).collect();
+    if let Some(last) = recent_titles(app, 1).first() {
+        out.insert(0, format!("Make a better version of: {}", last.chars().take(50).collect::<String>()));
+    }
+    out
 }
 
 /// Every driver knob: what each one is, its default, and this machine's value.
@@ -1085,7 +1142,8 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
     driver.knowledge = loki_core::knowledge::Knowledge::load(repo_dir().map(|r| r.join("playbooks")).as_deref(), Some(&home.join("lessons.md")));
     tracing::info!("playbooks: {}, lessons: {}", driver.knowledge.playbooks.len(), driver.knowledge.lessons().len());
     let link = link::Link::from_env(&home);
-    let app = App { home: home.clone(), driver: Arc::new(driver), live: Arc::new(Mutex::new(HashMap::new())), pulls: Arc::new(Mutex::new(HashMap::new())), link: link.clone() };
+    let app = App { home: home.clone(), driver: Arc::new(driver), live: Arc::new(Mutex::new(HashMap::new())), pulls: Arc::new(Mutex::new(HashMap::new())), link: link.clone(),
+        ideas: Arc::new(Mutex::new((None, vec![]))) };
     let router = Router::new()
         .route("/", get(|| async { Html(UI) }))
         .route("/health", get(|| async { Json(json!({"ok": true, "service": "lokid", "version": env!("CARGO_PKG_VERSION")})) }))
@@ -1113,6 +1171,7 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
         .route("/link", get(link_status))
         .route("/logs", get(logs))
         .route("/tuning", get(tuning))
+        .route("/suggestions", get(suggestions))
         .route("/mirror/file", get(mirror_file))
         .route("/peer/:name/*rest", any(peer_proxy).layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024)))
         .with_state(app.clone());

@@ -139,9 +139,9 @@ impl Driver {
         let mut system = SYSTEM.to_string();
         if !info.interviewed && info.interview != "off" {
             system.push_str(&format!("\nINTERVIEW ({}): before `plan`, if the goal makes or changes something and leaves real \
-choices open, call `interview` once with 1-3 questions (skip anything the goal already says). Good questions by kind - \
-image: Style, Framing, Shape (16:9 / 1:1 / 9:16); turnaround: Views, Pose (T / A); 3D model: Use (game asset / hero detail / \
-blockout), Start from (concept / Blender from scratch); video: Length, Shape, Look; writing: Length, Tone. {}\n",
+choices open, call `interview` once with 1-3 questions about THIS goal (name its subject; skip anything the goal already says). \
+Ask what would change the result most for this particular thing - never a stock list (style / framing / shape) unless that \
+really is the open choice. Options: 2-4 per question, labels of 1-3 words, a description of at most 6 words. {}\n",
                 info.interview,
                 if info.interview == "big" { "Only for big jobs (several outputs or hours of work)." } else { "Plain questions are never interviewed." }));
         }

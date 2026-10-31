@@ -160,6 +160,8 @@ body.menuopen [data-tip]:hover::after{display:none}
 .btn:hover{background:var(--g3)}.btn.pri{background:var(--grad);color:var(--onacc);font-weight:650;border-color:transparent}.btn.pri:hover{filter:brightness(1.07)}
 .btn.sm{padding:4px 10px;font-size:12px}
 .typing{color:var(--dim);font-size:12.5px;display:flex;align-items:center;gap:8px}
+.opt.sm{padding:4px 10px;border-radius:9px;font-size:12.5px}.field.inl{min-height:0;width:120px;margin:0;padding:4px 9px;font-size:12.5px;border-radius:9px}
+.card .q{margin-top:8px}.card .q .qq{font-size:13px;margin-bottom:5px}.card .q .opts{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .lm{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;padding:2px 2px}
 .lm .m{color:var(--muted)}
 .logs{font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--muted);background:rgba(0,0,0,.22);border-radius:10px;padding:8px 10px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0}.ind.lm{margin-top:-6px}
@@ -204,7 +206,7 @@ body.menuopen [data-tip]:hover::after{display:none}
 .pager{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--dim)}
 .sec{margin-bottom:6px;padding:2px 0 8px;border-bottom:1px solid var(--edge)}.sec>h3{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:6px 0 8px;font-weight:650;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
 .sec>h3::after{content:"";width:6px;height:6px;border-right:1.5px solid var(--dim);border-bottom:1.5px solid var(--dim);transform:rotate(45deg);margin-left:6px;transition:.15s}
-.sec.shut>h3::after{transform:rotate(-45deg)}.sec.shut>:not(h3){display:none}.sec.shut>h3{margin-bottom:0}.sec.shut>h3 .btn{display:none}
+.sec.shut>h3::after{transform:rotate(-45deg)}.sec.shut>:not(h3){display:none}.sec.shut>h3{margin-bottom:0}.sec.shut>h3 .btn,.sec.shut>h3 .seg{display:none}
 .num{width:84px;padding:4px 8px;border-radius:9px;border:1px solid var(--edge);background:rgba(0,0,0,.18);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
 .themes{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
 .th{padding:8px;border-radius:12px;border:1px solid var(--edge);background:var(--g2);font-size:12px;text-align:left;box-shadow:inset 0 1px 0 var(--hi)}
@@ -313,6 +315,15 @@ async function paintLogs() {
   const d = await api((S.logWho ? `/peer/${encodeURIComponent(S.logWho)}` : '') + '/logs?lines=300').catch(() => null);
   box.textContent = d ? (d[S.logFile] || '(empty)') : 'Could not read the logs' + (S.logWho ? ` of ${S.logWho}` : '');
   box.scrollTop = box.scrollHeight;
+}
+/* "What should we make?": four ideas from LOKI's current list (made from its playbooks and your recent work), shuffled */
+async function paintIdeas(again) {
+  const el = $('#sugs'); if (!el) return;
+  if (again || !S.ideas || Date.now() - (S.ideasT || 0) > 120000) { S.ideas = await api('/suggestions').catch(() => S.ideas || []) || []; S.ideasT = Date.now(); }
+  const pick = [...S.ideas].sort(() => Math.random() - .5).slice(0, 4);
+  el.innerHTML = pick.map(s => `<button class="sug">${esc(s)}</button>`).join('') + `<button class="ib" id="sugMore" data-tip="Other ideas">${ic('refresh')}</button>`;
+  el.querySelectorAll('.sug').forEach(b => b.onclick = () => { $('#inp').value = b.textContent; $('#inp').focus(); paintComposer(); });
+  $('#sugMore').onclick = () => paintIdeas(Math.random() < .3);
 }
 /* one small menu for every choice (no native selects) */
 function dropdown(anchor, title, items, value, onpick) {
@@ -633,8 +644,8 @@ function actionCard(r, inPop) {
     const qs = (a.questions || []).slice(0, 3), ans = S.answers[r.id] || {};
     return `<div class="card" data-card="${id}"><div class="tt">${ic('msg')} A few quick questions before I start</div>
       ${qs.map((q, qi) => `<div class="q"><div class="qh">${esc(q.header)}</div><div class="qq">${esc(q.question)}</div><div class="opts">${(q.options || []).map(o => {
-        const on = (ans[qi] || []).includes(o.label); return `<button class="opt ${on ? 'on' : ''}" data-ivq="${qi}" data-o="${esc(o.label)}" data-multi="${q.multi ? 1 : 0}" data-ivrun="${id}">${esc(o.label)}${o.description ? `<small>${esc(o.description)}</small>` : ''}</button>`; }).join('')}</div>
-        <input class="field" placeholder="Or type your own…" data-other="${qi}" data-run-o="${id}" value="${esc((ans['o' + qi]) || '')}"></div>`).join('')}
+        const on = (ans[qi] || []).includes(o.label); return `<button class="opt sm ${on ? 'on' : ''}" title="${esc(o.description || '')}" data-ivq="${qi}" data-o="${esc(o.label)}" data-multi="${q.multi ? 1 : 0}" data-ivrun="${id}">${esc(o.label)}</button>`; }).join('')}
+        <input class="field inl" placeholder="other…" data-other="${qi}" data-run-o="${id}" value="${esc((ans['o' + qi]) || '')}"></div></div>`).join('')}
       <div class="btns"><button class="btn" data-skip="${id}">Go as written</button><button class="btn pri" data-ivsend="${id}">Start</button></div></div>`;
   }
   if (p.name === 'image_prompt') return `<div class="card" data-card="${id}"><div class="tt">${ic('wand')} OK this image prompt?</div><div class="ds">${esc(cap(a.purpose || 'An image'))} — edit the words if you like.</div>
@@ -656,8 +667,8 @@ function paintChat(force) {
   if (!S.sel || !c) {
     head.innerHTML = `<span class="ttl">New job</span>`; $('#crumb').textContent = ''; col.dataset.sig = '';
     col.innerHTML = `<div class="hello"><h1>What should we make?</h1><p>One prompt. LOKI asks what it needs, plans, works for as long as it takes, checks every step and shows you the results.</p>
-      <div class="sugs">${['Model and render a low-poly treasure chest in Blender','Make a turnaround sheet for a red baby dragon','Render a 360° turntable of my last scene','Write ad captions for my latest render'].map(s => `<button class="sug">${esc(s)}</button>`).join('')}</div></div>`;
-    col.querySelectorAll('.sug').forEach(b => b.onclick = () => { $('#inp').value = b.textContent; $('#inp').focus(); paintComposer(); });
+      <div class="sugs" id="sugs"></div></div>`;
+    paintIdeas();
     paintComposer(); return;
   }
   const r = c.run, tasks = c.tasks || [], live = c.active && ['running','planning','resting'].includes(r.status), done = tasks.filter(t => t.state === 'passed').length;

@@ -60,7 +60,7 @@ pub fn schemas() -> Value {
           json!({"text":{"type":"string"},"files":{"type":"array","items":{"type":"string"}}}), &["text"]),
         f("image_prompt", "REQUIRED before generating any AI image: submit the exact prompt. The owner approves or edits it; use the prompt that comes back, word for word.",
           json!({"prompt":{"type":"string"},"purpose":{"type":"string"}}), &["prompt","purpose"]),
-        f("interview", "Ask the owner 1-3 quick questions with options BEFORE planning, about choices the goal leaves open (style, framing, size, use, length, tone). Each question: a header (max 12 chars), the question, 2-4 options with a label and one-line description, and multi=true if several can be picked.",
+        f("interview", "Ask the owner 1-3 quick questions with options BEFORE planning, about the choices THIS goal leaves open - specific to its subject, not a stock list. Each question: a header (max 12 chars), the question, 2-4 options with a short label (1-3 words) and a description (max 6 words), and multi=true if several can be picked.",
           json!({"questions":{"type":"array","items":{"type":"object","properties":{
               "header":{"type":"string"},"question":{"type":"string"},"multi":{"type":"boolean"},
               "options":{"type":"array","items":{"type":"object","properties":{"label":{"type":"string"},"description":{"type":"string"}},"required":["label"]}}},
