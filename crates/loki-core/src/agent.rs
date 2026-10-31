@@ -74,6 +74,7 @@ const INSPECT_SCRIPT: &str = include_str!("../../../tools/blender/inspect_scene.
 /// The Blender helper library every job gets in scripts/ (placing, hinging, framing, rendering).
 const LOKI_BPY: &str = include_str!("../../../tools/blender/loki_bpy.py");
 const RENDER_PARTS: &str = include_str!("../../../tools/blender/render_parts.py");
+const LOKI_BUILD: &str = include_str!("../../../tools/blender/loki_build.py");
 
 /// The tools this machine really has, with exact paths (how to use each lives in its playbook, not here).
 fn machine_tools(blender: Option<&str>) -> String {
@@ -82,7 +83,7 @@ fn machine_tools(blender: Option<&str>) -> String {
         lines.push(format!("Blender: \"{b}\" (scripts/loki_bpy.py helpers are in the job folder)"));
     }
     if lines.is_empty() { return String::new(); }
-    format!("\nMACHINE TOOLS (exact paths):\n- {}\n- Work live with the `session` tool (kind blender or python); scripts/render_parts.py renders mesh files from any tool.\n", lines.join("\n- "))
+    format!("\nMACHINE TOOLS (exact paths):\n- {}\n- 3D objects: use the `build` tool (a part spec - LOKI does the placing and rendering). `session` (blender or python) is for anything a spec can't say.\n", lines.join("\n- "))
 }
 
 struct Exchange {
@@ -201,24 +202,9 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
         let mut silent_turns = 0u32;
         // An owner request stays in front of the model until it acts on it.
         let mut owner_request: Option<String> = None;
-        // Turns in a row that changed nothing (notes, looking around, errors, no tool call),
-        // kept in run.json so pauses and approvals don't reset it.
-        let mut idle_turns = info.idle_turns;
-        // jobs from before this counter existed: count from the journal
-        if info.since_pass == 0 && info.steps > 0 {
-            let steps = j.steps();
-            let last = steps.iter().rposition(|s| s["tool"] == "mark_done" && s["result"].as_str().is_some_and(|r| r.contains("passed")));
-            info.since_pass = (steps.len() - last.map(|i| i + 1).unwrap_or(0)) as u32;
-        }
-        // the first error line of the last failed run, to ask for a lesson once it is fixed
-        let mut fixed_error: Option<String> = None;
 
         // Coming back from a pause: apply the owner's answer first.
         if let Some(reply) = info.owner_reply.take() {
-            let stall = crate::tuning::Tuning::load().stall_steps;
-            if info.since_pass >= stall {
-                info.since_pass = stall / 2; // the owner answered the stall question: another round, not forever
-            }
             if let Some(p) = info.pending.take() {
                 let mut call = ToolCall { name: p["name"].as_str().unwrap_or("").into(), args: p["args"].clone() };
                 let note = reply.note.trim().to_string();
@@ -248,8 +234,6 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
                 } else {
                     format!("Owner declined. {}", reply.note)
                 };
-                let failed = result.starts_with("exit Some") || result.starts_with("Owner declined") || result.contains("timed out");
-                idle_turns = if failed { idle_turns + 1 } else { 0 };
                 j.progress(&format!("owner {} {}", if reply.approve { "approved" } else { "declined" }, call.name));
                 j.log_step(&json!({"step": info.steps, "provider": "owner", "model": "", "tool": call.name, "args": call.args,
                     "result": short(&result, 2000), "owner": if reply.approve { "approved" } else { "declined" }}));
@@ -267,6 +251,7 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
         if std::fs::create_dir_all(&scripts).is_ok() {
             let _ = std::fs::write(scripts.join("loki_bpy.py"), LOKI_BPY);
             let _ = std::fs::write(scripts.join("render_parts.py"), RENDER_PARTS);
+            let _ = std::fs::write(scripts.join("loki_build.py"), LOKI_BUILD);
         }
 
         loop {
@@ -356,7 +341,6 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
 
             let Some(call) = reply.call else {
                 silent_turns += 1;
-                idle_turns += 1;
                 j.log_step(&json!({"step": info.steps, "provider": reply.provider, "text": short(&reply.text, 3000)}));
                 nudge = Some(if silent_turns >= 3 {
                     "You have answered 3 times without a tool call. Reply ONLY with JSON like {\"tool\":\"note\",\"args\":{\"text\":\"...\"}}.".into()
@@ -403,62 +387,9 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
             j.log_step(&json!({"step": info.steps, "provider": reply.provider, "model": reply.model,
                 "tool": call.name, "args": call.args, "result": short(&result, 2000),
                 "tin": reply.tokens_in, "tout": reply.tokens_out, "secs": (reply.secs * 10.0).round() / 10.0}));
-            let productive = !result.starts_with("ERROR")
-                && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "session" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish" | "interview" | "inspect_scene" | "look" | "learn");
-            if call.name == "run" {
-                if result.starts_with("ERROR") {
-                    let line = result.lines().rev().find(|l| l.contains("Error") || l.contains("error")).unwrap_or("").trim().to_string();
-                    if !line.is_empty() { fixed_error = Some(line); }
-                } else if let Some(err) = fixed_error.take() {
-                    if nudge.is_none() {
-                        nudge = Some(format!("That fixed the earlier error ({}). Call `learn` with a one-line rule so no future job repeats it, then carry on.", short(&err, 200)));
-                    }
-                }
-            }
-            let repeat = recent.iter().rev().take(4).any(|e| e.call == call);
-            idle_turns = if productive && !repeat { 0 } else { idle_turns + 1 };
-            info.idle_turns = idle_turns;
-            if !paused && j.tasks().is_empty() && info.steps >= 5 && call.name != "plan" {
-                nudge = Some("You still have no checklist. Call `plan` now, or `finish` if the goal needs no work.".into());
-            }
-            if !paused && idle_turns == tune.idle_nudge {
-                nudge = Some(format!("{} turns without progress. Make a real change now (write a file, run a program, mark_done) or block_task the current task.", tune.idle_nudge));
-            }
             let passed_now = call.name == "mark_done" && result.contains("passed");
             if call.name == "mark_done" && (passed_now || result.contains("check failed")) {
                 self.pool.lock().await.report_check(&reply.provider, passed_now);   // evidence for picking models
-            }
-            info.since_pass = if passed_now { 0 } else { info.since_pass + 1 };
-            if !paused && info.since_pass == tune.stall_steps * 2 / 3 {
-                nudge = Some(format!("{} steps since a step last passed its check. The same approach keeps failing: change the \
-                    approach (simpler shapes, a loki_bpy kit, fewer parts), or block_task this step with what you tried.", info.since_pass));
-            }
-            if !paused && info.since_pass >= tune.stall_steps && idle_turns < tune.idle_ask {
-                let task = current_task(&j.tasks()).map(|t| format!(" \"{}\"", t.title)).unwrap_or_default();
-                let last_fail = recent.iter().rev().find(|e| e.result.contains("check failed") || e.result.contains("score") || e.result.starts_with("ERROR"))
-                    .map(|e| short(&e.result, 220)).unwrap_or_default();
-                let q = format!("I've worked {} steps on{task} without passing its check. Latest: {last_fail}\nShould I keep trying a different way, accept it as it is, or stop?", info.since_pass);
-                info.pending = Some(json!({"name": "ask_owner", "args": {"question": q, "options": ["Try a different way", "Accept it as it is", "Stop this job"]}}));
-                info.waiting_for = Some(q.clone());
-                info.status = Status::Waiting;
-                j.save_info(&info)?;
-                j.say("loki", &q, vec![]);
-                j.progress(&format!("paused: {} steps without a passed check", info.since_pass));
-                return Ok(info);
-            }
-            if !paused && idle_turns >= tune.idle_ask {
-                // Out of ideas: ask the owner instead of burning the free budget.
-                let mut last: Vec<String> = recent.iter().rev().take(6).map(|e| e.call.name.replace('_', " ")).collect();
-                last.dedup();
-                let task = current_task(&j.tasks()).map(|t| format!(" on \"{}\"", t.title)).unwrap_or_default();
-                let q = format!("I'm stuck{task}: 16 turns without real progress (mostly: {}). How should I continue?", last.join(", "));
-                info.pending = Some(json!({"name": "ask_owner", "args": {"question": q}}));
-                info.waiting_for = Some(q.clone());
-                info.status = Status::Waiting;
-                j.save_info(&info)?;
-                j.say("loki", &q, vec![]);
-                j.progress("paused: no progress for 16 turns");
-                return Ok(info);
             }
             j.save_info(&info)?;
             if paused {
@@ -702,6 +633,31 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
                     Err(e) => Outcome::Err(e),
                 }
             }
+            "build" => {
+                let Some(blender) = self.blender.clone() else { return Outcome::Err("Blender is not installed on this machine".into()) };
+                let spec = if a["spec"].is_string() { serde_json::from_str::<Value>(a["spec"].as_str().unwrap()).unwrap_or(json!({})) } else { a["spec"].clone() };
+                let name: String = spec["name"].as_str().unwrap_or("model").chars().map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
+                let name = if name.is_empty() { "model".to_string() } else { name };
+                let _ = std::fs::create_dir_all(ws.join("scenes"));
+                let spec_rel = format!("scenes/{name}.json");
+                if std::fs::write(ws.join(&spec_rel), serde_json::to_string_pretty(&spec).unwrap_or_default()).is_err() {
+                    return Outcome::Err("could not write the spec".into());
+                }
+                let cmd = format!("\"{blender}\" --background --factory-startup --python-exit-code 1 --python scripts/loki_build.py -- {spec_rel}");
+                let limit = Duration::from_secs(crate::tuning::Tuning::load().command_timeout_s);
+                let out = match tools::shell(&ws, &cmd, limit).await { Outcome::Ok(t) | Outcome::Err(t) | Outcome::NeedsOwner(t) => t };
+                if let Some(l) = out.lines().find(|l| l.contains("LOKI_SPEC_ERROR")) {
+                    return Outcome::Err(format!("ERROR in the spec: {} (nothing was built; fix the spec and build again)", l.split("LOKI_SPEC_ERROR").nth(1).unwrap_or("").trim()));
+                }
+                match out.lines().find(|l| l.contains("LOKI_INFO ")) {
+                    Some(l) => Outcome::Ok(format!("built {name}: {}\nfiles: scenes/{name}.blend, renders/{name}.png, renders/{name}_views.png (look at the views next)",
+                        l.split("LOKI_INFO ").nth(1).unwrap_or("").trim())),
+                    None => {
+                        let tail: Vec<&str> = out.lines().filter(|l| l.contains("Error") || l.contains("error") || l.contains("Traceback") || l.trim_start().starts_with("File")).collect();
+                        Outcome::Err(format!("ERROR: the build failed:\n{}", tail.iter().rev().take(8).rev().cloned().collect::<Vec<_>>().join("\n")))
+                    }
+                }
+            }
             "session" => {
                 let kind = a["kind"].as_str().unwrap_or("python");
                 let Some(code) = a["code"].as_str() else { return Outcome::Err("missing 'code'".into()) };
@@ -794,7 +750,7 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
                 let again = a["command"].as_str().is_some_and(|c| info.approved_commands.iter().any(|x| x == c));
                 tools::run(&ws, &self.cfg.policy, a, approved || again).await
             }
-            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, session, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, interview, inspect_scene, look, learn, finish")),
+            other => Outcome::Err(format!("unknown tool '{other}'. Available: plan, list_dir, read_file, write_file, run, build, session, mark_done, block_task, add_task, note, ask_owner, tell_owner, image_prompt, interview, inspect_scene, look, learn, finish")),
         }
     }
 }

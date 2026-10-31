@@ -6,29 +6,27 @@ description: Build, light and render a prop or scene from scratch in Blender, li
 
 Written from what went wrong in LOKI's first real jobs (floating lids, flames outside the frame, crashes on Blender 5.2).
 
-**Work live, step by step** (the way the best agents on the BlenderWorld benchmark work): use the `session` tool with
-kind `blender`. The scene stays open between calls, so build one part, check it, adjust, then the next:
+**Use the `build` tool for any object.** Write a part spec - what each part is, its size, what it sits on - and LOKI
+does every coordinate, bevel, material, light and render. Parts attach face to face, so nothing floats. Think like a
+modeller: main body first, then what sits on it, then details (rims, bands, handles, feet). Real sizes in metres.
 
-```python
-# call 1                                         # call 2: check before moving on
-start()                                          scene()          # names, sizes, positions
-wood = pbr("Wood", "wood_planks", scale=2)       # call 3: look from four sides when a part is in place
-body = tray("Body", (0.8, 0.5, 0.45), wall=0.04, material=wood, bevel=0.01)
-ground(6, mat("Floor", "#4a4744", rough=0.9))    look("step1")    # -> renders/step1_views.png, then `look` it
-# ... more parts, measured from the ones before (place_on, place_beside, hinge) ...
-save("scenes/chest.blend"); finish("chest")      # final render + four-view sheet
+```json
+{"name": "lantern", "materials": {"brass": "brass", "glass": "glass", "flame": {"color": "#ffb347", "emit": 8}},
+ "parts": [
+  {"id": "base",   "shape": "lathe",    "size": [0.20, 0.20, 0.04], "mat": "brass", "profile": [[0.5,0],[0.5,0.3],[0.44,0.45],[0.44,1]]},
+  {"id": "glass",  "shape": "tube",     "size": [0.15, 0.15, 0.22], "mat": "glass", "on": "base", "at": "top", "wall": 0.003},
+  {"id": "post",   "shape": "cylinder", "size": [0.014, 0.014, 0.22], "mat": "brass", "on": "base", "at": "top", "repeat": {"count": 4, "around": 0.08}},
+  {"id": "band",   "shape": "torus",    "size": [0.17, 0.17, 0.012], "mat": "brass", "on": "base", "at": "top", "offset": [0, 0, 0.1]},
+  {"id": "collar", "shape": "cylinder", "size": [0.19, 0.19, 0.02], "mat": "brass", "on": "glass", "at": "top"},
+  {"id": "cap",    "shape": "cone",     "size": [0.21, 0.21, 0.09], "mat": "brass", "on": "collar", "at": "top", "top": 0.18},
+  {"id": "ring",   "shape": "torus",    "size": [0.08, 0.08, 0.012], "mat": "brass", "on": "cap", "at": "top", "rotate": [90, 0, 0]},
+  {"id": "burner", "shape": "cylinder", "size": [0.05, 0.05, 0.03], "mat": "brass", "on": "base", "at": "top"},
+  {"id": "flame",  "shape": "sphere",   "size": [0.025, 0.025, 0.055], "mat": "flame", "on": "burner", "at": "top"}]}
 ```
-Look at your own views about every few parts (not after every line - effective feedback beats lots of it).
-Everything sizes in metres; parts stand on their bottom centre; +y is the back, the camera looks from -y.
-
-**Quality, in order of what matters** (from research on LLM-made 3D: LL3M, BlenderLLM, BlenderRAG):
-- Real surfaces: `pbr(name, asset)` loads a Poly Haven scan (wood_planks, rusty_metal_02, brick_wall_001,
-  rock_face, forest_ground_01, rough_concrete, painted_plaster_wall ...); unknown or offline -> a flat `fallback`.
-  `hdri("studio_small_09")` (in lights()) gives real reflections; outdoors try "kloofendal_48d_partly_cloudy".
-- Real shapes: tray() for anything that holds things, ring() for bands and frames, planks() for wood panels,
-  bevel every hard edge. A solid block with things on top reads as a toy.
-- Check every side: `renders/<name>_views.png` (front, right, back, above) is what the `look:` check scores - a part
-  floating at the back fails it. Look at the sheet yourself before you call a step done.
+A chest: body `shell` (open top, "wall"), lid `barrel` on body at top with "hinge": {"edge": "back", "angle": 105},
+bands: a `box` a little larger than the body at "center" with "wrap": true (it becomes a strap), the same on the lid with
+a `barrel` band; treasure: a `dome` on the body "inside".
+After building, `look` at renders/<name>_views.png, fix the spec (sizes, what's missing) and build again.
 
 **Script shape without the helpers** (one script makes everything; run: `blender --background --python scripts/x.py`)
 1. Start clean: `bpy.ops.wm.read_factory_settings(use_empty=True)`; real units (metres): a chest ~0.8 x 0.5 x 0.5.

@@ -72,9 +72,16 @@ Done 2026-10-30 (owner: "keep improving ... use deepseek and that nano one ... n
 - [x] Auto / Smart instead of Agent / Hard. Live `session` tool: an interpreter (Blender or Python) that stays open
   per job, so work goes step by step instead of re-running one big script.
 
+Done 2026-10-30 (owner: "strip that logic that makes it loop", "real results, not floating low-poly bits"):
+
+- [x] No more pausing guards: the 30-step stall question, idle nudges and idle questions are gone; a job works until
+  it is done or out of budget.
+- [x] `build` tool + tools/blender/loki_build.py: the model writes a part spec (shape, size, what it sits on, where);
+  LOKI places every part face to face, bevels, smooths, wraps bands, hinges lids, lights, renders four views.
+
 Next, in order:
 
-0. Prove the live-session flow on the PC (same chest brief), then other kinds of work through the same loop.
+0. LOKI builds lantern / chest / stool / reading nook with `build` on the PC; grow shapes from what jobs ask for.
 
 Then (owner's direction 2026-10-29: art, production, creation; long runs; free models;
 owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local

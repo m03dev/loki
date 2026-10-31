@@ -42,9 +42,6 @@ impl Tuning {
     pub fn describe() -> Value {
         json!([
             {"key": "look_pass", "label": "Vision pass mark", "help": "A look: check passes at this score out of 10", "min": 1, "max": 10, "step": 0.5},
-            {"key": "stall_steps", "label": "Ask after steps without a pass", "help": "Steps without passing any check before the job stops and asks you", "min": 5, "max": 200, "step": 1},
-            {"key": "idle_nudge", "label": "Nudge after idle turns", "help": "Turns that change nothing before the model is told to make a real change", "min": 2, "max": 100, "step": 1},
-            {"key": "idle_ask", "label": "Ask after idle turns", "help": "Turns that change nothing before the job asks you", "min": 3, "max": 200, "step": 1},
             {"key": "task_attempts", "label": "Attempts per step", "help": "Failed attempts at one step before it is set aside", "min": 1, "max": 50, "step": 1},
             {"key": "context_window", "label": "Steps kept word for word", "help": "Recent steps the model sees in full; older ones are summarised", "min": 2, "max": 30, "step": 1},
             {"key": "rest_cap_s", "label": "Longest rest (s)", "help": "Longest wait when every free model is busy", "min": 10, "max": 3600, "step": 10},
