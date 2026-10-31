@@ -35,7 +35,8 @@ shapes: box, cylinder, tube ("wall"), sphere, dome (half sphere), barrel (half c
   rod - a round bar between parts: {"shape": "rod", "between": "leg", "height": 0.35, "diameter": 0.02} joins each
         copy of a repeated part to the next (rungs); or "from": "leg_1", "to": "leg_2". height = 0-1 up the parts.
   heap - a mound covered in small pieces: {"shape": "heap", "on": "body", "at": "inside", "mat": "gold",
-         "pieces": "coin"|"ball"} fills a container (no size needed); on a table give "size": [x, y, height].
+         "pieces": "coin"|"ball", "spill": "front"} fills a container (no size needed) and, with spill (front, back,
+         left, right, all), pours over onto the floor; on a table give "size": [x, y, height].
   "repeat": {"count": 3, "around": 0.1, "splay": 12} spreads copies round the parent and leans them out (legs).
 The finished model always stands on the floor (its lowest point at z = 0).
   "bevel": edge rounding in metres (default: small, automatic); "smooth": true/false (default: true for round shapes).
@@ -445,7 +446,7 @@ def make_heap(p, first, mat):
             x, y = min(x, p["size"][0]), min(y, p["size"][1])
         floor_z = plo.z + w
         edge = max(0.0, phi.z - 0.012 - floor_z)
-        crown = float(p["size"][2]) * 0.5 if "size" in p else min(x, y) * 0.16
+        crown = float(p["size"][2]) * 0.5 if "size" in p else min(x, y) * 0.25
         peak = edge + crown
         rect = par.get("loki_shape") not in ROUND
         centre = Vector(((plo.x + phi.x) / 2, (plo.y + phi.y) / 2, floor_z))
@@ -538,7 +539,31 @@ def make_heap(p, first, mat):
         if par is not None:
             o.parent = par
             o.matrix_parent_inverse = par.matrix_world.inverted()
-    return [mound, pieces]
+    out = [mound, pieces]
+    side = p.get("spill")
+    if inside and side:
+        # overflowing: a low pile on the floor against the container's side, as if poured over the rim
+        sides = ("front", "back", "left", "right") if side == "all" else (side,)
+        for sd in sides:
+            if sd not in ("front", "back", "left", "right"):
+                raise SpecError(f"heap '{pid}': spill is front, back, left, right or all")
+            along_x = sd in ("front", "back")
+            wdt = (phi.x - plo.x if along_x else phi.y - plo.y) * 0.85
+            dep = (phi.z - plo.z) * 0.9
+            q = {"id": f"{pid}_spill_{sd}", "shape": "heap", "mat": p.get("mat"), "pieces": p.get("pieces", "coin"),
+                 "size": [wdt, dep, dep * 0.3] if along_x else [dep, wdt, dep * 0.3], "seed": int(p.get("seed", 7)) + len(out)}
+            objs = make_heap(q, first, mat)
+            lo2, hi2 = bounds(objs[0])
+            c = (plo + phi) / 2
+            tgt = {"front": Vector((c.x, plo.y - (hi2.y - lo2.y) / 2 + 0.02, 0)), "back": Vector((c.x, phi.y + (hi2.y - lo2.y) / 2 - 0.02, 0)),
+                   "left": Vector((plo.x - (hi2.x - lo2.x) / 2 + 0.02, c.y, 0)), "right": Vector((phi.x + (hi2.x - lo2.x) / 2 - 0.02, c.y, 0))}[sd]
+            for o in objs:
+                o.location = Vector((tgt.x, tgt.y, plo.z))
+                o.parent = par
+                o.matrix_parent_inverse = par.matrix_world.inverted()
+            out += objs
+        bpy.context.view_layer.update()
+    return out
 
 
 def make_derived(p, first, made, mats):
@@ -790,7 +815,8 @@ def build(spec):
         h = p.get("hinge")
         if h:
             for o in made[p["id"]]:
-                hinge(o, h.get("edge", "back"), float(h.get("angle", 90)), first.get(p.get("on")))
+                # past ~120 degrees a lid lies flat behind the box and stops reading as an open lid
+                hinge(o, h.get("edge", "back"), min(120.0, float(h.get("angle", 105))), first.get(p.get("on")))
     check_contacts(spec, made, first)   # after hinges: what touched the shut lid must still touch something
     # real light sources (a flame, a bulb: emit >= 1.5) light the scene - one light per part, not per copy or coin;
     # a faint glow (gold with emit 0.4) only glows
