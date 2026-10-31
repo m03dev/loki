@@ -98,12 +98,18 @@ def make_material(name, spec):
         else:
             spec = {"color": "#9a9a9a"}
     spec = dict(spec)
+    # {"wood": {"color": "#8b4513"}}: a material named like a preset keeps the preset's real surface (scanned wood,
+    # stone ...) - the colour alone renders as flat plastic
+    if "preset" not in spec and not spec.get("pbr") and name.lower() in PRESET:
+        spec = {**PRESET[name.lower()], **{k: v for k, v in spec.items() if k != "color"}}
     # models write metal: true, emit: false - numbers from here on
     for k, on in (("metal", 1.0), ("emit", 4.0)):
         if isinstance(spec.get(k), bool):
             spec[k] = on if spec[k] else 0.0
     if float(spec.get("metal") or 0) >= 0.5 and 0 < float(spec.get("emit") or 0) < 1.5:
         spec["emit"] = 0.0   # "shiny gold" written as a faint glow renders as a lamp; metal shines by reflection
+    if float(spec.get("metal") or 0) >= 0.5:
+        spec["rough"] = max(0.2, float(spec.get("rough", 0.3)))   # a mirror-smooth metal reflects the dark room as black
     if "preset" in spec and spec["preset"] in PRESET:
         spec = {**PRESET[spec["preset"]], **{k: v for k, v in spec.items() if k != "preset"}}
     if spec.get("pbr"):
