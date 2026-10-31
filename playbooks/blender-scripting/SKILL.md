@@ -6,7 +6,8 @@ description: Build, light and render a prop or scene from scratch in Blender, li
 
 Written from what went wrong in LOKI's first real jobs (floating lids, flames outside the frame, crashes on Blender 5.2).
 
-**Use the `build` tool for any object.** Write a part spec - what each part is, its size, what it sits on - and LOKI
+**Use the `build` tool for any object - one spec for the whole object, one task for it** (plan "Build the chest" checked
+by `look:renders/chest.png`, not a task and a build per part). Write a part spec - what each part is, its size, what it sits on - and LOKI
 does every coordinate, bevel, material, light and render. Parts attach face to face, so nothing floats. Think like a
 modeller: main body first, then what sits on it, then details (rims, bands, handles, feet). Real sizes in metres.
 

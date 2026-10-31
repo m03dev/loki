@@ -803,6 +803,9 @@ def main():
     path = args[0] if os.path.isabs(args[0]) else os.path.join(os.path.dirname(HERE), args[0])
     with open(path, encoding="utf-8") as f:
         spec = json.load(f)
+    if not isinstance(spec, dict):
+        print('LOKI_SPEC_ERROR the spec must be {"name": ..., "materials": {...}, "parts": [...]}')
+        raise SystemExit(2)
     name = spec.get("name") or os.path.splitext(os.path.basename(path))[0]
     L.start(os.path.join(HERE, "loki_build.py"))
     t0 = time.time()

@@ -636,6 +636,9 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
             "build" => {
                 let Some(blender) = self.blender.clone() else { return Outcome::Err("Blender is not installed on this machine".into()) };
                 let spec = if a["spec"].is_string() { serde_json::from_str::<Value>(a["spec"].as_str().unwrap()).unwrap_or(json!({})) } else { a["spec"].clone() };
+                if !spec["parts"].as_array().is_some_and(|p| !p.is_empty()) {
+                    return Outcome::Err("ERROR: build needs {\"spec\": {\"name\": ..., \"materials\": {...}, \"parts\": [...]}} - the whole object in one spec (nothing was built)".into());
+                }
                 let name: String = spec["name"].as_str().unwrap_or("model").chars().map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
                 let name = if name.is_empty() { "model".to_string() } else { name };
                 let _ = std::fs::create_dir_all(ws.join("scenes"));
