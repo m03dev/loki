@@ -293,6 +293,21 @@ def pbr(name, asset, scale=1.0, tint=None, res="1k", fallback="#9a8a78", metal=N
 
 # ---------------------------------------------------------------- parts (metres, origin at bottom centre)
 
+def _friendly(fn):
+    """Accept the names models reach for: location= / loc= / position= for at=, mat= for material=."""
+    import functools
+
+    @functools.wraps(fn)
+    def wrap(*a, **kw):
+        for alias in ("location", "loc", "position", "pos"):
+            if alias in kw and "at" not in kw:
+                kw["at"] = kw.pop(alias)
+        if "mat" in kw and "material" not in kw:
+            kw["material"] = kw.pop("mat")
+        return fn(*a, **kw)
+    return wrap
+
+
 def _finish_part(o, name, material, bevel_w, segments=2):
     o.name = name
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
@@ -310,6 +325,7 @@ def _finish_part(o, name, material, bevel_w, segments=2):
     return o
 
 
+@_friendly
 def box(name, size=(1, 1, 1), material=None, at=(0, 0, 0), bevel=0.0):
     """A box `size` = (x, y, z) metres, standing on `at`."""
     bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
@@ -320,6 +336,7 @@ def box(name, size=(1, 1, 1), material=None, at=(0, 0, 0), bevel=0.0):
     return o
 
 
+@_friendly
 def tray(name, size=(1, 1, 1), wall=0.03, material=None, at=(0, 0, 0), bevel=0.0):
     """An open-top box (a chest body, crate, drawer, planter): floor + four walls `wall` m thick, one object.
     Things put in it with place_inside() / coins() sit inside, not on a solid lid."""
@@ -333,6 +350,7 @@ def tray(name, size=(1, 1, 1), wall=0.03, material=None, at=(0, 0, 0), bevel=0.0
     return o
 
 
+@_friendly
 def ring(name, size=(1, 1, 0.05), wall=0.01, material=None, at=(0, 0, 0)):
     """A rectangular band with no floor or lid (iron bands round a chest, a frame round a door): four thin walls."""
     x, y, z = size
@@ -345,6 +363,7 @@ def ring(name, size=(1, 1, 0.05), wall=0.01, material=None, at=(0, 0, 0)):
     return o
 
 
+@_friendly
 def cyl(name, radius=0.5, depth=1.0, material=None, at=(0, 0, 0), axis="Z", verts=24, bevel=0.0):
     """A cylinder. axis "X"/"Y" lays it down (logs, bars, hinges); origin at the bottom centre after turning."""
     bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=radius, depth=depth, location=(0, 0, 0))
@@ -359,6 +378,7 @@ def cyl(name, radius=0.5, depth=1.0, material=None, at=(0, 0, 0), axis="Z", vert
     return o
 
 
+@_friendly
 def sphere(name, radius=0.5, material=None, at=(0, 0, 0), low=True):
     if low:
         bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=radius, location=(0, 0, 0))
@@ -369,6 +389,7 @@ def sphere(name, radius=0.5, material=None, at=(0, 0, 0), low=True):
     return o
 
 
+@_friendly
 def cone(name, radius=0.5, depth=1.0, material=None, at=(0, 0, 0), verts=12, radius_top=0.0):
     bpy.ops.mesh.primitive_cone_add(vertices=verts, radius1=radius, radius2=radius_top, depth=depth, location=(0, 0, 0))
     o = _finish_part(bpy.context.object, name, material, 0)
@@ -490,6 +511,7 @@ def array(o, count, offset=(1, 0, 0), relative=True):
     return o
 
 
+@_friendly
 def planks(name, size=(1, 0.5, 0.4), n=4, material=None, gap=0.006, axis="z", bevel_w=0.008):
     """A panel made of `n` planks (wood reads as wood). Returns the joined object, origin bottom centre."""
     i = "xyz".index(axis)
@@ -740,6 +762,7 @@ def finish(name, size=(1024, 1024), engine=None, samples=64, sheet=True):
 
 # ---------------------------------------------------------------- shapes for kits
 
+@_friendly
 def dome(name, size=(1, 0.5, 0.2), material=None, at=(0, 0, 0), segments=16, bevel=0.0):
     """A half-round (barrel-top) lid: a half ellipse in Y/Z run along X. size = (length x, width y, rise z)."""
     import bmesh
@@ -777,6 +800,7 @@ def _turn(objs, pivot, axis, degrees):
     bpy.context.view_layer.update()
 
 
+@_friendly
 def lathe(name, profile, material=None, at=(0, 0, 0), segments=32, cap=True):
     """Spin a profile [(radius, z), ...] (bottom to top) round Z: barrels, vases, bottles, columns, lamp bases."""
     import bmesh

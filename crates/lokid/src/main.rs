@@ -1150,6 +1150,8 @@ async fn fit_local_models(pool: &mut ModelPool) {
 }
 
 async fn serve(home: PathBuf) -> anyhow::Result<()> {
+    std::env::set_var("LOKI_HOME", &home);
+    loki_core::session::reap_leftovers();
     let mut pool = load_pool(&home)?;
     fit_local_models(&mut pool).await;
     discover_vision(&mut pool, &home).await;

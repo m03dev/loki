@@ -59,6 +59,7 @@ impl Sessions {
                     cmd.creation_flags(0x0800_0000);
                 }
                 let mut child = cmd.spawn().map_err(|e| format!("cannot start the {kind} session ({prog}): {e}"))?;
+                if let Some(pid) = child.id() { remember_pid(pid); }
                 let stdin = child.stdin.take().ok_or("no stdin")?;
                 let out = BufReader::new(child.stdout.take().ok_or("no stdout")?).lines();
                 let l = Arc::new(Mutex::new(Live { _child: child, stdin, out }));
@@ -99,6 +100,44 @@ impl Sessions {
     pub async fn close(&self, job: &str) {
         self.live.lock().await.retain(|k, _| !k.starts_with(&format!("{job}|")));
     }
+}
+
+/// Session processes this driver started, so a restarted driver (an update, a crash) can stop the ones it left behind
+/// - on Windows a child outlives its parent, and every leftover Blender holds memory.
+fn pid_file() -> Option<std::path::PathBuf> {
+    std::env::var("LOKI_HOME").ok().map(|h| std::path::Path::new(&h).join("session_pids.txt"))
+}
+
+fn remember_pid(pid: u32) {
+    if let Some(f) = pid_file() {
+        use std::io::Write;
+        if let Ok(mut h) = std::fs::OpenOptions::new().create(true).append(true).open(f) {
+            let _ = writeln!(h, "{pid}");
+        }
+    }
+}
+
+/// Call once when the driver starts: stop session processes a previous driver left running.
+pub fn reap_leftovers() {
+    let Some(f) = pid_file() else { return };
+    let Ok(text) = std::fs::read_to_string(&f) else { return };
+    for pid in text.lines().filter_map(|l| l.trim().parse::<u32>().ok()) {
+        // only if that pid is still a Blender or Python (pids get reused after a reboot)
+        #[cfg(windows)]
+        for image in ["blender.exe", "python.exe", "python3.exe"] {
+            let _ = std::process::Command::new("taskkill").args(["/PID", &pid.to_string(), "/FI", &format!("IMAGENAME eq {image}"), "/T", "/F"])
+                .stdout(Stdio::null()).stderr(Stdio::null()).status();
+        }
+        #[cfg(unix)]
+        {
+            let comm = std::process::Command::new("ps").args(["-p", &pid.to_string(), "-o", "comm="]).output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_ascii_lowercase()).unwrap_or_default();
+            if comm.contains("blender") || comm.contains("python") {
+                let _ = std::process::Command::new("kill").args(["-9", &pid.to_string()]).stdout(Stdio::null()).stderr(Stdio::null()).status();
+            }
+        }
+    }
+    let _ = std::fs::remove_file(f);
 }
 
 async fn read_done(out: &mut Lines<BufReader<ChildStdout>>) -> Result<Value, String> {

@@ -14,7 +14,7 @@ import traceback
 from contextlib import redirect_stderr, redirect_stdout
 
 ROOT = os.getcwd()
-ns = {"__name__": "__loki_session__", "ROOT": ROOT}
+ns = {"__name__": "__loki_session__", "ROOT": ROOT, "__file__": os.path.join(ROOT, "scripts", "session.py")}  # script-style code works too
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 try:
     import bpy  # noqa: F401  (only inside Blender)
