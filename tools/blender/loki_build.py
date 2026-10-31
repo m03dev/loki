@@ -453,6 +453,7 @@ def make_heap(p, first, mat):
         if "size" not in p:
             raise SpecError(f"heap '{pid}' needs a size [x, y, height] (or \"at\": \"inside\" a container to fill it)")
         x, y, peak = (float(v) for v in p["size"])
+        peak = min(peak, 0.35 * min(x, y))   # a loose pile slumps: never an egg standing up
         edge, rect = 0.0, p.get("footprint") == "box"
         centre = Vector((0, 0, 0))
     a, b = x / 2, y / 2
@@ -504,7 +505,9 @@ def make_heap(p, first, mat):
 
     piece = float(p.get("piece", max(0.018, min(0.045, min(x, y) * 0.07))))
     kind = p.get("pieces", "coin")
-    count = int(p.get("count", min(1500, (x * y if rect else math.pi * a * b) / (piece * piece) * 2.2)))
+    # enough pieces to cover the mound: a smaller "count" leaves a bare gold blob showing
+    dense = (x * y if rect else math.pi * a * b) / (piece * piece) * 2.2
+    count = int(min(2500, max(dense, float(p.get("count", 0)))))
     bm = bmesh.new()
     e = 1e-3
     for k in range(count):
