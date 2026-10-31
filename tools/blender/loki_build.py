@@ -399,6 +399,10 @@ def gap(a, b):
     return best
 
 
+def _bevel(o):
+    return sum(m.width for m in o.modifiers if m.type == "BEVEL")
+
+
 def check_contacts(spec, made, first):
     """Nothing floats: every attached part must touch what it is on. A gap is an error the model fixes."""
     bad = []
@@ -407,12 +411,14 @@ def check_contacts(spec, made, first):
         if not on or p.get("shape") in DERIVED or p["id"] not in made:
             continue
         others = [x for q in spec["parts"] if q["id"] != p["id"] and q["id"] in made and q.get("shape") != "heap" for x in made[q["id"]][:12]]
+        # a hinge is a real joint: rounded (bevelled) corners on the lid and the body open a gap at the pivot
+        tol = 0.004 + (_bevel(made[p["id"]][0]) + _bevel(first[on])) * 1.5 if p.get("hinge") else 0.004
         for o in made[p["id"]]:
             g = gap(o, first[on])
-            if g > 0.004:
+            if g > tol:
                 # it may rest on something else instead (a band on the posts around a base)
                 g = min([g] + [gap(o, x) for x in others])
-            if g > 0.004:
+            if g > tol:
                 bad.append(f"'{o.name}' floats {g * 100:.1f} cm away from '{on}' (and everything else)")
     if bad:
         raise SpecError("; ".join(bad[:6]) + ". Parts must touch what they are on: drop or shrink the offset, pick the "
