@@ -712,19 +712,22 @@ def build(spec):
             for o in made[p["id"]]:
                 hinge(o, h.get("edge", "back"), float(h.get("angle", 90)), first.get(p.get("on")))
     check_contacts(spec, made, first)   # after hinges: what touched the shut lid must still touch something
-    # light sources light the scene
+    # real light sources (a flame, a bulb: emit >= 1.5) light the scene - one light per part, not per copy or coin;
+    # a faint glow (gold with emit 0.4) only glows
     for p in spec["parts"]:
         m = mats.get(p.get("mat") or p.get("material") or "plastic")
-        if m is not None and m.get("loki_emit"):
-            for o in made[p["id"]]:
-                lo, hi = bounds(o)
-                ld = bpy.data.lights.new(o.name + "_light", "POINT")
-                ld.energy = 15 * m["loki_emit"]
-                ld.color = tuple(m.diffuse_color[:3])
-                ld.shadow_soft_size = max(0.01, (hi - lo).length / 4)
-                lo_ = bpy.data.objects.new(o.name + "_light", ld)
-                bpy.context.scene.collection.objects.link(lo_)
-                lo_.location = (lo + hi) / 2
+        if m is None or m.get("loki_emit", 0) < 1.5 or p["id"] not in made:
+            continue
+        objs = made[p["id"]][:8]
+        for o in objs:
+            lo, hi = bounds(o)
+            ld = bpy.data.lights.new(o.name + "_light", "POINT")
+            ld.energy = 15 * m["loki_emit"] / len(objs)
+            ld.color = tuple(m.diffuse_color[:3])
+            ld.shadow_soft_size = max(0.01, (hi - lo).length / 4)
+            lo_ = bpy.data.objects.new(o.name + "_light", ld)
+            bpy.context.scene.collection.objects.link(lo_)
+            lo_.location = (lo + hi) / 2
     return made, issues
 
 
