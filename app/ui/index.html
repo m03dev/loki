@@ -202,7 +202,10 @@ body.menuopen [data-tip]:hover::after{display:none}
 .mtag{font-size:10px;padding:1px 7px;border-radius:99px;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent);margin-right:6px;white-space:nowrap}
 .lib .mtag{position:absolute;top:6px;left:6px}
 .pager{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--dim)}
-.sec{margin-bottom:18px}.sec>h3{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 8px;font-weight:700;display:flex;align-items:center;gap:6px}
+.sec{margin-bottom:6px;padding:2px 0 8px;border-bottom:1px solid var(--edge)}.sec>h3{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:6px 0 8px;font-weight:650;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.sec>h3::after{content:"";width:6px;height:6px;border-right:1.5px solid var(--dim);border-bottom:1.5px solid var(--dim);transform:rotate(45deg);margin-left:6px;transition:.15s}
+.sec.shut>h3::after{transform:rotate(-45deg)}.sec.shut>:not(h3){display:none}.sec.shut>h3{margin-bottom:0}.sec.shut>h3 .btn{display:none}
+.num{width:84px;padding:4px 8px;border-radius:9px;border:1px solid var(--edge);background:rgba(0,0,0,.18);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
 .themes{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
 .th{padding:8px;border-radius:12px;border:1px solid var(--edge);background:var(--g2);font-size:12px;text-align:left;box-shadow:inset 0 1px 0 var(--hi)}
 .th.on{border-color:color-mix(in srgb,var(--accent) 60%,transparent)}
@@ -460,7 +463,8 @@ async function paintSettings() {
     <div class="sec"><h3>${ic('term')} Logs <span class="sp"></span><span class="seg" id="logWho"></span></h3><div class="seg" id="logFile" style="margin-bottom:6px"></div><pre class="logs" id="logBox"></pre></div>
     <div class="sec"><h3>${ic('monitor')} This machine <span class="sp"></span><button class="btn sm" id="scanB">Scan again</button></h3><div id="sysBox"><div class="empty">Scanning…</div></div></div>
     <div class="sec"><h3>${ic('chip')} Local models</h3><div id="localBox"><div class="empty">…</div></div></div>
-    <div class="sec"><h3>${ic('refresh')} Free online models <span class="sp"></span><button class="btn sm" id="probeB">Check all</button></h3><div id="freeBox"></div></div>
+    <div class="sec"><h3>${ic('refresh')} Models <span class="sp"></span><button class="btn sm" id="probeB">Check all</button></h3><div id="roleBox"></div><div id="freeBox"></div></div>
+    <div class="sec"><h3>${ic('wand')} Tuning <span class="sp"></span><button class="btn sm" id="tuneReset">Defaults</button></h3><div id="tuneBox"><div class="empty">…</div></div></div>
     <div class="sec"><h3>${ic('book')} What LOKI knows</h3><div id="knowBox"><div class="empty">…</div></div></div>`;
   api('/link').then(l => { const el = $('#linkBox'); if (!el) return;
     if (l.off) { el.innerHTML = `<div class="empty">Off — ${esc(l.why)}</div>`; return; }
@@ -480,7 +484,30 @@ async function paintSettings() {
   db.querySelectorAll('[data-iv-set]').forEach(b => b.onclick = () => { CFG.interview = b.dataset.ivSet; saveCfg(); paintSettings(); });
   db.querySelectorAll('[data-nt]').forEach(b => b.onclick = () => { CFG.notify = b.dataset.nt === '1'; if (CFG.notify && 'Notification' in window) Notification.requestPermission?.(); saveCfg(); paintSettings(); });
   $('#scanB').onclick = () => scan(); $('#probeB').onclick = async () => { $('#freeBox').innerHTML = '<div class="empty">Asking every model for a one-word answer…</div>'; await loadModels(true); paintFree(); };
-  paintFree(); scan();
+  paintFree(); scan(); paintRoles(); paintTuning();
+  /* compact: every section folds by its title; the choice is remembered */
+  const shut = new Set(CFG.shut || ['logs', 'this machine', 'local models', 'what loki knows', 'tuning']);
+  db.querySelectorAll('.sec').forEach(sec => { const h = sec.querySelector('h3'), key = [...h.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(' ').trim().toLowerCase().replace(/\s+/g, ' ');
+    sec.classList.toggle('shut', shut.has(key));
+    h.onclick = e => { if (e.target.closest('button')) return; sec.classList.toggle('shut'); sec.classList.contains('shut') ? shut.add(key) : shut.delete(key); CFG.shut = [...shut]; saveCfg(); }; });
+}
+/* which model does each kind of work: Auto picks by evidence (checks passed), or pin one */
+function paintRoles() {
+  const el = $('#roleBox'); if (!el) return; const t = (CFG.tuning = CFG.tuning || {});
+  const roles = [['brain', 'Thinking', 'plans and builds'], ['fast', 'Quick', 'small steps, summaries'], ['vision', 'Looking', 'scores renders']];
+  el.innerHTML = roles.map(([r, l, d]) => { const pin = S.models.find(m => m.role === r && m.provider === t[r]);
+    return `<div class="row"><label>${l} <small style="color:var(--dim)">${d}</small></label><button class="dd" data-role="${r}"><span>${pin ? esc(niceModel(pin.model)) : 'Auto'}</span>${ic('chev')}</button></div>`; }).join('');
+  el.querySelectorAll('[data-role]').forEach(b => b.onclick = e => { e.stopPropagation(); const r = b.dataset.role;
+    dropdown(b, '', [{v:'', label:'Auto', sub:'the model whose steps pass checks most'}, ...S.models.filter(m => m.role === r && m.ok).map(m => ({v:m.provider, label:niceModel(m.model), sub:m.provider, tps:m.tps}))],
+      t[r] || '', v => { t[r] = v; saveCfg(); paintRoles(); }); });
+}
+async function paintTuning() {
+  const el = $('#tuneBox'); if (!el) return; let d; try { d = await api('/tuning'); } catch (e) { el.innerHTML = '<div class="empty">Driver too old for tuning.</div>'; return; }
+  const t = (CFG.tuning = Object.assign({}, d.values, CFG.tuning || {}));
+  el.innerHTML = d.knobs.map(k => `<div class="row" title="${esc(k.help)}"><label>${esc(k.label)}</label><input class="num" type="number" min="${k.min}" max="${k.max}" step="${k.step}" value="${t[k.key]}" data-tune="${k.key}"></div>`).join('')
+    + '<div style="font-size:11.5px;color:var(--dim);margin-top:4px">Changes apply to running jobs on their next step.</div>';
+  el.querySelectorAll('[data-tune]').forEach(i => i.onchange = () => { const k = d.knobs.find(x => x.key === i.dataset.tune); t[k.key] = Math.min(k.max, Math.max(k.min, +i.value)); i.value = t[k.key]; saveCfg(); });
+  $('#tuneReset').onclick = e => { e.stopPropagation(); CFG.tuning = Object.assign({}, d.defaults, {brain: t.brain, fast: t.fast, vision: t.vision}); saveCfg(); paintTuning(); };
 }
 function paintFree() {
   const el = $('#freeBox'); if (!el) return;

@@ -197,7 +197,8 @@ pub async fn run(ws: &Path, policy: &Policy, args: &Value, approved: bool) -> Ou
         let head = if why.is_empty() { a.what.clone() } else { why.to_string() };
         return Outcome::NeedsOwner(format!("{head}. {}", a.what));
     }
-    shell(ws, &harden(cmd), policy.command_timeout).await
+    let limit = std::time::Duration::from_secs(crate::tuning::Tuning::load().command_timeout_s).max(policy.command_timeout.min(std::time::Duration::from_secs(10)));
+    shell(ws, &harden(cmd), limit).await
 }
 
 /// Make known tools report failure honestly. Blender exits 0 even when its Python script

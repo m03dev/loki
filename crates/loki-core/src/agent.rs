@@ -37,9 +37,6 @@ with tell_owner. A plain question that needs no work: answer with `finish`.\n\
 - When you produce something worth seeing (a render, an image, a model), `tell_owner` with the file attached.\n\
 - Never claim results you did not produce.";
 
-/// Steps without a passed check before the job stops and asks the owner.
-const STALL_ASK: u32 = 30;
-
 pub struct DriverConfig {
     /// Recent tool exchanges kept verbatim; older ones are compacted.
     pub window: usize,
@@ -172,10 +169,11 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
 
     /// Fold the oldest exchanges into summary.md so context stays small forever.
     async fn compact(&self, j: &Journal, recent: &mut Vec<Exchange>) {
-        if recent.len() <= self.cfg.window {
+        let window = crate::tuning::Tuning::load().context_window;
+        if recent.len() <= window {
             return;
         }
-        let spill: Vec<Exchange> = recent.drain(..recent.len() - self.cfg.window).collect();
+        let spill: Vec<Exchange> = recent.drain(..recent.len() - window).collect();
         let raw: String = spill
             .iter()
             .map(|e| format!("- {} {} -> {}", e.call.name, short(&e.call.args.to_string(), 160), short(&e.result, 200)))
@@ -217,8 +215,9 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
 
         // Coming back from a pause: apply the owner's answer first.
         if let Some(reply) = info.owner_reply.take() {
-            if info.since_pass >= STALL_ASK {
-                info.since_pass = STALL_ASK / 2; // the owner answered the stall question: another round, not forever
+            let stall = crate::tuning::Tuning::load().stall_steps;
+            if info.since_pass >= stall {
+                info.since_pass = stall / 2; // the owner answered the stall question: another round, not forever
             }
             if let Some(p) = info.pending.take() {
                 let mut call = ToolCall { name: p["name"].as_str().unwrap_or("").into(), args: p["args"].clone() };
@@ -271,6 +270,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
         }
 
         loop {
+            let tune = crate::tuning::Tuning::load();   // fresh each turn: Settings changes apply to running jobs
             if stop.load(Ordering::SeqCst) {
                 info.status = Status::Stopped;
                 j.progress("stopped by owner");
@@ -326,9 +326,11 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
             } else {
                 vec![]
             };
-            let mut answer = self.llm.chat_pref(&self.pool, Role::Brain, &msgs, &schemas, info.prefer.as_deref(), &exclude).await;
+            let brain_pref = info.prefer.clone().or_else(|| Some(tune.brain.clone()).filter(|b| !b.is_empty()));
+            let mut answer = self.llm.chat_pref(&self.pool, Role::Brain, &msgs, &schemas, brain_pref.as_deref(), &exclude).await;
             if !smart && matches!(answer, Err(LlmError::AllBusy { .. })) {
-                if let Ok(r) = self.llm.chat_pref(&self.pool, Role::Fast, &msgs, &schemas, None, &exclude).await {
+                let fast_pref = Some(tune.fast.clone()).filter(|b| !b.is_empty());
+                if let Ok(r) = self.llm.chat_pref(&self.pool, Role::Fast, &msgs, &schemas, fast_pref.as_deref(), &exclude).await {
                     answer = Ok(r);
                 }
             }
@@ -337,7 +339,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 Err(LlmError::AllBusy { retry_in_secs }) => {
                     info.status = Status::Resting;
                     j.save_info(&info)?;
-                    let wait = Duration::from_secs(retry_in_secs.max(1) as u64).min(self.cfg.rest_cap);
+                    let wait = Duration::from_secs(retry_in_secs.max(1) as u64).min(Duration::from_secs(tune.rest_cap_s));
                     j.progress(&format!("all free providers busy, resting {}s", wait.as_secs()));
                     tokio::time::sleep(wait).await;
                     info.status = Status::Running;
@@ -419,19 +421,19 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
             if !paused && j.tasks().is_empty() && info.steps >= 5 && call.name != "plan" {
                 nudge = Some("You still have no checklist. Call `plan` now, or `finish` if the goal needs no work.".into());
             }
-            if !paused && idle_turns == 10 {
-                nudge = Some("10 turns without progress. Make a real change now (write a file, run a program, mark_done) or block_task the current task.".into());
+            if !paused && idle_turns == tune.idle_nudge {
+                nudge = Some(format!("{} turns without progress. Make a real change now (write a file, run a program, mark_done) or block_task the current task.", tune.idle_nudge));
             }
             let passed_now = call.name == "mark_done" && result.contains("passed");
             if call.name == "mark_done" && (passed_now || result.contains("check failed")) {
                 self.pool.lock().await.report_check(&reply.provider, passed_now);   // evidence for picking models
             }
             info.since_pass = if passed_now { 0 } else { info.since_pass + 1 };
-            if !paused && info.since_pass == STALL_ASK * 2 / 3 {
+            if !paused && info.since_pass == tune.stall_steps * 2 / 3 {
                 nudge = Some(format!("{} steps since a step last passed its check. The same approach keeps failing: change the \
                     approach (simpler shapes, a loki_bpy kit, fewer parts), or block_task this step with what you tried.", info.since_pass));
             }
-            if !paused && info.since_pass >= STALL_ASK && idle_turns < 16 {
+            if !paused && info.since_pass >= tune.stall_steps && idle_turns < tune.idle_ask {
                 let task = current_task(&j.tasks()).map(|t| format!(" \"{}\"", t.title)).unwrap_or_default();
                 let last_fail = recent.iter().rev().find(|e| e.result.contains("check failed") || e.result.contains("score") || e.result.starts_with("ERROR"))
                     .map(|e| short(&e.result, 220)).unwrap_or_default();
@@ -444,7 +446,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 j.progress(&format!("paused: {} steps without a passed check", info.since_pass));
                 return Ok(info);
             }
-            if !paused && idle_turns >= 16 {
+            if !paused && idle_turns >= tune.idle_ask {
                 // Out of ideas: ask the owner instead of burning the free budget.
                 let mut last: Vec<String> = recent.iter().rev().take(6).map(|e| e.call.name.replace('_', " ")).collect();
                 last.dedup();
@@ -548,8 +550,8 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
 
     async fn check_look(&self, ws: &std::path::Path, path: &str, brief: &str) -> Result<String, String> {
         match self.look(ws, path, brief).await {
-            Ok((score, text)) if score >= self.look_pass => Ok(format!("vision score {score}/10. {text}")),
-            Ok((score, text)) => Err(format!("vision score {score}/10 (needs {}). Fix these and render again: {text}", self.look_pass)),
+            Ok((score, text)) if score >= crate::tuning::Tuning::load().look_pass => Ok(format!("vision score {score}/10. {text}")),
+            Ok((score, text)) => Err(format!("vision score {score}/10 (needs {}). Fix these and render again: {text}", crate::tuning::Tuning::load().look_pass)),
             // Don't hold a job hostage to a busy free tier: pass, but say it was not seen.
             Err(e) if e.starts_with("no vision model") => Ok(format!("NOT visually checked ({e}); file exists")),
             Err(e) => Err(e),
@@ -588,7 +590,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
 
     fn bump_attempt(&self, j: &Journal) {
         let mut tasks = j.tasks();
-        let max = self.cfg.max_task_attempts;
+        let max = crate::tuning::Tuning::load().task_attempts;
         if let Some(t) = tasks.iter_mut().find(|t| t.state == TaskState::Todo) {
             t.attempts += 1;
             if t.attempts >= max {
@@ -703,7 +705,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
             "session" => {
                 let kind = a["kind"].as_str().unwrap_or("python");
                 let Some(code) = a["code"].as_str() else { return Outcome::Err("missing 'code'".into()) };
-                let secs = a["timeout"].as_u64().unwrap_or(300).clamp(10, 1800);
+                let secs = a["timeout"].as_u64().unwrap_or(crate::tuning::Tuning::load().session_timeout_s).clamp(10, 3600);
                 match self.sessions.run(&info.id, &ws, kind, code, self.blender.as_deref(), Duration::from_secs(secs)).await {
                     Ok((true, out)) => Outcome::Ok(if out.trim().is_empty() { "ok (no output)".into() } else { out }),
                     Ok((false, out)) => Outcome::Err(format!("ERROR in the {kind} session (it is still open; fix and send again):\n{out}")),

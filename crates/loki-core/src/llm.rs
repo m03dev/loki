@@ -172,7 +172,8 @@ impl Llm {
         ]);
         let mut tried: Vec<String> = Vec::new();
         loop {
-            let pick = { pool.lock().await.pick(Role::Vision, &tried) };
+            let want = crate::tuning::Tuning::load().vision;
+            let pick = { pool.lock().await.pick_pref(Role::Vision, &tried, Some(want.as_str()).filter(|w| !w.is_empty())) };
             let Some(pick) = pick else { return Err(LlmError::AllBusy { retry_in_secs: 60 }) };
             let name = pick.provider.name.clone();
             tried.push(name.clone());

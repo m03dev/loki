@@ -461,6 +461,12 @@ async fn peer_proxy(State(app): State<App>, AxPath((name, _rest)): AxPath<(Strin
     }
 }
 
+/// Every driver knob: what each one is, its default, and this machine's value.
+async fn tuning() -> Json<Value> {
+    let t = loki_core::tuning::Tuning::load();
+    Json(json!({"knobs": loki_core::tuning::Tuning::describe(), "defaults": loki_core::tuning::Tuning::default(), "values": t}))
+}
+
 async fn get_settings(State(app): State<App>) -> Json<Value> {
     Json(app.settings())
 }
@@ -1106,6 +1112,7 @@ async fn serve(home: PathBuf) -> anyhow::Result<()> {
         .route("/knowledge", get(knowledge))
         .route("/link", get(link_status))
         .route("/logs", get(logs))
+        .route("/tuning", get(tuning))
         .route("/mirror/file", get(mirror_file))
         .route("/peer/:name/*rest", any(peer_proxy).layer(axum::extract::DefaultBodyLimit::max(512 * 1024 * 1024)))
         .with_state(app.clone());
