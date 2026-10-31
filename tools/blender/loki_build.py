@@ -30,6 +30,14 @@ shapes: box, cylinder, tube ("wall"), sphere, dome (half sphere), barrel (half c
   ("top": 0-1 top radius ratio), torus (size x/y = outer diameter, z = ring thickness), shell (open-top box, "wall"),
   wedge (slope down to the front), lathe ("profile": [[radius 0-1, height 0-1], ...] bottom to top), planks (box made of
   "count" boards along z).
+  band - straps round an earlier part, sized for you: {"shape": "band", "on": "body", "count": 2, "mat": "iron"}
+         (optional width, thickness, axis "x"|"y"); on a barrel lid they follow the curve.
+  rod - a round bar between parts: {"shape": "rod", "between": "leg", "height": 0.35, "diameter": 0.02} joins each
+        copy of a repeated part to the next (rungs); or "from": "leg_1", "to": "leg_2". height = 0-1 up the parts.
+  heap - a mound covered in small pieces: {"shape": "heap", "size": [0.7, 0.4, 0.25], "on": "body", "at": "inside",
+         "mat": "gold", "count": 120, "pieces": "coin"|"ball"} (treasure, gems, apples, gravel).
+  "repeat": {"count": 3, "around": 0.1, "splay": 12} spreads copies round the parent and leans them out (legs).
+The finished model always stands on the floor (its lowest point at z = 0).
   "bevel": edge rounding in metres (default: small, automatic); "smooth": true/false (default: true for round shapes).
 materials: presets wood, oak, darkwood, iron, steel, gold, brass, copper, silver, stone, brick, concrete, marble, leather,
   fabric, velvet, glass, ceramic, plastic, rubber, paper, any colour word, or {"color": "#hex", "metal": 0-1,
@@ -52,6 +60,7 @@ import loki_bpy as L  # noqa: E402
 
 ROUND = {"cylinder", "tube", "sphere", "dome", "barrel", "cone", "torus", "lathe"}
 ANCHORS = {"top", "bottom", "front", "back", "left", "right", "inside", "center"}
+DERIVED = {"band", "rod", "heap"}   # shapes sized from other parts, not from "size"
 
 
 class SpecError(Exception):
@@ -97,12 +106,19 @@ def make_material(name, spec):
         m = L.mat(name, spec.get("color", "#9a9a9a"), metal=spec.get("metal", 0.0), rough=spec.get("rough", 0.5),
                   emit=spec.get("emit", 0.0), emit_color=spec.get("emit_color"))
     if spec.get("glass"):
+        # see-through in every engine: mostly transparent, glossy, a faint tint (transmission alone renders black/white
+        # in Eevee without per-material ray tracing)
         b = next(x for x in m.node_tree.nodes if x.type == "BSDF_PRINCIPLED")
-        for k in ("Transmission Weight", "Transmission"):
-            if k in b.inputs:
-                b.inputs[k].default_value = 1.0
-        if "IOR" in b.inputs:
-            b.inputs["IOR"].default_value = 1.45
+        if "Alpha" in b.inputs:
+            b.inputs["Alpha"].default_value = float(spec.get("alpha", 0.18))
+        b.inputs["Roughness"].default_value = 0.02
+        for attr, val in (("surface_render_method", "BLENDED"), ("blend_method", "BLEND"), ("use_backface_culling", False),
+                          ("show_transparent_back", True)):
+            if hasattr(m, attr):
+                try:
+                    setattr(m, attr, val)
+                except Exception:  # noqa: BLE001
+                    pass
     if spec.get("emit"):
         # a light source should also light the scene, not only glow
         m["loki_emit"] = float(spec["emit"])
@@ -329,6 +345,155 @@ def attach(o, parent, at, align="bottom", inset=None):
     bpy.context.view_layer.update()
 
 
+def _axis_point(o, frac):
+    """A point on the part's long axis, `frac` of the way up from its lowest end (works for tilted legs)."""
+    me = o.data
+    pts = [o.matrix_world @ v.co for v in me.vertices]
+    lo = min(pts, key=lambda q: q.z)
+    hi = max(pts, key=lambda q: q.z)
+    zlo = [q for q in pts if q.z <= lo.z + 0.002]
+    zhi = [q for q in pts if q.z >= hi.z - 0.002]
+    a = sum(zlo, Vector()) / len(zlo)
+    b = sum(zhi, Vector()) / len(zhi)
+    return a.lerp(b, frac)
+
+
+def make_derived(p, first, made, mats):
+    """band: straps round another part; rod: a round bar between two parts (rungs, rails, chains)."""
+    pid = p["id"]
+    mname = p.get("mat") or p.get("material") or "iron"
+    if mname not in mats:
+        mats[mname] = make_material(mname, mname)
+    shape = p["shape"]
+    objs = []
+    if shape == "band":
+        on = p.get("on")
+        if on not in first:
+            raise SpecError(f"band '{pid}' needs \"on\": an earlier part to go round")
+        par = first[on]
+        lo, hi = bounds(par)
+        n = max(1, int(p.get("count", 2)))
+        w = float(p.get("width", min(0.06, (hi.x - lo.x) * 0.07)))
+        t = float(p.get("thickness", 0.006))
+        axis = p.get("axis", "x")
+        for k in range(n):
+            f = 0.5 if n == 1 else 0.18 + 0.64 * k / (n - 1)
+            q = {"id": f"{pid}_{k + 1}", "_name": f"{pid}_{k + 1}", "shape": "barrel" if par.get("loki_shape") == "barrel" else "box"}
+            if axis == "x":
+                q["size"] = [w, hi.y - lo.y + 2 * t, hi.z - lo.z + (t if q["shape"] == "barrel" else 2 * t)]
+                at = Vector((lo.x + (hi.x - lo.x) * f, (lo.y + hi.y) / 2, 0))
+            else:
+                q["size"] = [hi.x - lo.x + 2 * t, w, hi.z - lo.z + 2 * t]
+                at = Vector(((lo.x + hi.x) / 2, lo.y + (hi.y - lo.y) * f, 0))
+            o = make_shape(q)
+            olo, ohi = bounds(o)
+            o.location = Vector((at.x, at.y, lo.z - (t if q["shape"] != "barrel" else 0) - olo.z))
+            bpy.context.view_layer.update()
+            wrap_around(o, par)
+            finish_part(o, {**q, "bevel": 0.001}, mats[mname])
+            o.parent = par
+            o.matrix_parent_inverse = par.matrix_world.inverted()
+            objs.append(o)
+        return objs
+    if shape == "heap":
+        # a mound with many small pieces lying on its surface (coins, gems, apples, gravel)
+        if "size" not in p:
+            raise SpecError(f"heap '{pid}' needs a size [x, y, height]")
+        x, y, z = p["size"]
+        q = {**p, "shape": "dome", "_name": pid, "size": [x, y, z * 0.8]}
+        mound = make_shape(q)
+        fillers = []
+        on = p.get("on")
+        if on:
+            if on not in first:
+                raise SpecError(f"heap '{pid}' is on '{on}', which is not defined before it")
+            attach(mound, first[on], p.get("at", "top"), "bottom", p.get("inset"))
+            if p.get("at") == "inside" and not p.get("keep_low"):
+                # a heap in a container fills it and crowns just over the rim (a full chest, a fruit bowl)
+                mlo, mhi = bounds(mound)
+                plo, phi = bounds(first[on])
+                rise = (phi.z + (mhi.z - mlo.z) * 0.3) - mhi.z
+                if rise > 0:
+                    mound.location.z += rise
+                    filler = _make_cyl(pid + "_fill", x * 0.98, y * 0.98, max(0.001, rise))
+                    bpy.ops.object.select_all(action="DESELECT")
+                    filler.location = Vector(((mlo.x + mhi.x) / 2, (mlo.y + mhi.y) / 2, mlo.z + rise / 2))
+                    sq = filler.scale
+                    filler.scale = (sq.x, sq.y, sq.z)
+                    finish_part(filler, {"shape": "cylinder", "size": [x, y, rise], "bevel": 0}, mats[mname])
+                    filler.parent = first[on]
+                    filler.matrix_parent_inverse = first[on].matrix_world.inverted()
+                    fillers.append(filler)
+                bpy.context.view_layer.update()
+        finish_part(mound, {**q, "bevel": 0}, mats[mname])
+        objs.append(mound)
+        objs.extend(fillers)
+        lo, hi = bounds(mound)
+        c = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))
+        a, b, h = x / 2, y / 2, z * 0.8
+        piece = float(p.get("piece", max(0.02, min(0.05, min(x, y) * 0.09))))
+        import random as _r
+        rnd = _r.Random(int(p.get("seed", 7)))
+        n = int(p.get("count", 140))
+        balls = p.get("pieces", "coin") != "coin"
+        for k in range(n):
+            # an even spread over the mound, each piece lying along the surface (tilted by its normal)
+            u, v = rnd.uniform(-1, 1), rnd.uniform(-1, 1)
+            q2 = 1 - u * u - v * v
+            if q2 <= 0.0:
+                continue
+            w = math.sqrt(q2)
+            pos = Vector((c.x + u * a, c.y + v * b, c.z + h * w))
+            normal = Vector((u / a, v / b, w / h)).normalized()
+            if balls:
+                bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=piece / 2)
+                item = bpy.context.object
+                item.name = f"{pid}_piece{k}"
+            else:
+                item = _make_cyl(f"{pid}_piece{k}", piece, piece, piece * 0.15)
+                tilt = Euler((rnd.uniform(-0.35, 0.35), rnd.uniform(-0.35, 0.35), rnd.uniform(0, 6.28)))
+                item.matrix_world = normal.to_track_quat("Z", "Y").to_matrix().to_4x4() @ tilt.to_matrix().to_4x4()
+            item.location = pos + normal * piece * 0.05
+            finish_part(item, {"shape": "cylinder", "size": [piece, piece, piece * 0.15], "bevel": 0.0008}, mats[mname])
+            item.parent = mound
+            item.matrix_parent_inverse = mound.matrix_world.inverted()
+            objs.append(item)
+        if on:
+            mound.parent = first[on]
+            mound.matrix_parent_inverse = first[on].matrix_world.inverted()
+        return objs
+    # rod
+    d = float(p.get("diameter", (p.get("size") or [0.02])[0]))
+    height = float(p.get("height", 0.4))
+    pairs = []
+    if p.get("between"):
+        base = p["between"]
+        copies = made.get(base)
+        if not copies or len(copies) < 2:
+            raise SpecError(f"rod '{pid}': between '{base}' needs a repeated part (count >= 2) defined before it")
+        loop = len(copies) > 2 and p.get("loop", True)
+        pairs = [(copies[i], copies[(i + 1) % len(copies)]) for i in range(len(copies) if loop else len(copies) - 1)]
+    else:
+        a, b = p.get("from"), p.get("to")
+        if a not in first or b not in first:
+            raise SpecError(f"rod '{pid}': needs \"from\" and \"to\" (earlier part ids, copies are id_1, id_2 ...) or \"between\": a repeated part")
+        pairs = [(first[a], first[b])]
+    for k, (oa, ob) in enumerate(pairs):
+        pa, pb = _axis_point(oa, height), _axis_point(ob, height)
+        L_ = (pb - pa).length
+        if L_ < 1e-4:
+            raise SpecError(f"rod '{pid}': its two ends are at the same place")
+        name = pid if len(pairs) == 1 else f"{pid}_{k + 1}"
+        o = _make_cyl(name, d, d, L_)
+        o.matrix_world = Matrix.Translation((pa + pb) / 2) @ (pb - pa).to_track_quat("Z", "Y").to_matrix().to_4x4()
+        bpy.context.view_layer.update()
+        finish_part(o, {"shape": "cylinder", "size": [d, d, L_]}, mats[mname])
+        o.parent = oa
+        o.matrix_parent_inverse = oa.matrix_world.inverted()
+        objs.append(o)
+    return objs
+
+
 def wrap_around(o, parent):
     """Keep only the part of `o` outside its parent: a band, strap or rim that hugs the parent's surface."""
     bpy.context.view_layer.update()
@@ -404,6 +569,13 @@ def build(spec):
         pid = p.get("id")
         if not pid:
             raise SpecError("every part needs an 'id'")
+        if p.get("shape") in DERIVED:
+            objs = make_derived(p, first, made, mats)
+            made[pid] = objs
+            first[pid] = objs[0]
+            for k, o in enumerate(objs):
+                first[f"{pid}_{k + 1}"] = o
+            continue
         if "size" not in p or len(p["size"]) != 3 or min(p["size"]) <= 0:
             raise SpecError(f"part '{pid}': 'size' must be [width x, depth y, height z] in metres, all > 0")
         on = p.get("on")
@@ -422,6 +594,7 @@ def build(spec):
             q = dict(p)
             q["_name"] = pid if count == 1 else f"{pid}_{k + 1}"
             o = make_shape(q)
+            o["loki_shape"] = p.get("shape", "box")
             if p.get("rotate"):
                 o.rotation_euler = Euler([math.radians(v) for v in p["rotate"]])
                 _apply(o)
@@ -436,6 +609,15 @@ def build(spec):
             if rep.get("around"):
                 ang = 2 * math.pi * k / count + math.radians(rep.get("start", 45 if count == 4 else 0))
                 o.location += Vector((math.cos(ang) * rep["around"], math.sin(ang) * rep["around"], 0))
+                if rep.get("splay"):
+                    # lean outward (legs): tilt about the end that touches the parent
+                    lo_, hi_ = bounds(o)
+                    top_end = at != "top"
+                    pivot = Vector(((lo_.x + hi_.x) / 2, (lo_.y + hi_.y) / 2, hi_.z if top_end else lo_.z))
+                    axis = Vector((-math.sin(ang), math.cos(ang), 0))
+                    tilt = -math.radians(float(rep["splay"])) * (1 if top_end else -1)   # free end swings outward
+                    o.matrix_world = Matrix.Translation(pivot) @ Matrix.Rotation(tilt, 4, axis) @ Matrix.Translation(-pivot) @ o.matrix_world
+                    bpy.context.view_layer.update()
             elif count > 1:
                 axis = {"x": 0, "y": 1, "z": 2}[rep.get("along", "x")]
                 step = rep.get("spacing", p["size"][axis] * 1.5)
@@ -445,11 +627,19 @@ def build(spec):
             if p.get("offset"):
                 o.location += Vector(p["offset"])
             if p.get("wrap") and on:
+                plo, phi = bounds(first[on])
+                psize, osize = phi - plo, Vector(p["size"])
+                if all(osize[i] >= psize[i] * 0.9 for i in range(3)):
+                    raise SpecError(f"part '{pid}': a wrap as big as '{on}' would cover it completely - for straps use "
+                                    f'{{"shape": "band", "on": "{on}", "count": 2}}')
                 wrap_around(o, first[on])
             finish_part(o, p, mats[mname])
             objs.append(o)
         made[pid] = objs
         first[pid] = objs[0]
+        if len(objs) > 1:
+            for k, o in enumerate(objs):
+                first[f"{pid}_{k + 1}"] = o
         # children follow their parent through hinges: parent after placement, keeping world transforms
         if on:
             for o in objs:
@@ -493,6 +683,12 @@ def main():
     except SpecError as e:
         print(f"LOKI_SPEC_ERROR {e}")
         raise SystemExit(2)
+    # the model stands on the floor: lift or drop everything so its lowest point is at z = 0
+    roots = [o for o in bpy.context.scene.objects if o.parent is None and o.type in ("MESH", "LIGHT")]
+    lo, hi = L._scene_bounds()
+    for o in roots:
+        o.location.z -= lo.z
+    bpy.context.view_layer.update()
     lo, hi = L._scene_bounds()
     size = hi - lo
     L.ground(max(3.0, size.length * 5), L.mat("Floor", spec.get("floor", "#3b3b3b"), rough=0.85))

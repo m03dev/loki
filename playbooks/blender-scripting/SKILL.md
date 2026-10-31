@@ -23,9 +23,11 @@ modeller: main body first, then what sits on it, then details (rims, bands, hand
   {"id": "burner", "shape": "cylinder", "size": [0.05, 0.05, 0.03], "mat": "brass", "on": "base", "at": "top"},
   {"id": "flame",  "shape": "sphere",   "size": [0.025, 0.025, 0.055], "mat": "flame", "on": "burner", "at": "top"}]}
 ```
-A chest: body `shell` (open top, "wall"), lid `barrel` on body at top with "hinge": {"edge": "back", "angle": 105},
-bands: a `box` a little larger than the body at "center" with "wrap": true (it becomes a strap), the same on the lid with
-a `barrel` band; treasure: a `dome` on the body "inside".
+A chest: body `shell` (open top, "wall"), `band` on the body (count 2, iron), lock plate `box` on the body "front"
+"align": "top", lid `barrel` on the body "top" with "hinge": {"edge": "back", "angle": 105}, `band` on the lid,
+treasure `heap` on the body "inside" (it fills to the rim).
+A stool or table: seat `cylinder`/`box`, legs on the seat "bottom" with "repeat": {"count": 3, "around": 0.11,
+"splay": 12}, rungs `rod` "between": "leg", "height": 0.35. Never place a part with offsets when an anchor says it.
 After building, `look` at renders/<name>_views.png, fix the spec (sizes, what's missing) and build again.
 
 **Script shape without the helpers** (one script makes everything; run: `blender --background --python scripts/x.py`)
