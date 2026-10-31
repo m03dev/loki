@@ -1,43 +1,25 @@
 ---
 name: blender-scripting
-description: Build, light and render a prop or scene from scratch with a Blender Python script (bpy) - models that hold together, sit on the ground, are framed by the camera and checked by LOKI's scene inspector.
+description: Build, light and render a prop or scene from scratch in Blender, live in a session, step by step (bpy) - models that hold together, sit on the ground, are framed by the camera and checked by LOKI's scene inspector.
 ---
 # Blender scripting - props and scenes that hold together
 
 Written from what went wrong in LOKI's first real jobs (floating lids, flames outside the frame, crashes on Blender 5.2).
 
-**Kits first.** If loki_bpy has a kit for the object, use it - kits are whole objects built and checked from four
-sides, with real hinges and joints: `chest(...)` (open_deg, domed, hoard, size, your own materials). Only build from
-parts what no kit covers, and never a hinged thing without hinge hardware.
+**Work live, step by step** (the way the best agents on the BlenderWorld benchmark work): use the `session` tool with
+kind `blender`. The scene stays open between calls, so build one part, check it, adjust, then the next:
 
 ```python
-from loki_bpy import *
-start(__file__)
-ground(6, pbr("Floor", "rough_concrete", fallback="#4a4744"))
-chest("Chest", width=0.8, open_deg=105, domed=True, hoard=80)
-frame(); lights(); finish("chest")
+# call 1                                         # call 2: check before moving on
+start()                                          scene()          # names, sizes, positions
+wood = pbr("Wood", "wood_planks", scale=2)       # call 3: look from four sides when a part is in place
+body = tray("Body", (0.8, 0.5, 0.45), wall=0.04, material=wood, bevel=0.01)
+ground(6, mat("Floor", "#4a4744", rough=0.9))    look("step1")    # -> renders/step1_views.png, then `look` it
+# ... more parts, measured from the ones before (place_on, place_beside, hinge) ...
+save("scenes/chest.blend"); finish("chest")      # final render + four-view sheet
 ```
-
-**Use loki_bpy** (it is in every job's scripts/ folder): it places parts by their measured bounds, hinges lids on a
-real edge, frames the camera from the scene's bounds and renders with the right engine for this Blender. A whole chest:
-
-```python
-import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from loki_bpy import *
-start(__file__)
-wood = pbr("Wood", "wood_planks", scale=2)              # a real scanned surface (Poly Haven, CC0), never a flat colour
-iron = pbr("Iron", "rusty_metal_02", fallback="#4a4f55", metal=1.0)
-gold = mat("Gold", "#d4a017", metal=1.0, rough=0.25)
-ground(6, pbr("Floor", "rough_concrete", fallback="#4a4744"))
-body = tray("Body", (0.8, 0.5, 0.45), wall=0.04, material=wood, bevel=0.01)   # open-top: things go IN it
-lid = box("Lid", (0.82, 0.52, 0.1), wood, bevel=0.015); place_on(lid, body)
-for z in (0.08, 0.32):
-    ring(f"Band{z}", (0.82, 0.52, 0.05), wall=0.012, material=iron, at=(0, 0, z))  # bands wrap the sides only
-plate = box("Lock", (0.1, 0.02, 0.12), gold, bevel=0.004); place_beside(plate, body, side="-y", align="top")
-coins(body, 60, gold, fill=0.8)          # in a tray it lays a gold bed first, so the heap rests on something
-hinge(lid, edge="+y", angle=55)          # back hinge (+y), front lifts; the camera looks from -y (the front)
-frame(); lights(); finish("chest")       # lights() = studio HDRI + three-point; finish() also writes chest_views.png
-```
+Look at your own views about every few parts (not after every line - effective feedback beats lots of it).
+Everything sizes in metres; parts stand on their bottom centre; +y is the back, the camera looks from -y.
 
 **Quality, in order of what matters** (from research on LLM-made 3D: LL3M, BlenderLLM, BlenderRAG):
 - Real surfaces: `pbr(name, asset)` loads a Poly Haven scan (wood_planks, rusty_metal_02, brick_wall_001,

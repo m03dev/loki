@@ -68,37 +68,15 @@ pub struct Driver {
     pub blender: Option<String>,
     /// A `look:` check passes at this vision score or above.
     pub look_pass: f64,
+    /// Live interpreters per job (session tool).
+    pub sessions: crate::session::Sessions,
 }
 
 /// LOKI's scene inspector, shipped inside the driver so every machine has the same one.
 const INSPECT_SCRIPT: &str = include_str!("../../../tools/blender/inspect_scene.py");
 /// The Blender helper library every job gets in scripts/ (placing, hinging, framing, rendering).
 const LOKI_BPY: &str = include_str!("../../../tools/blender/loki_bpy.py");
-const CAD_RENDER: &str = include_str!("../../../tools/cad/cad_render.py");
-const LOKI_CAD: &str = include_str!("../../../tools/cad/loki_cad.py");
-
-/// CAD tools the launcher installed into harness_data/cad after this driver started (found without a restart).
-fn find_cad(key: &str) -> Option<String> {
-    let cad = std::path::PathBuf::from(std::env::var("LOKI_HOME").ok()?).parent()?.join("cad");
-    let found = if key == "LOKI_CAD_PY" {
-        [cad.join("b123/Scripts/python.exe"), cad.join("b123/bin/python")].into_iter().find(|p| p.is_file())
-    } else {
-        let names = ["freecadcmd.exe", "FreeCADCmd.exe", "freecadcmd", "FreeCADCmd"];
-        let mut hit = None;
-        if let Ok(rd) = std::fs::read_dir(cad.join("freecad")) {
-            'outer: for e in rd.flatten() {
-                for sub in ["bin", "usr/bin", "Contents/Resources/bin", "Contents/MacOS"] {
-                    for n in names {
-                        let p = e.path().join(sub).join(n);
-                        if p.is_file() { hit = Some(p); break 'outer; }
-                    }
-                }
-            }
-        }
-        hit
-    };
-    found.map(|p| p.to_string_lossy().to_string())
-}
+const RENDER_PARTS: &str = include_str!("../../../tools/blender/render_parts.py");
 
 /// The tools this machine really has, with exact paths (how to use each lives in its playbook, not here).
 fn machine_tools(blender: Option<&str>) -> String {
@@ -106,13 +84,8 @@ fn machine_tools(blender: Option<&str>) -> String {
     if let Some(b) = blender {
         lines.push(format!("Blender: \"{b}\" (scripts/loki_bpy.py helpers are in the job folder)"));
     }
-    for (k, what) in [("LOKI_CAD_PY", "build123d (CAD): run scripts with"), ("LOKI_FREECAD", "FreeCAD (CAD, headless): run scripts with")] {
-        if let Some(p) = std::env::var(k).ok().filter(|p| std::path::Path::new(p).is_file()).or_else(|| find_cad(k)) {
-            lines.push(format!("{what} \"{p}\""));
-        }
-    }
     if lines.is_empty() { return String::new(); }
-    format!("\nMACHINE TOOLS (exact paths):\n- {}\n- scripts/loki_cad.py: proven build123d parts (read its top first); scripts/cad_render.py renders parts/<material>.stl in Blender.\n", lines.join("\n- "))
+    format!("\nMACHINE TOOLS (exact paths):\n- {}\n- Work live with the `session` tool (kind blender or python); scripts/render_parts.py renders mesh files from any tool.\n", lines.join("\n- "))
 }
 
 struct Exchange {
@@ -142,7 +115,7 @@ impl Driver {
     pub fn new(pool: Arc<Mutex<ModelPool>>) -> Self {
         let blender = std::env::var("LOKI_BLENDER").ok().filter(|b| std::path::Path::new(b).is_file())
             .or_else(|| which("blender").map(|p| p.to_string_lossy().to_string()));
-        Self { pool, llm: Llm::new(), cfg: DriverConfig::default(), machine: machine_note(), knowledge: Knowledge::default(), blender, look_pass: 7.0 }
+        Self { pool, llm: Llm::new(), cfg: DriverConfig::default(), machine: machine_note(), knowledge: Knowledge::default(), blender, look_pass: 7.0, sessions: Default::default() }
     }
 
     fn context(&self, j: &Journal, info: &RunInfo, tasks: &[Task], recent: &[Exchange], nudge: Option<&str>) -> Vec<Msg> {
@@ -294,8 +267,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
         let scripts = info.workspace.join("scripts");
         if std::fs::create_dir_all(&scripts).is_ok() {
             let _ = std::fs::write(scripts.join("loki_bpy.py"), LOKI_BPY);
-            let _ = std::fs::write(scripts.join("cad_render.py"), CAD_RENDER);
-            let _ = std::fs::write(scripts.join("loki_cad.py"), LOKI_CAD);
+            let _ = std::fs::write(scripts.join("render_parts.py"), RENDER_PARTS);
         }
 
         loop {
@@ -346,12 +318,21 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
             nudge = None;
             let schemas = tools::schemas();
             info.ctx_tokens = ((msgs.iter().map(|m| m.content.len()).sum::<usize>() + schemas.to_string().len()) / 4) as u64;
-            let exclude: Vec<String> = if info.mode == "hard" {
+            // Smart: only the strongest proven online models, and wait when they are busy.
+            // Auto: the best brain that answers; when every brain is busy, the fast model keeps the job moving.
+            let smart = matches!(info.mode.as_str(), "smart" | "hard");
+            let exclude: Vec<String> = if smart {
                 self.pool.lock().await.providers().iter().filter(|p| p.local).map(|p| p.name.clone()).collect()
             } else {
                 vec![]
             };
-            let reply = match self.llm.chat_pref(&self.pool, Role::Brain, &msgs, &schemas, info.prefer.as_deref(), &exclude).await {
+            let mut answer = self.llm.chat_pref(&self.pool, Role::Brain, &msgs, &schemas, info.prefer.as_deref(), &exclude).await;
+            if !smart && matches!(answer, Err(LlmError::AllBusy { .. })) {
+                if let Ok(r) = self.llm.chat_pref(&self.pool, Role::Fast, &msgs, &schemas, None, &exclude).await {
+                    answer = Ok(r);
+                }
+            }
+            let reply = match answer {
                 Ok(r) => r,
                 Err(LlmError::AllBusy { retry_in_secs }) => {
                     info.status = Status::Resting;
@@ -442,6 +423,9 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 nudge = Some("10 turns without progress. Make a real change now (write a file, run a program, mark_done) or block_task the current task.".into());
             }
             let passed_now = call.name == "mark_done" && result.contains("passed");
+            if call.name == "mark_done" && (passed_now || result.contains("check failed")) {
+                self.pool.lock().await.report_check(&reply.provider, passed_now);   // evidence for picking models
+            }
             info.since_pass = if passed_now { 0 } else { info.since_pass + 1 };
             if !paused && info.since_pass == STALL_ASK * 2 / 3 {
                 nudge = Some(format!("{} steps since a step last passed its check. The same approach keeps failing: change the \
@@ -582,7 +566,7 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
         if !blocked.is_empty() {
             text.push_str(&format!("\nCould not finish: {}", blocked.join("; ")));
         }
-        // the facts about what was made (cad_render writes renders/<name>_info.json)
+        // the facts about what was made (render_parts writes renders/<name>_info.json)
         let mut facts = vec![];
         if let Ok(rd) = std::fs::read_dir(info.workspace.join("renders")) {
             for e in rd.flatten() {
@@ -714,6 +698,16 @@ blockout), Start from (concept / Blender from scratch); video: Length, Shape, Lo
                 match self.inspect(&ws, p).await {
                     Ok(r) => Outcome::Ok(describe_inspection(&r)),
                     Err(e) => Outcome::Err(e),
+                }
+            }
+            "session" => {
+                let kind = a["kind"].as_str().unwrap_or("python");
+                let Some(code) = a["code"].as_str() else { return Outcome::Err("missing 'code'".into()) };
+                let secs = a["timeout"].as_u64().unwrap_or(300).clamp(10, 1800);
+                match self.sessions.run(&info.id, &ws, kind, code, self.blender.as_deref(), Duration::from_secs(secs)).await {
+                    Ok((true, out)) => Outcome::Ok(if out.trim().is_empty() { "ok (no output)".into() } else { out }),
+                    Ok((false, out)) => Outcome::Err(format!("ERROR in the {kind} session (it is still open; fix and send again):\n{out}")),
+                    Err(e) => Outcome::Err(format!("ERROR: {e}")),
                 }
             }
             "look" => {

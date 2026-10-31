@@ -158,6 +158,11 @@ impl App {
                 }
             }
             me.live.lock().await.remove(&id);
+            // live sessions stay open while a job waits for the owner or rests; otherwise they close with it
+            let st = Journal::open(&me.runs_dir().join(&id)).info().map(|i| i.status).ok();
+            if !matches!(st, Some(Status::Waiting) | Some(Status::Resting) | Some(Status::Running)) {
+                me.driver.sessions.close(&id).await;
+            }
         });
     }
 }
@@ -194,7 +199,7 @@ impl App {
     let (j, mut info) = Journal::create(&app.runs_dir(), &req.goal, &ws_root, req.max_steps.unwrap_or(2000), req.max_hours.unwrap_or(12.0))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     info.workspace = req.workspace.unwrap_or_else(|| ws_root.join(&info.id));
-    info.mode = req.mode.filter(|m| !m.is_empty()).unwrap_or_else(|| "agent".into());
+    info.mode = match req.mode.as_deref() { Some("smart") | Some("hard") => "smart", _ => "auto" }.into();
     info.interview = req.interview.clone().filter(|v| matches!(v.as_str(), "always" | "big" | "off"))
         .unwrap_or_else(|| app.settings()["interview"].as_str().unwrap_or("always").to_string());
     info.prefer = req.prefer.filter(|p| !p.is_empty());
@@ -678,7 +683,7 @@ async fn remove_local_model(Json(m): Json<ModelName>) -> StatusCode {
 }
 
 /// Jobs and messages dropped into <home>/inbox as JSON files (the other machine, a script, a phone):
-///   {"goal": "...", "mode": "hard"}            start a job
+///   {"goal": "...", "mode": "smart"}            start a job
 ///   {"run": "<id>", "say": "..."}              chat message
 ///   {"run": "<id>", "reply": {"approve": true, "note": "..."}}
 ///   {"run": "<id>", "stop": true}

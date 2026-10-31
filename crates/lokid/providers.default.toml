@@ -12,10 +12,22 @@ rpm = 40          # account-wide across all NIM models
 rpd = 10000
 priority = 10
 [provider.models]
-# Measured on the owner's PC key (2026-10-29): Ultra and Lightning answer; DeepSeek Flash took ~280 s a step.
+# Brain moved to DeepSeek (below) 2026-10-30: BlenderWorld (223 real 3D tasks) scores DeepSeek-V4.1-Flash 65.7,
+# close to paid frontier models; Ultra looped for hours on LOKI's own jobs. Ultra stays as the fallback brain.
 brain = "nvidia/nemotron-3-ultra-550b-a55b"
 vision = "google/gemma-4-31b-it"
 fast = "nvidia/nemotron-3.5-lightning-30b-a3b"
+
+# The nano model for quick turns (looking around, small edits); falls back to Lightning above when it isn't served.
+[[provider]]
+name = "nvidia-nano"
+base_url = "https://integrate.api.nvidia.com/v1"
+key_env = "NVIDIA_API_KEY"
+rpm = 40
+rpd = 10000
+priority = 6
+[provider.models]
+fast = "nvidia/nemotron-3-nano-30b-a3b"
 
 [[provider]]
 name = "nvidia-deepseek"
@@ -23,7 +35,7 @@ base_url = "https://integrate.api.nvidia.com/v1"
 key_env = "NVIDIA_API_KEY"
 rpm = 40
 rpd = 10000
-priority = 15
+priority = 5
 [provider.models]
 brain = "deepseek-ai/deepseek-v4.1-flash"
 

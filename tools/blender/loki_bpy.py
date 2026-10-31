@@ -33,7 +33,7 @@ from mathutils import Matrix, Vector
 
 __all__ = ["start", "mat", "box", "cyl", "sphere", "cone", "ground", "bounds", "size_of", "place_on", "place_beside",
            "place_inside", "center_on", "hinge", "array", "coins", "planks", "join", "parent", "bevel", "frame", "lights",
-           "world", "finish", "render", "save", "hdri", "pbr", "views", "tray", "ring", "dome", "chest", "lathe", "barrel", "ROOT"]
+           "world", "finish", "render", "save", "hdri", "pbr", "views", "tray", "ring", "dome", "lathe", "ROOT"]
 
 ROOT = os.getcwd()
 _parts = []
@@ -777,60 +777,6 @@ def _turn(objs, pivot, axis, degrees):
     bpy.context.view_layer.update()
 
 
-# ---------------------------------------------------------------- kits: whole objects, tested from four sides
-
-def chest(name="Chest", width=0.8, depth=0.5, height=0.42, lid_rise=0.16, open_deg=105, domed=True, hoard=80,
-          wood=None, metal=None, gold=None, at=(0, 0, 0)):
-    """A complete treasure chest - use this, never build a chest from loose boxes.
-    Open-top body, barrel (domed=True) or flat lid on two real hinges at the back, iron bands round body and lid,
-    lock plate on the front, a hoard of coins resting on a gold bed inside. open_deg 0 = shut, 105 = lid resting
-    open behind the body. Returns {"body", "lid", "parts"} (every object)."""
-    wood = wood or pbr(f"{name}_Wood", "wood_planks", scale=2, fallback="#7a4e2a")
-    metal = metal or mat(f"{name}_Iron", "#3a3f45", metal=1.0, rough=0.42)
-    gold = gold or mat(f"{name}_Gold", "#d9a521", metal=1.0, rough=0.25)
-    ax, ay, az = at
-    w, d, h = width, depth, height
-    band_t, band_h = 0.012, min(0.05, h * 0.12)
-    parts = []
-    body = tray(f"{name}_Body", (w, d, h), wall=max(0.025, w * 0.045), material=wood, at=at, bevel=0.006)
-    parts.append(body)
-    for k, z in enumerate((h * 0.08, h - band_h - h * 0.06)):
-        parts.append(ring(f"{name}_BodyBand{k}", (w + 2 * band_t, d + 2 * band_t, band_h), band_t, metal, (ax, ay, az + z)))
-    # lid, built shut on top of the body, then opened round the hinge line
-    lw, ld = w + 2 * band_t, d + 2 * band_t
-    lid = dome(f"{name}_Lid", (lw, ld, lid_rise), wood, (ax, ay, az + h)) if domed else \
-        box(f"{name}_Lid", (lw, ld, lid_rise * 0.6), wood, (ax, ay, az + h), bevel=0.01)
-    swing = [lid]
-    for k, x in enumerate((-0.32 * w, 0.32 * w)):
-        if domed:
-            b = dome(f"{name}_LidBand{k}", (band_h, ld + 2 * band_t, lid_rise + band_t), metal, (ax + x, ay, az + h))
-        else:
-            b = box(f"{name}_LidBand{k}", (band_h, ld + 2 * band_t, lid_rise * 0.6 + band_t), metal, (ax + x, ay, az + h))
-        swing.append(b)
-    # hinges: a fixed leaf on the body's back, a leaf on the lid's back, a knuckle (pin) between them on the hinge line
-    r = 0.018
-    py = ay + d / 2 + band_t + r * 0.7
-    pivot = Vector((ax, py, az + h))
-    for k, x in enumerate((-0.3 * w, 0.3 * w)):
-        knuckle = cyl(f"{name}_Hinge{k}", r, 0.1, metal, (ax + x - 0.05, py, az + h - r), axis="X", verts=16)
-        parts.append(knuckle)
-        parts.append(box(f"{name}_HingeLeafBody{k}", (0.09, 0.006, 0.075), metal, (ax + x, py - r * 0.4, az + h - 0.075 - r * 0.2)))
-        leaf = box(f"{name}_HingeLeafLid{k}", (0.09, 0.006, 0.06), metal, (ax + x, py - r * 0.4, az + h + r * 0.2))
-        swing.append(leaf)
-    # lock plate on the body's front, against the face (a hasp on a barrel lid's thin front edge would hang in the air)
-    parts.append(box(f"{name}_Lock", (0.1, 0.014, 0.12), gold, (ax, ay - d / 2 - band_t - 0.007, az + h - 0.13), bevel=0.004))
-    if open_deg:
-        _turn(swing, pivot, "X", -open_deg)     # front lifts, lid rolls back over the hinge line
-    parts += swing
-    if hoard:
-        parts += coins(body, hoard, gold, radius=min(0.03, w * 0.04), fill=0.8)
-    # check the kit's own promise: every swinging part still meets the hinge line
-    for o in swing:
-        lo, hi = bounds(o)
-        assert lo.y - 0.05 <= py <= hi.y + 0.05, f"{o.name} came off the hinge"
-    return {"body": body, "lid": lid, "parts": parts}
-
-
 def lathe(name, profile, material=None, at=(0, 0, 0), segments=32, cap=True):
     """Spin a profile [(radius, z), ...] (bottom to top) round Z: barrels, vases, bottles, columns, lamp bases."""
     import bmesh
@@ -858,24 +804,3 @@ def lathe(name, profile, material=None, at=(0, 0, 0), segments=32, cap=True):
     o = _finish_part(o, name, material, 0)
     o.location = Vector(at)
     return o
-
-
-def barrel(name="Barrel", height=0.9, radius=0.3, bulge=0.12, hoops=4, wood=None, metal=None, at=(0, 0, 0)):
-    """A complete wooden barrel: bulging body (radius grows by `bulge` x radius at the middle), iron hoops that sit ON
-    the curve, a lid set into the top. Returns {"body", "parts"}."""
-    wood = wood or pbr(f"{name}_Wood", "wood_planks", scale=3, fallback="#7a4e2a")
-    metal = metal or mat(f"{name}_Iron", "#3a3f45", metal=1.0, rough=0.42)
-    r_at = lambda z: radius * (1 + bulge * math.sin(math.pi * z / height))
-    prof = [(r_at(height * i / 16), height * i / 16) for i in range(17)]
-    ax, ay, az = at
-    body = lathe(f"{name}_Body", prof, wood, at)
-    parts = [body]
-    for k in range(hoops):
-        t = (0.1, 0.3, 0.7, 0.9)[k] if hoops == 4 else (k + 0.5) / hoops
-        z0, z1 = height * t - 0.025, height * t + 0.025
-        hoop = lathe(f"{name}_Hoop{k}", [(r_at(z0) + 0.006, 0), (r_at(z1) + 0.006, z1 - z0)], metal, (ax, ay, az + z0), cap=False)
-        hoop.modifiers.new("Solidify", "SOLIDIFY").thickness = 0.006
-        parts.append(hoop)
-    # the head: a disc a little below the rim
-    parts.append(cyl(f"{name}_Head", r_at(height) * 0.94, 0.02, wood, (ax, ay, az + height - 0.035), verts=32))
-    return {"body": body, "parts": parts}

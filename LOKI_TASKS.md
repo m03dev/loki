@@ -64,12 +64,17 @@ Done 2026-10-30 (owner: "blender results are shit", "floating lids ... we need t
   `hdri()` studio light in lights(); flat colours only when offline.
 - [x] Every finish() renders a four-view sheet (front, right, back, above); the `look:` check scores the sheet.
 
-Next, in order (owner 2026-10-30: "a cad software", "take the top two and pit them against each other"):
+Done 2026-10-30 (owner: "keep improving ... use deepseek and that nano one ... not specific for blender"):
 
-0. CAD head-to-head on both machines: build123d vs FreeCAD (the launcher installs both into harness_data/cad).
-   Five different objects each (chest, chair, lantern, sword, bookshelf), written by LOKI's free models with the
-   cad-modeling playbook, rendered by scripts/cad_render.py. Compare: passed first try, steps, time, vision score.
-   The winner becomes the one CAD route; the loser and the old box-stacking kits go.
+- [x] CAD tryout dropped: free models wrote bad raw CAD with build123d and FreeCAD alike (2-4/10 after 30-47 steps).
+- [x] Models by evidence: DeepSeek-V4.1-Flash is the first brain (BlenderWorld 65.7), Nemotron nano the fast model;
+  every checklist check a provider's step passes or fails moves it up or down the pick order.
+- [x] Auto / Smart instead of Agent / Hard. Live `session` tool: an interpreter (Blender or Python) that stays open
+  per job, so work goes step by step instead of re-running one big script.
+
+Next, in order:
+
+0. Prove the live-session flow on the PC (same chest brief), then other kinds of work through the same loop.
 
 Then (owner's direction 2026-10-29: art, production, creation; long runs; free models;
 owner's picks: library + Mac/PC mirror, For you prompt approval, Lab GPU queue + ComfyUI, Mac<->PC link + local

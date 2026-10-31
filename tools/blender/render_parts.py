@@ -1,8 +1,8 @@
-"""cad_render - turn CAD parts into a finished render (Blender). Every job gets it in scripts/.
+"""render_parts - turn mesh parts (STL / OBJ / GLB from any tool) into a finished render. Every job gets it in scripts/.
 
-A CAD script (build123d or FreeCAD) writes one STL per material into parts/ (millimetres):
+Any tool that makes meshes writes one file per material into parts/ (STL/OBJ in millimetres, GLB in metres):
     parts/wood.stl  parts/iron.stl  parts/gold.stl  parts/stone.stl  parts/glass.stl  parts/red.stl ...
-Then:  blender --background --python-exit-code 1 --python scripts/cad_render.py -- parts <name>
+Then:  blender --background --python-exit-code 1 --python scripts/render_parts.py -- parts <name>
 It imports the parts, gives each its material (by file name; any colour word or #hex works too), adds ground, camera and
 studio light, saves scenes/<name>.blend, renders renders/<name>.png + renders/<name>_views.png (front/right/back/above)
 and writes renders/<name>_info.json (triangles, open edges, size in metres per part) - the info shown with the result.
@@ -50,11 +50,11 @@ def material_for(stem):
     return mat(stem, "#9a9a9a", rough=0.5)
 
 
-start(os.path.join(HERE, "cad_render.py"))
+start(os.path.join(HERE, "render_parts.py"))
 info = {"name": name, "parts": {}}
 files = sorted(f for f in os.listdir(parts_dir) if f.lower().endswith((".stl", ".obj", ".glb"))) if os.path.isdir(parts_dir) else []
 if not files:
-    raise SystemExit(f"no parts in {parts_dir}: the CAD script must write parts/<material>.stl")
+    raise SystemExit(f"no parts in {parts_dir}: write parts/<material>.stl first")
 for f in files:
     stem, ext = os.path.splitext(f)
     before = set(bpy.data.objects)

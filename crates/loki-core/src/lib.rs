@@ -12,4 +12,5 @@ pub mod knowledge;
 pub mod llm;
 pub mod pool;
 pub mod risk;
+pub mod session;
 pub mod tools;

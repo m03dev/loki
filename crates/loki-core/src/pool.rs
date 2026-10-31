@@ -54,6 +54,11 @@ struct Usage {
     consecutive_failures: u32,
     successes: u64,
     failures: u64,
+    /// The work itself: checks this provider's steps passed / failed (a model that answers but builds junk loses here).
+    #[serde(default)]
+    checks_passed: u64,
+    #[serde(default)]
+    checks_failed: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -181,7 +186,10 @@ impl ModelPool {
                 .map(|u| u.consecutive_failures)
                 .unwrap_or(0);
             let first = prefer.is_some_and(|n| n == p.name);
-            (!first, p.priority, rel)
+            // evidence: up to 8 priority points for a provider whose steps keep passing their checks
+            let (ok, bad) = self.state.usage.get(&p.name).map(|u| (u.checks_passed, u.checks_failed)).unwrap_or((0, 0));
+            let quality = (ok as f64 + 1.0) / ((ok + bad) as f64 + 2.0);
+            (!first, p.priority - (quality * 8.0).round() as i32, rel)
         });
         for p in candidates {
             let key = if p.key_env.is_empty() {
@@ -233,6 +241,18 @@ impl ModelPool {
         u.consecutive_failures = 0;
         u.successes += 1;
         self.save();
+    }
+
+    /// A checklist step this provider worked on passed (or failed) the driver's check.
+    pub fn report_check(&mut self, name: &str, passed: bool) {
+        let u = self.usage(name, Utc::now());
+        if passed { u.checks_passed += 1 } else { u.checks_failed += 1 }
+        self.save();
+    }
+
+    /// Per provider: (checks passed, checks failed).
+    pub fn check_scores(&self) -> HashMap<String, (u64, u64)> {
+        self.state.usage.iter().map(|(k, u)| (k.clone(), (u.checks_passed, u.checks_failed))).collect()
     }
 
     /// `rate_limited` = HTTP 429 / quota; other failures back off more gently.

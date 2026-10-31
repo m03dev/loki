@@ -62,7 +62,7 @@ pub struct RunInfo {
     /// The owner's answer or approval, consumed on resume.
     #[serde(default)]
     pub owner_reply: Option<OwnerReply>,
-    /// "agent" (default) or "hard" (strongest model first).
+    /// "auto" (default: best brain that answers, fast model when brains are busy) or "smart" (strongest proven only).
     #[serde(default)]
     pub mode: String,
     /// Provider the owner picked for this job (tried first).

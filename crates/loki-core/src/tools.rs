@@ -67,6 +67,8 @@ pub fn schemas() -> Value {
               "required":["header","question","options"]}}}), &["questions"]),
         f("inspect_scene", "Open a saved .blend with LOKI's inspector and get real facts: meshes, triangles, materials, and errors such as floating parts, parts outside the camera view, no camera. Use it after every Blender build.",
           json!({"path":{"type":"string"}}), &["path"]),
+        f("session", "Work live in an interpreter that stays open for this job: kind 'blender' (Python inside Blender: the scene stays between calls; helpers scene() lists objects, look('name') renders four views to renders/name_views.png, save('scenes/x.blend'), plus loki_bpy) or 'python'. Send a few lines at a time, check, adjust - not one huge script. Printed output and errors come back.",
+          json!({"kind":{"type":"string","enum":["blender","python"]},"code":{"type":"string"},"timeout":{"type":"integer"}}), &["kind","code"]),
         f("look", "Have a vision model compare an image (a render) with the brief. Returns a score 1-10 and the visible problems.",
           json!({"path":{"type":"string"},"brief":{"type":"string"}}), &["path"]),
         f("learn", "Save a one-line rule to LOKI's lessons notebook after you fixed a real error (e.g. an API change), so no future job repeats it.",

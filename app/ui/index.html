@@ -327,7 +327,7 @@ function dropdown(anchor, title, items, value, onpick) {
 let toastT; function toast(t, onclick) { const e = $('#toast'); e.textContent = t; e.onclick = () => { e.classList.remove('show'); onclick && onclick(); }; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('show'), 4200); }
 
 /* ---------- state + settings ---------- */
-const S = { sel:null, runs:[], local:[], peerRuns:{}, link:null, target:'', tick:0, chat:null, models:[], mode:'agent', prefer:'', atts:[], open:new Set(), libPage:0, seenWaiting:null, planOpen:true, answers:{} };
+const S = { sel:null, runs:[], local:[], peerRuns:{}, link:null, target:'', tick:0, chat:null, models:[], mode:'auto', prefer:'', atts:[], open:new Set(), libPage:0, seenWaiting:null, planOpen:true, answers:{} };
 let CFG = { theme:'glass', accent:null, interview:'always', scale:1, thumb:110, notify:true, wl:22, wr:26, home:{} };
 const THEMES = { glass:['#8ccfc4','#8aa4b8','#a596c4','#141417'], midnight:['#7aa2ff','#8f8cf0','#c08cff','#0d1120'], ember:['#f0a868','#e88a6a','#e46f8f','#16110e'],
   forest:['#8fd19e','#b7cf86','#d9c47a','#0f1511'], mono:['#e4e4e7','#b4b4ba','#8f8f96','#141414'], light:['#3f9e90','#5b7d99','#7b68b0','#f3f4f6'] };
@@ -524,7 +524,7 @@ function chatShell() {
     <div class="dropov">${ic('image')}<div>Drop to attach to this job</div><div style="color:var(--dim);font-size:12.5px">images, references, scenes — any file</div></div>
     <div class="comp"><div class="box"><div class="atts" id="atts" style="display:none"></div>
       <textarea id="inp" rows="1" placeholder="Describe what to make, or talk to the job…"></textarea>
-      <div class="cb"><span class="seg"><button data-mode="agent" class="tu" data-tip="Agent — fast free models, local model as backup">Agent</button><button data-mode="hard" class="tu" data-tip="Hard — strongest free model only; waits instead of dropping to the local model">Hard</button></span>
+      <div class="cb"><span class="seg"><button data-mode="auto" class="tu" data-tip="Auto — the best free model that answers; a fast model keeps going when they're busy">Auto</button><button data-mode="smart" class="tu" data-tip="Smart — only the strongest proven models; waits for them rather than settling">Smart</button></span>
         <button class="dd tu" id="modelSel" data-tip="Model — which free model to try first"></button>
         <button class="dd tu" id="runOn" style="display:none" data-tip="Run on — this machine, or the other one (heavy Blender / GPU work belongs on the PC)"></button>
         <button class="ib tu" id="bAtt" data-tip="Attach — add files as references (or drop / paste them)">${ic('plus')}</button><input type="file" id="pick" multiple hidden>

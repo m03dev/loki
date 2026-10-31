@@ -66,11 +66,7 @@ impl Knowledge {
             .map(|p| {
                 let mut s = tokens(&format!("{} {}", p.name.replace('-', " "), p.description)).iter().filter(|w| words.contains(w)).count();
                 // the scripting playbook is the base for any Blender work
-                let cad = words.iter().any(|w| matches!(w.as_str(), "cad" | "build123d" | "freecad"));
-                if p.name == "cad-modeling" && cad {
-                    s += 5;
-                }
-                if p.name == "blender-scripting" && !cad && words.iter().any(|w| matches!(w.as_str(), "blender" | "model" | "render" | "scene" | "prop" | "3d" | "low" | "poly" | "turntable")) {
+                if p.name == "blender-scripting" && words.iter().any(|w| matches!(w.as_str(), "blender" | "model" | "render" | "scene" | "prop" | "3d" | "low" | "poly" | "turntable")) {
                     s += 3;
                 }
                 (s, p)
