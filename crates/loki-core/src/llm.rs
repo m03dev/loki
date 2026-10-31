@@ -230,7 +230,16 @@ pub fn repair_call_with(text: &str, schemas: &Value) -> Option<ToolCall> {
     for candidate in json_candidates(text) {
         if let Some(v) = parse_json_lenient(&candidate) {
             if v.get("tool").or_else(|| v.get("name")).and_then(|n| n.as_str()).is_none() {
-                let args = v.get("args").or_else(|| v.get("arguments")).or_else(|| v.get("parameters")).cloned().unwrap_or_else(|| v.clone());
+                let mut args = v.get("args").or_else(|| v.get("arguments")).or_else(|| v.get("parameters")).cloned().unwrap_or_else(|| v.clone());
+                // {"args": {..., "tool": "write_file"}} - the tool name slipped inside the args
+                if let Some(o) = args.as_object_mut() {
+                    if let Some(Value::String(n)) = o.remove("tool") {
+                        if schemas.as_array().is_some_and(|a| a.iter().any(|t| t["function"]["name"] == n.as_str() || t["name"] == n.as_str())) {
+                            return Some(ToolCall { name: n, args });
+                        }
+                        o.insert("tool".into(), Value::String(n));
+                    }
+                }
                 if let Some(name) = infer_tool(&args, schemas) {
                     return Some(ToolCall { name, args });
                 }
@@ -311,11 +320,17 @@ fn json_candidates(text: &str) -> Vec<String> {
                     depth -= 1;
                     if depth == 0 {
                         out.push(text[s..s + i + 1].to_string());
+                        depth = -1;
                         break;
                     }
                 }
                 _ => {}
             }
+        }
+        // models drop a closing brace at the end of a long call (seen 20 turns in a row from Nemotron-Ultra):
+        // close what is open
+        if depth > 0 && !in_str {
+            out.push(format!("{}{}", text[s..].trim_end(), "}".repeat(depth as usize)));
         }
     }
     out
@@ -387,6 +402,16 @@ pub fn parse_json_lenient(s: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repairs_a_call_missing_its_last_brace() {
+        // Nemotron-Ultra on the PC, 20 turns in a row: the args object is never closed
+        let t = r#"{"args":{"path":"D:\\loki\\work\\chest_spec.json","content":"{\n  \"name\": \"chest\"\n}","tool":"write_file"}"#;
+        let c = repair_call(t).expect("parsed");
+        assert_eq!(c.name, "write_file");
+        assert!(c.args["content"].as_str().unwrap().contains("chest"));
+        assert!(c.args.get("tool").is_none());
+    }
 
     #[test]
     fn repairs_fenced_tool_json() {
