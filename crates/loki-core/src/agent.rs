@@ -463,8 +463,10 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
         let (img, mime) = shrink(&bytes).unwrap_or((bytes, if path.to_ascii_lowercase().ends_with(".png") { "image/png" } else { "image/jpeg" }));
         let what = if use_sheet { "a sheet of four views of one 3D render (top-left: front, top-right: right side, bottom-left: from behind, bottom-right: from above)" } else { "a 3D render" };
         let prompt = format!("You are a strict art director reviewing {what}.\nBRIEF: {brief}\n\
-            Look at the image. List concrete visible problems (floating or disconnected parts, wrong proportions, anything the brief asks for that is missing or out of frame, \
-            blocky placeholder shapes, bad lighting or exposure, clipping). Then score 1-10 how well it meets the brief (7 = good enough to show, 9 = portfolio).\n\
+            Judge ONLY the subject the brief asks for: its shape, proportions, parts and materials. The floor, background, framing and studio light are LOKI's \
+            and are not problems - never ask for walls, floors, backdrops or scenery the brief does not name. \
+            List concrete visible problems (floating or disconnected parts, wrong proportions, anything the brief asks for that is missing, \
+            blocky placeholder shapes, clipping). Then score 1-10 how well it meets the brief (7 = good enough to show, 9 = portfolio).\n\
             Reply only JSON: {{\"score\": n, \"problems\": [\"...\"], \"good\": [\"...\"]}}");
         match self.llm.vision(&self.pool, &prompt, &img, mime).await {
             Ok(r) => {
@@ -479,10 +481,24 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
         }
     }
 
+    /// Scores ratchet: every try is kept if it is the best so far, a worse try is called out (go back, change one thing),
+    /// and after 3 tries the best one stands - so a job never walks itself backwards for hours chasing a noisy judge.
     async fn check_look(&self, ws: &std::path::Path, path: &str, brief: &str) -> Result<String, String> {
+        let pass = crate::tuning::Tuning::load().look_pass;
         match self.look(ws, path, brief).await {
-            Ok((score, text)) if score >= crate::tuning::Tuning::load().look_pass => Ok(format!("vision score {score}/10. {text}")),
-            Ok((score, text)) => Err(format!("vision score {score}/10 (needs {}). Fix these and render again: {text}", crate::tuning::Tuning::load().look_pass)),
+            Ok((score, text)) => {
+                let (best, tries) = keep_best(ws, path, score);
+                if score >= pass {
+                    Ok(format!("vision score {score}/10. {text}"))
+                } else if tries >= 3 && best >= 5.0 {
+                    restore_best(ws, path);
+                    Ok(format!("best of {tries} tries kept (vision score {best}/10; the files are back to that version). Last notes: {text}"))
+                } else if score < best {
+                    Err(format!("vision score {score}/10 - WORSE than your best try ({best}/10). Go back to that version and change one thing at a time. Notes: {text}"))
+                } else {
+                    Err(format!("vision score {score}/10 (needs {pass}). Fix these and render again: {text}"))
+                }
+            }
             // Don't hold a job hostage to a busy free tier: pass, but say it was not seen.
             Err(e) if e.starts_with("no vision model") => Ok(format!("NOT visually checked ({e}); file exists")),
             Err(e) => Err(e),
@@ -843,4 +859,87 @@ fn short(s: &str, n: usize) -> String {
 /// Convenience for callers that only have a JSON value for a tool call.
 pub fn call_from(v: &Value) -> Option<ToolCall> {
     Some(ToolCall { name: v["name"].as_str()?.to_string(), args: v["args"].clone() })
+}
+
+fn best_dir(ws: &std::path::Path, path: &str) -> std::path::PathBuf {
+    let key: String = path.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+    ws.join(".loki").join("best").join(key)
+}
+
+/// The files that make one result: every file in the image's folder and in scenes/ whose name starts with its stem
+/// (renders/chest.png, renders/chest_views.png, scenes/chest.json, scenes/chest.blend).
+fn result_files(ws: &std::path::Path, path: &str) -> Vec<std::path::PathBuf> {
+    let file = ws.join(path);
+    let Some(stem) = file.file_stem().map(|s| s.to_string_lossy().to_string()) else { return vec![] };
+    let mut out = vec![];
+    for dir in [file.parent().map(|p| p.to_path_buf()), Some(ws.join("scenes"))].into_iter().flatten() {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for e in rd.flatten() {
+                let n = e.file_name().to_string_lossy().to_string();
+                let rest = n.strip_prefix(&stem).unwrap_or("x");
+                if e.path().is_file() && (rest.starts_with('.') || rest.starts_with("_views") || rest.starts_with("_info")) {
+                    out.push(e.path());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Record a look score; a new best copies the result's files aside. Returns (best score, tries).
+fn keep_best(ws: &std::path::Path, path: &str, score: f64) -> (f64, u32) {
+    let dir = best_dir(ws, path);
+    let _ = std::fs::create_dir_all(&dir);
+    let rec: Value = std::fs::read_to_string(dir.join("best.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(json!({"best": -1.0, "tries": 0}));
+    let (mut best, tries) = (rec["best"].as_f64().unwrap_or(-1.0), rec["tries"].as_u64().unwrap_or(0) as u32 + 1);
+    if score > best {
+        best = score;
+        let mut kept = vec![];
+        for f in result_files(ws, path) {
+            if let Ok(rel) = f.strip_prefix(ws) {
+                let to = dir.join("files").join(rel);
+                let _ = std::fs::create_dir_all(to.parent().unwrap_or(&dir));
+                if std::fs::copy(&f, &to).is_ok() { kept.push(rel.to_string_lossy().to_string()); }
+            }
+        }
+        let _ = std::fs::write(dir.join("kept.json"), json!(kept).to_string());
+    }
+    let _ = std::fs::write(dir.join("best.json"), json!({"best": best, "tries": tries}).to_string());
+    (best, tries)
+}
+
+/// Put the best try's files back in place.
+fn restore_best(ws: &std::path::Path, path: &str) {
+    let dir = best_dir(ws, path);
+    let kept: Vec<String> = std::fs::read_to_string(dir.join("kept.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    for rel in kept {
+        let _ = std::fs::copy(dir.join("files").join(&rel), ws.join(&rel));
+    }
+}
+
+#[cfg(test)]
+mod best_tests {
+    use super::*;
+
+    #[test]
+    fn a_worse_try_never_replaces_the_best_one() {
+        let ws = std::env::temp_dir().join(format!("lokibest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&ws);
+        std::fs::create_dir_all(ws.join("renders")).unwrap();
+        std::fs::create_dir_all(ws.join("scenes")).unwrap();
+        let put = |v: &str| {
+            std::fs::write(ws.join("renders/chest.png"), v).unwrap();
+            std::fs::write(ws.join("renders/chest_views.png"), v).unwrap();
+            std::fs::write(ws.join("scenes/chest.json"), v).unwrap();
+        };
+        put("good");
+        assert_eq!(keep_best(&ws, "renders/chest.png", 6.0), (6.0, 1));
+        put("worse");
+        assert_eq!(keep_best(&ws, "renders/chest.png", 3.0), (6.0, 2));
+        restore_best(&ws, "renders/chest.png");
+        for f in ["renders/chest.png", "renders/chest_views.png", "scenes/chest.json"] {
+            assert_eq!(std::fs::read_to_string(ws.join(f)).unwrap(), "good", "{f}");
+        }
+        let _ = std::fs::remove_dir_all(&ws);
+    }
 }

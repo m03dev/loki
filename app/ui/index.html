@@ -48,8 +48,6 @@ svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 .crumb{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw;padding-left:6px}
 .chipm{font-size:11.5px;color:var(--muted);padding:3px 10px;border-radius:99px;border:1px solid var(--edge);background:var(--g2);white-space:nowrap}
 .bell{position:relative}.bell .n{position:absolute;top:3px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--warn);color:#1a1a1a;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
-.bell.ring svg{animation:ring 1.2s var(--ease) 2}
-@keyframes ring{0%,100%{transform:rotate(0)}20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(8deg)}80%{transform:rotate(-4deg)}}
 .frame{position:absolute;inset:50px 0 0 0;display:grid;padding:0 12px 12px 0}
 .rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 0 4px;width:58px}
 .rail .ib{width:40px;height:40px;border-radius:13px}
@@ -316,14 +314,12 @@ async function paintLogs() {
   box.textContent = d ? (d[S.logFile] || '(empty)') : 'Could not read the logs' + (S.logWho ? ` of ${S.logWho}` : '');
   box.scrollTop = box.scrollHeight;
 }
-/* "What should we make?": four ideas from LOKI's current list (made from its playbooks and your recent work), shuffled */
-async function paintIdeas(again) {
+/* "What should we make?": one idea per new chat, picked at random from LOKI's local list (no model call) */
+async function paintIdeas() {
   const el = $('#sugs'); if (!el) return;
-  if (again || !S.ideas || Date.now() - (S.ideasT || 0) > 120000) { S.ideas = await api('/suggestions').catch(() => S.ideas || []) || []; S.ideasT = Date.now(); }
-  const pick = [...S.ideas].sort(() => Math.random() - .5).slice(0, 4);
-  el.innerHTML = pick.map(s => `<button class="sug">${esc(s)}</button>`).join('') + `<button class="ib" id="sugMore" data-tip="Other ideas">${ic('refresh')}</button>`;
+  if (!S.idea) { const all = await api('/suggestions').catch(() => []) || []; S.idea = all[Math.floor(Math.random() * all.length)] || ''; }
+  el.innerHTML = S.idea ? `<button class="sug">${esc(S.idea)}</button>` : '';
   el.querySelectorAll('.sug').forEach(b => b.onclick = () => { $('#inp').value = b.textContent; $('#inp').focus(); paintComposer(); });
-  $('#sugMore').onclick = () => paintIdeas(Math.random() < .3);
 }
 /* one small menu for every choice (no native selects) */
 function dropdown(anchor, title, items, value, onpick) {
@@ -341,8 +337,8 @@ function dropdown(anchor, title, items, value, onpick) {
 let toastT; function toast(t, onclick) { const e = $('#toast'); e.textContent = t; e.onclick = () => { e.classList.remove('show'); onclick && onclick(); }; e.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('show'), 4200); }
 
 /* ---------- state + settings ---------- */
-const S = { sel:null, runs:[], local:[], peerRuns:{}, link:null, target:'', tick:0, chat:null, models:[], mode:'auto', prefer:'', atts:[], open:new Set(), libPage:0, seenWaiting:null, planOpen:true, answers:{} };
-let CFG = { theme:'glass', accent:null, interview:'always', scale:1, thumb:110, notify:true, wl:22, wr:26, home:{} };
+const S = { sel:null, runs:[], local:[], peerRuns:{}, link:null, target:'', tick:0, chat:null, models:[], mode:'auto', prefer:'', atts:[], open:new Set(), libPage:0, planOpen:true, answers:{} };
+let CFG = { theme:'glass', accent:null, interview:'off', scale:1, thumb:110, wl:22, wr:26, home:{} };
 const THEMES = { glass:['#8ccfc4','#8aa4b8','#a596c4','#141417'], midnight:['#7aa2ff','#8f8cf0','#c08cff','#0d1120'], ember:['#f0a868','#e88a6a','#e46f8f','#16110e'],
   forest:['#8fd19e','#b7cf86','#d9c47a','#0f1511'], mono:['#e4e4e7','#b4b4ba','#8f8f96','#141414'], light:['#3f9e90','#5b7d99','#7b68b0','#f3f4f6'] };
 let saveT; const saveCfg = () => { clearTimeout(saveT); saveT = setTimeout(() => post('/settings', CFG, 'PUT').catch(() => {}), 350); };
@@ -469,7 +465,7 @@ async function paintSettings() {
       <div class="row"><label>Thumbnail size</label><input class="range" type="range" min="70" max="240" step="10" value="${CFG.thumb}" data-cfg="thumb"></div></div>
     <div class="sec"><h3>${ic('msg')} Working</h3>
       <div class="row"><label>Interview me</label><span class="seg">${['always','big','off'].map(v => `<button data-iv-set="${v}" class="${CFG.interview === v ? 'on' : ''}">${{always:'Every job', big:'Big jobs', off:'Never'}[v]}</button>`).join('')}</span></div>
-      <div class="row"><label>Notifications</label><span class="seg"><button data-nt="1" class="${CFG.notify ? 'on' : ''}">On</button><button data-nt="0" class="${CFG.notify ? '' : 'on'}">Off</button></span></div></div>
+</div>
     <div class="sec"><h3>${ic('swap')} Mac ↔ PC link</h3><div id="linkBox"><div class="empty">…</div></div></div>
     <div class="sec"><h3>${ic('term')} Logs <span class="sp"></span><span class="seg" id="logWho"></span></h3><div class="seg" id="logFile" style="margin-bottom:6px"></div><pre class="logs" id="logBox"></pre></div>
     <div class="sec"><h3>${ic('monitor')} This machine <span class="sp"></span><button class="btn sm" id="scanB">Scan again</button></h3><div id="sysBox"><div class="empty">Scanning…</div></div></div>
@@ -493,7 +489,6 @@ async function paintSettings() {
   $('#accReset').onclick = () => { CFG.accent = null; applyLook(); saveCfg(); paintSettings(); };
   db.querySelectorAll('[data-cfg]').forEach(r => r.oninput = () => { CFG[r.dataset.cfg] = +r.value; applyLook(); saveCfg(); });
   db.querySelectorAll('[data-iv-set]').forEach(b => b.onclick = () => { CFG.interview = b.dataset.ivSet; saveCfg(); paintSettings(); });
-  db.querySelectorAll('[data-nt]').forEach(b => b.onclick = () => { CFG.notify = b.dataset.nt === '1'; if (CFG.notify && 'Notification' in window) Notification.requestPermission?.(); saveCfg(); paintSettings(); });
   $('#scanB').onclick = () => scan(); $('#probeB').onclick = async () => { $('#freeBox').innerHTML = '<div class="empty">Asking every model for a one-word answer…</div>'; await loadModels(true); paintFree(); };
   paintFree(); scan(); paintRoles(); paintTuning();
   /* compact: every section folds by its title; the choice is remembered */
@@ -793,7 +788,7 @@ async function sendAtts(m) {
   return out;
 }
 async function stopJob() { if (S.sel) { await post(`${rb(S.sel)}/stop`).catch(() => {}); toast('Stopped — send a message to carry on'); poll(true); } }
-function newJob() { S.sel = null; S.chat = null; paintChat(true); fillDrawer(); paintTarget(); $('#inp')?.focus(); }
+function newJob() { S.idea = null; S.sel = null; S.chat = null; paintChat(true); fillDrawer(); paintTarget(); $('#inp')?.focus(); }
 function select(id) { S.sel = id; S.chat = null; S.open.clear(); S.planOpen = true; paintTarget(); poll(true); }
 $('#bUpd').onclick = async () => { try { await post('/update'); toast('Updating… LOKI restarts in a moment; jobs carry on'); } catch (e) { toast('Update request failed'); } };
 
@@ -809,19 +804,6 @@ function paintBell() {
 }
 $('#bBell').onclick = e => { e.stopPropagation(); $('#pop').classList.toggle('show'); paintBell(); };
 document.addEventListener('mousedown', e => { if (!e.target.closest('#pop') && !e.target.closest('#bBell')) $('#pop').classList.remove('show'); });
-function notifyNew() {
-  const w = S.runs.filter(r => r.status === 'waiting'), ids = w.map(r => r.id + ':' + r.steps);
-  if (S.seenWaiting === null) { S.seenWaiting = ids; return; }
-  const fresh = w.filter(r => !S.seenWaiting.includes(r.id + ':' + r.steps)); S.seenWaiting = ids;
-  if (!fresh.length) return;
-  const r = fresh[0], what = r.pending?.name === 'interview' ? 'has a few questions' : r.pending?.name === 'image_prompt' ? 'wants you to OK an image prompt' : r.pending?.name === 'ask_owner' ? 'asks you something' : 'needs your OK';
-  $('#bBell').classList.add('ring'); setTimeout(() => $('#bBell').classList.remove('ring'), 2600);
-  if (CFG.notify) {
-    if (r.id !== S.sel) toast(`${r.title || 'A job'} ${what}`, () => select(r.id));
-    if ('Notification' in window && Notification.permission === 'granted' && document.hidden) new Notification('LOKI', {body:`${r.title || 'A job'} ${what}`});
-  }
-}
-
 /* ---------- misc ---------- */
 document.addEventListener('click', e => {
   const im = e.target.closest('img[data-zoom]'); if (im) { $('#lbImg').src = im.src; $('#lbCap').textContent = im.dataset.zoom; $('#lb').classList.add('show'); return; }
@@ -856,7 +838,7 @@ async function poll(force) {
     S.local = await api('/runs') || []; await peers(); mergeRuns();
     if (S.sel) { const remote = !!where(S.sel)[0];
       if (!remote || force || ++S.tick % 2 === 0) { const c = await api(`${rb(S.sel)}/chat`).catch(() => null); if (c) { if (remote) c.run.id = S.sel; S.chat = c; } } }
-    paintChat(force); paintBell(); notifyNew(); if (bodyOf('jobs')) fillDrawer();
+    paintChat(force); paintBell(); if (bodyOf('jobs')) fillDrawer();
     if (S.offline) { S.offline = false; $('#mach').innerHTML = S.machHTML || ''; }
   } catch (e) { if (!S.offline) { S.offline = true; $('#mach').innerHTML = '<b style="color:var(--bad)">driver restarting…</b>'; } }
   busy = false;

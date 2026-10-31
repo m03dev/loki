@@ -79,6 +79,14 @@ Done 2026-10-30 (owner: "strip that logic that makes it loop", "real results, no
 - [x] `build` tool + tools/blender/loki_build.py: the model writes a part spec (shape, size, what it sits on, where);
   LOKI places every part face to face, bevels, smooths, wraps bands, hinges lids, lights, renders four views.
 
+Done 2026-10-31 (owner: "1 step forward 2 steps back", "take off the guardrails", "don't notify me"):
+
+- [x] Looks ratchet: every look score is kept if it's the best so far (its files saved in .loki/best), a worse try is
+  called out, and after 3 tries the best one stands - a chest job no longer walks itself backwards for 11 hours.
+- [x] The vision judge scores only the subject (no "add a wall / floor / backdrop"); `build` makes only the object.
+- [x] No notifications (toast, desktop, bell ring); interview off by default; one random idea per new chat, local
+  only - no model calls spent on suggestions.
+
 Next, in order:
 
 0. LOKI builds lantern / chest / stool / reading nook with `build` on the PC; grow shapes from what jobs ask for.
