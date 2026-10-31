@@ -358,6 +358,56 @@ def _axis_point(o, frac):
     return a.lerp(b, frac)
 
 
+def _bvh(o):
+    from mathutils.bvhtree import BVHTree
+    dg = bpy.context.evaluated_depsgraph_get()
+    ev = o.evaluated_get(dg)
+    me = ev.to_mesh()
+    verts = [o.matrix_world @ v.co for v in me.vertices]
+    polys = [tuple(pl.vertices) for pl in me.polygons]
+    ev.to_mesh_clear()
+    return BVHTree.FromPolygons(verts, polys), verts
+
+
+def gap(a, b):
+    """Shortest distance between two parts' surfaces (0 when they touch or cross)."""
+    ta, va = _bvh(a)
+    tb, vb = _bvh(b)
+    if ta.overlap(tb):
+        return 0.0
+    best = 1e9
+    for v in va[:: max(1, len(va) // 400)]:
+        hit = tb.find_nearest(v)
+        if hit[0] is not None:
+            best = min(best, hit[3])
+    for v in vb[:: max(1, len(vb) // 400)]:
+        hit = ta.find_nearest(v)
+        if hit[0] is not None:
+            best = min(best, hit[3])
+    return best
+
+
+def check_contacts(spec, made, first):
+    """Nothing floats: every attached part must touch what it is on. A gap is an error the model fixes."""
+    bad = []
+    for p in spec["parts"]:
+        on = p.get("on")
+        if not on or p.get("shape") in DERIVED or p["id"] not in made:
+            continue
+        others = [x for q in spec["parts"] if q["id"] != p["id"] and q["id"] in made and q.get("shape") != "heap" for x in made[q["id"]][:12]]
+        for o in made[p["id"]]:
+            g = gap(o, first[on])
+            if g > 0.004:
+                # it may rest on something else instead (a band on the posts around a base)
+                g = min([g] + [gap(o, x) for x in others])
+            if g > 0.004:
+                bad.append(f"'{o.name}' floats {g * 100:.1f} cm away from '{on}' (and everything else)")
+    if bad:
+        raise SpecError("; ".join(bad[:6]) + ". Parts must touch what they are on: drop or shrink the offset, pick the "
+                        "anchor that puts them there (top/bottom/front/back/left/right/inside), use \"band\" for straps "
+                        "and \"rod\" for bars between parts.")
+
+
 def make_derived(p, first, made, mats):
     """band: straps round another part; rod: a round bar between two parts (rungs, rails, chains)."""
     pid = p["id"]
@@ -516,9 +566,14 @@ def wrap_around(o, parent):
     _boolean(o, c)
 
 
-def hinge(o, edge, angle):
-    """Rotate o (and its children) about its bottom edge on `edge`."""
+def hinge(o, edge, angle, parent=None):
+    """Rotate o (and its children) about its bottom edge on `edge` - where it meets its parent, so an overhanging lid
+    still turns on the body's edge."""
     lo, hi = bounds(o)
+    if parent is not None:
+        plo, phi = bounds(parent)
+        lo = Vector((max(lo.x, plo.x), max(lo.y, plo.y), lo.z))
+        hi = Vector((min(hi.x, phi.x), min(hi.y, phi.y), hi.z))
     pivot = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))
     a = math.radians(angle)
     if edge in ("back", "front"):
@@ -588,6 +643,10 @@ def build(spec):
         if mname not in mats:
             mats[mname] = make_material(mname, mname)
         rep = p.get("repeat") or {}
+        unknown = set(rep) - {"count", "around", "along", "spacing", "start", "splay"}
+        if unknown:
+            raise SpecError(f"part '{pid}': repeat takes count with around (a ring) or along/spacing (a row), plus splay - "
+                            f"not {', '.join(sorted(unknown))}. Bars between repeated parts: {{\"shape\": \"rod\", \"between\": \"{p.get('on') or 'leg'}\"}}")
         count = max(1, int(rep.get("count", 1)))
         objs = []
         for k in range(count):
@@ -651,7 +710,8 @@ def build(spec):
         h = p.get("hinge")
         if h:
             for o in made[p["id"]]:
-                hinge(o, h.get("edge", "back"), float(h.get("angle", 90)))
+                hinge(o, h.get("edge", "back"), float(h.get("angle", 90)), first.get(p.get("on")))
+    check_contacts(spec, made, first)   # after hinges: what touched the shut lid must still touch something
     # light sources light the scene
     for p in spec["parts"]:
         m = mats.get(p.get("mat") or p.get("material") or "plastic")
