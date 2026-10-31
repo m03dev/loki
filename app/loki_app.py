@@ -36,7 +36,8 @@ EXE = ".exe" if WIN else ""
 UPDATE_EVERY_S = int(os.environ.get("LOKI_UPDATE_EVERY_S") or 600)
 LOG = HOME / "launcher.log"
 STATUS = HOME / "launcher_status.json"
-SOURCES = ("Cargo.toml", "Cargo.lock", "crates", "app/ui/index.html")
+# everything compiled into lokid (include_str!): a change to any of these must rebuild the driver
+SOURCES = ("Cargo.toml", "Cargo.lock", "crates", "app/ui/index.html", "tools/blender", "tools/session")
 NO_WINDOW = 0x08000000 if WIN else 0   # CREATE_NO_WINDOW: no console flashes for git/cargo
 STATE: dict = {"window": None, "phase": "starting"}
 
@@ -151,7 +152,7 @@ def source_hash() -> str:
     h = hashlib.sha256()
     for name in SOURCES:
         p = REPO / name
-        files = sorted(x for x in p.rglob("*") if x.is_file() and "target" not in x.parts) if p.is_dir() else [p]
+        files = sorted(x for x in p.rglob("*") if x.is_file() and "target" not in x.parts and "__pycache__" not in x.parts) if p.is_dir() else [p]
         for f in files:
             try:
                 h.update(str(f.relative_to(REPO)).replace("\\", "/").encode())
