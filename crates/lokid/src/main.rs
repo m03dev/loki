@@ -1060,6 +1060,9 @@ async fn status(State(app): State<App>) -> Json<Value> {
 const VISION_FAMILIES: &[&str] = &["qwen3-vl", "qwen3.5-vl", "qwen2.5-vl", "llama-4-maverick", "llama-4-scout", "gemma-4", "gemma-3-27b",
     "pixtral", "nemotron-nano-vl", "nemotron-nano-12b-v2-vl", "phi-4-multimodal", "llama-3.2-90b-vision", "llama-3.2-11b-vision", "-vl", "vision"];
 
+/// Small, quick text models, preferred first, for the fast role when the configured one is gone.
+const FAST_FAMILIES: &[&str] = &["nemotron-3-nano", "nemotron-nano", "nano", "lightning", "flash", "mini", "8b"];
+
 /// Model ids drift: ask each online provider which models it serves (GET /models), and give the pool
 /// working vision models from that list (up to 2 per endpoint) when the configured one is gone.
 async fn discover_vision(pool: &mut ModelPool, home: &Path) {
@@ -1094,6 +1097,19 @@ async fn discover_vision(pool: &mut ModelPool, home: &Path) {
         picks.truncate(2);
         let Some(tpl) = base.iter().find(|p| &p.base_url == url).cloned() else { continue };
         let configured: Vec<String> = pool.providers().iter().filter(|p| &p.base_url == url).filter_map(|p| p.models.get(&Role::Vision).cloned()).collect();
+        // a brain or fast model the endpoint no longer serves: a fast one is replaced by a live small model, a brain is dropped
+        for p in pool.providers_mut().iter_mut().filter(|p| &p.base_url == url) {
+            for role in [Role::Brain, Role::Fast] {
+                let Some(m) = p.models.get(&role).cloned() else { continue };
+                if ids.contains(&m) { continue; }
+                let swap = (role == Role::Fast).then(|| FAST_FAMILIES.iter().find_map(|f| lower.iter().find(|(l, _)| l.contains(f)
+                    && !["-vl", "vision", "embed", "guard", "reward", "parse", "safety"].iter().any(|x| l.contains(x))).map(|x| x.1.clone()))).flatten();
+                match swap {
+                    Some(n) => { tracing::info!("{} model {m} is gone from {}; using {n}", if role == Role::Fast { "fast" } else { "brain" }, p.name); p.models.insert(role, n); }
+                    None => { tracing::info!("model {m} is gone from {}", p.name); p.models.remove(&role); }
+                }
+            }
+        }
         // drop configured vision models this endpoint no longer serves
         for p in pool.providers_mut().iter_mut().filter(|p| &p.base_url == url) {
             if let Some(m) = p.models.get(&Role::Vision).cloned() {
