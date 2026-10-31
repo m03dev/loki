@@ -37,6 +37,15 @@ def save(path='scenes/scene.blend'):
     bpy.ops.wm.save_as_mainfile(filepath=p)
     return p
 
+def api():
+    \'\'\'Every loki_bpy helper with its arguments and what it does - read this instead of the source.\'\'\'
+    import inspect, loki_bpy
+    for n in loki_bpy.__all__:
+        f = getattr(loki_bpy, n, None)
+        if callable(f):
+            doc = (inspect.getdoc(f) or '').split('\\n')[0]
+            print(f'{n}{inspect.signature(f)}  - {doc}')
+
 def scene():
     '''One line per object: name, type, size (m), location, material.'''
     out = []

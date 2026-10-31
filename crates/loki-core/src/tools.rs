@@ -67,7 +67,7 @@ pub fn schemas() -> Value {
               "required":["header","question","options"]}}}), &["questions"]),
         f("inspect_scene", "Open a saved .blend with LOKI's inspector and get real facts: meshes, triangles, materials, and errors such as floating parts, parts outside the camera view, no camera. Use it after every Blender build.",
           json!({"path":{"type":"string"}}), &["path"]),
-        f("session", "Work live in an interpreter that stays open for this job: kind 'blender' (Python inside Blender: the scene stays between calls; helpers scene() lists objects, look('name') renders four views to renders/name_views.png, save('scenes/x.blend'), plus loki_bpy) or 'python'. Send a few lines at a time, check, adjust - not one huge script. Printed output and errors come back.",
+        f("session", "Work live in an interpreter that stays open for this job: kind 'blender' (Python inside Blender: the scene stays between calls; helpers api() lists every loki_bpy helper with its arguments (use it instead of reading the source), scene() lists objects, look('name') renders four views to renders/name_views.png, save('scenes/x.blend'), plus loki_bpy) or 'python'. Send a few lines at a time, check, adjust - not one huge script. Printed output and errors come back.",
           json!({"kind":{"type":"string","enum":["blender","python"]},"code":{"type":"string"},"timeout":{"type":"integer"}}), &["kind","code"]),
         f("look", "Have a vision model compare an image (a render) with the brief. Returns a score 1-10 and the visible problems.",
           json!({"path":{"type":"string"},"brief":{"type":"string"}}), &["path"]),
@@ -167,7 +167,24 @@ pub fn command_allowed(policy: &Policy, command: &str) -> bool {
         return false;
     }
     let prog = program_name(command);
-    policy.auto_commands.iter().any(|a| *a == prog)
+    policy.auto_commands.iter().any(|a| *a == prog) || read_only_powershell(command)
+}
+
+/// `powershell -Command "Get-Content x | Select-Object -Skip 10"`: only reading cmdlets, nothing that writes or runs.
+fn read_only_powershell(command: &str) -> bool {
+    if !matches!(program_name(command).as_str(), "powershell" | "pwsh") { return false; }
+    const READ: &[&str] = &["get-content", "select-object", "select-string", "get-childitem", "measure-object", "where-object",
+        "sort-object", "format-table", "format-list", "out-string", "get-item", "test-path", "resolve-path", "get-location"];
+    let lower = command.to_ascii_lowercase();
+    let Some(i) = lower.find("-command") else { return false };
+    let body = lower[i + 8..].trim().trim_matches('"');
+    if ["set-", "remove-", "new-", "copy-", "move-", "invoke-", "start-", "stop-", "out-file", "add-content", ">", ";", "&", "`", "$("].iter().any(|x| body.contains(x)) {
+        return false;
+    }
+    body.split('|').all(|stage| {
+        let w = stage.split_whitespace().next().unwrap_or("");
+        READ.contains(&w) || matches!(w, "gc" | "cat" | "type" | "dir" | "ls" | "select" | "sls" | "where" | "sort" | "measure")
+    })
 }
 
 /// The program a command runs, as a bare lower-case name: `"D:\cad\b123\Scripts\python.exe" x.py` -> `python`,
@@ -313,6 +330,15 @@ mod tests {
             Outcome::Ok(t) => assert!(t.contains("a b; c"), "{t}"),
             Outcome::Err(t) | Outcome::NeedsOwner(t) => panic!("{t}"),
         }
+    }
+
+    #[test]
+    fn reading_with_powershell_needs_no_approval() {
+        let p = Policy::default();
+        assert!(command_allowed(&p, r#"powershell -Command "Get-Content scripts\loki_bpy.py | Select-Object -Skip 300 -First 160""#));
+        assert!(!command_allowed(&p, r#"powershell -Command "Remove-Item x""#));
+        assert!(!command_allowed(&p, r#"powershell -Command "Get-Content a; Remove-Item b""#));
+        assert!(!command_allowed(&p, r#"powershell -Command "Get-Content a > b""#));
     }
 
     #[test]
