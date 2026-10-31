@@ -25,7 +25,7 @@ modeller: main body first, then what sits on it, then details (rims, bands, hand
 ```
 A chest: body `shell` (open top, "wall"), `band` on the body (count 2, iron), lock plate `box` on the body "front"
 "align": "top", lid `barrel` on the body "top" with "hinge": {"edge": "back", "angle": 105}, `band` on the lid,
-treasure `heap` on the body "inside" (it fills to the rim).
+treasure `heap` on the body "inside" with no size (it takes the body's shape and fills to just over the rim; "pieces": "coin" or "ball"). Metals shine, they never need "emit".
 A stool or table: seat `cylinder`/`box`, legs on the seat "bottom" with "repeat": {"count": 3, "around": 0.11,
 "splay": 12}, rungs `rod` "between": "leg", "height": 0.35. Never place a part with offsets when an anchor says it.
 After building, `look` at renders/<name>_views.png, fix the spec (sizes, what's missing) and build again.

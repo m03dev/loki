@@ -34,8 +34,8 @@ shapes: box, cylinder, tube ("wall"), sphere, dome (half sphere), barrel (half c
          (optional width, thickness, axis "x"|"y"); on a barrel lid they follow the curve.
   rod - a round bar between parts: {"shape": "rod", "between": "leg", "height": 0.35, "diameter": 0.02} joins each
         copy of a repeated part to the next (rungs); or "from": "leg_1", "to": "leg_2". height = 0-1 up the parts.
-  heap - a mound covered in small pieces: {"shape": "heap", "size": [0.7, 0.4, 0.25], "on": "body", "at": "inside",
-         "mat": "gold", "count": 120, "pieces": "coin"|"ball"} (treasure, gems, apples, gravel).
+  heap - a mound covered in small pieces: {"shape": "heap", "on": "body", "at": "inside", "mat": "gold",
+         "pieces": "coin"|"ball"} fills a container (no size needed); on a table give "size": [x, y, height].
   "repeat": {"count": 3, "around": 0.1, "splay": 12} spreads copies round the parent and leans them out (legs).
 The finished model always stands on the floor (its lowest point at z = 0).
   "bevel": edge rounding in metres (default: small, automatic); "smooth": true/false (default: true for round shapes).
@@ -98,6 +98,12 @@ def make_material(name, spec):
         else:
             spec = {"color": "#9a9a9a"}
     spec = dict(spec)
+    # models write metal: true, emit: false - numbers from here on
+    for k, on in (("metal", 1.0), ("emit", 4.0)):
+        if isinstance(spec.get(k), bool):
+            spec[k] = on if spec[k] else 0.0
+    if float(spec.get("metal") or 0) >= 0.5 and 0 < float(spec.get("emit") or 0) < 1.5:
+        spec["emit"] = 0.0   # "shiny gold" written as a faint glow renders as a lamp; metal shines by reflection
     if "preset" in spec and spec["preset"] in PRESET:
         spec = {**PRESET[spec["preset"]], **{k: v for k, v in spec.items() if k != "preset"}}
     if spec.get("pbr"):
@@ -408,6 +414,118 @@ def check_contacts(spec, made, first):
                         "and \"rod\" for bars between parts.")
 
 
+def make_heap(p, first, mat):
+    """A mound covered in pieces (coins, gems, fruit, gravel) as two meshes: the mound and every piece in one mesh.
+    Inside a container it takes the container's footprint (box or round) and fills it to a crown just over the rim."""
+    import random as _r
+    pid = p["id"]
+    on = p.get("on")
+    par = first.get(on) if on else None
+    if on and par is None:
+        raise SpecError(f"heap '{pid}' is on '{on}', which is not defined before it")
+    inside = par is not None and p.get("at") == "inside"
+    if inside:
+        plo, phi = bounds(par)
+        w = float(par.get("loki_wall", 0.02))
+        x = phi.x - plo.x - 2.2 * w
+        y = phi.y - plo.y - 2.2 * w
+        if "size" in p:
+            x, y = min(x, p["size"][0]), min(y, p["size"][1])
+        floor_z = plo.z + w
+        edge = max(0.0, phi.z - 0.012 - floor_z)
+        crown = float(p["size"][2]) * 0.5 if "size" in p else min(x, y) * 0.16
+        peak = edge + crown
+        rect = par.get("loki_shape") not in ROUND
+        centre = Vector(((plo.x + phi.x) / 2, (plo.y + phi.y) / 2, floor_z))
+    else:
+        if "size" not in p:
+            raise SpecError(f"heap '{pid}' needs a size [x, y, height] (or \"at\": \"inside\" a container to fill it)")
+        x, y, peak = (float(v) for v in p["size"])
+        edge, rect = 0.0, p.get("footprint") == "box"
+        centre = Vector((0, 0, 0))
+    a, b = x / 2, y / 2
+    rnd = _r.Random(int(p.get("seed", 7)))
+    ph = [rnd.uniform(0, 6.28) for _ in range(4)]
+    amp = 0.05 * max(0.01, peak - edge)
+
+    def domain(u, v):  # grid square -> footprint (square stays, disc is the square mapped round)
+        return (u, v) if rect else (u * math.sqrt(max(0, 1 - v * v / 2)), v * math.sqrt(max(0, 1 - u * u / 2)))
+
+    def height(dx, dy):
+        t = (1 - dx * dx) * (1 - dy * dy) if rect else max(0.0, 1 - dx * dx - dy * dy)
+        lump = amp * (math.sin(5.1 * dx + ph[0]) * math.sin(4.3 * dy + ph[1]) + 0.5 * math.sin(9.7 * dx + 7.9 * dy + ph[2]))
+        return edge + (peak - edge) * max(0.0, t) ** 0.6 + lump * max(0.0, t) ** 0.4
+
+    n = 40
+    bm = bmesh.new()
+    top, bot = [], []
+    for i in range(n + 1):
+        rt, rb = [], []
+        for j in range(n + 1):
+            dx, dy = domain(-1 + 2 * i / n, -1 + 2 * j / n)
+            rt.append(bm.verts.new((dx * a, dy * b, height(dx, dy))))
+            rb.append(bm.verts.new((dx * a, dy * b, 0.0)))
+        top.append(rt)
+        bot.append(rb)
+    for i in range(n):
+        for j in range(n):
+            bm.faces.new((top[i][j], top[i + 1][j], top[i + 1][j + 1], top[i][j + 1]))
+            bm.faces.new((bot[i][j], bot[i][j + 1], bot[i + 1][j + 1], bot[i + 1][j]))
+    ring = [(i, 0) for i in range(n)] + [(n, j) for j in range(n)] + [(i, n) for i in range(n, 0, -1)] + [(0, j) for j in range(n, 0, -1)]
+    for k in range(len(ring)):
+        (i0, j0), (i1, j1) = ring[k], ring[(k + 1) % len(ring)]
+        try:
+            bm.faces.new((bot[i0][j0], bot[i1][j1], top[i1][j1], top[i0][j0]))
+        except ValueError:
+            pass
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mound = _obj_from_bm(pid, bm)
+    mound.location = centre
+    under = mat.copy()   # the mound shows between pieces: same stuff, deeper and rougher
+    bsdf = next((nd for nd in under.node_tree.nodes if nd.type == "BSDF_PRINCIPLED"), None) if under.node_tree else None
+    if bsdf:
+        c = bsdf.inputs["Base Color"].default_value
+        bsdf.inputs["Base Color"].default_value = (c[0] * 0.55, c[1] * 0.5, c[2] * 0.45, 1)
+        bsdf.inputs["Roughness"].default_value = 0.6
+    finish_part(mound, {"shape": "dome", "size": [x, y, peak], "bevel": 0, "smooth": True}, under)
+
+    piece = float(p.get("piece", max(0.018, min(0.045, min(x, y) * 0.07))))
+    kind = p.get("pieces", "coin")
+    count = int(p.get("count", min(1500, (x * y if rect else math.pi * a * b) / (piece * piece) * 2.2)))
+    bm = bmesh.new()
+    e = 1e-3
+    for k in range(count):
+        dx, dy = domain(rnd.uniform(-1, 1), rnd.uniform(-1, 1))
+        hz = height(dx, dy)
+        gx = (height(min(1, dx + e), dy) - height(max(-1, dx - e), dy)) / (2 * e * a)
+        gy = (height(dx, min(1, dy + e)) - height(dx, max(-1, dy - e))) / (2 * e * b)
+        nrm = Vector((-gx, -gy, 1)).normalized()
+        r = piece / 2 * rnd.uniform(0.85, 1.1)
+        tilt = Euler((rnd.uniform(-0.5, 0.5), rnd.uniform(-0.5, 0.5), rnd.uniform(0, 6.28))).to_matrix().to_4x4()
+        rot = nrm.to_track_quat("Z", "Y").to_matrix().to_4x4() @ tilt
+        if kind == "coin":
+            t = piece * 0.14
+            sink = rnd.uniform(-0.4, 0.6) * t
+            m = Matrix.Translation(Vector((dx * a, dy * b, hz)) + nrm * sink) @ rot
+            bmesh.ops.create_cone(bm, cap_ends=True, segments=14, radius1=r, radius2=r, depth=t, matrix=m)
+        else:
+            m = Matrix.Translation(Vector((dx * a, dy * b, hz)) + nrm * r * 0.4) @ rot
+            bmesh.ops.create_icosphere(bm, subdivisions=2, radius=r, matrix=m)
+    pieces = _obj_from_bm(pid + "_pieces", bm)
+    pieces.location = centre
+    finish_part(pieces, {"shape": "cylinder", "size": [piece, piece, piece * 0.14], "bevel": 0, "smooth": kind != "coin"}, mat)
+    if par is not None and not inside:
+        attach(mound, par, p.get("at", "top"), "bottom", p.get("inset"))
+        pieces.location = mound.location.copy()
+    bpy.context.view_layer.update()
+    for o in (mound, pieces):
+        if par is not None:
+            o.parent = par
+            o.matrix_parent_inverse = par.matrix_world.inverted()
+    return [mound, pieces]
+
+
 def make_derived(p, first, made, mats):
     """band: straps round another part; rod: a round bar between two parts (rungs, rails, chains)."""
     pid = p["id"]
@@ -417,6 +535,17 @@ def make_derived(p, first, made, mats):
     shape = p["shape"]
     objs = []
     if shape == "band":
+        # a band is sized and placed by what it goes round: take count/axis from a repeat, refuse what would be ignored
+        rep = p.get("repeat") if isinstance(p.get("repeat"), dict) else {}
+        if rep.get("count") and "count" not in p:
+            p["count"] = rep["count"]
+        if rep.get("along") in ("x", "y") and "axis" not in p:
+            p["axis"] = rep["along"]
+        extra = set(p) - {"id", "shape", "on", "mat", "material", "count", "width", "thickness", "axis", "repeat", "_name"}
+        if extra:
+            raise SpecError(f"band '{pid}': {', '.join(sorted(extra))} not used - a band wraps the whole part it is on. "
+                            f"Keys: on, count, width, thickness, axis (x or y), mat. A plate or strip on one face: "
+                            f"{{\"shape\": \"box\", \"on\": \"{p.get('on') or 'body'}\", \"at\": \"front\"}}")
         on = p.get("on")
         if on not in first:
             raise SpecError(f"band '{pid}' needs \"on\": an earlier part to go round")
@@ -430,14 +559,15 @@ def make_derived(p, first, made, mats):
             f = 0.5 if n == 1 else 0.18 + 0.64 * k / (n - 1)
             q = {"id": f"{pid}_{k + 1}", "_name": f"{pid}_{k + 1}", "shape": "barrel" if par.get("loki_shape") == "barrel" else "box"}
             if axis == "x":
-                q["size"] = [w, hi.y - lo.y + 2 * t, hi.z - lo.z + (t if q["shape"] == "barrel" else 2 * t)]
+                q["size"] = [w, hi.y - lo.y + 2 * t, hi.z - lo.z + (t / 2 if q["shape"] == "barrel" else 2 * t)]
                 at = Vector((lo.x + (hi.x - lo.x) * f, (lo.y + hi.y) / 2, 0))
             else:
                 q["size"] = [hi.x - lo.x + 2 * t, w, hi.z - lo.z + 2 * t]
                 at = Vector(((lo.x + hi.x) / 2, lo.y + (hi.y - lo.y) * f, 0))
             o = make_shape(q)
             olo, ohi = bounds(o)
-            o.location = Vector((at.x, at.y, lo.z - (t if q["shape"] != "barrel" else 0) - olo.z))
+            # on a barrel lid the strap's flat underside sits just inside the lid, so the open lid doesn't show it
+            o.location = Vector((at.x, at.y, lo.z + (t / 2 if q["shape"] == "barrel" else -t) - olo.z))
             bpy.context.view_layer.update()
             wrap_around(o, par)
             finish_part(o, {**q, "bevel": 0.001}, mats[mname])
@@ -446,72 +576,7 @@ def make_derived(p, first, made, mats):
             objs.append(o)
         return objs
     if shape == "heap":
-        # a mound with many small pieces lying on its surface (coins, gems, apples, gravel)
-        if "size" not in p:
-            raise SpecError(f"heap '{pid}' needs a size [x, y, height]")
-        x, y, z = p["size"]
-        q = {**p, "shape": "dome", "_name": pid, "size": [x, y, z * 0.8]}
-        mound = make_shape(q)
-        fillers = []
-        on = p.get("on")
-        if on:
-            if on not in first:
-                raise SpecError(f"heap '{pid}' is on '{on}', which is not defined before it")
-            attach(mound, first[on], p.get("at", "top"), "bottom", p.get("inset"))
-            if p.get("at") == "inside" and not p.get("keep_low"):
-                # a heap in a container fills it and crowns just over the rim (a full chest, a fruit bowl)
-                mlo, mhi = bounds(mound)
-                plo, phi = bounds(first[on])
-                rise = (phi.z + (mhi.z - mlo.z) * 0.3) - mhi.z
-                if rise > 0:
-                    mound.location.z += rise
-                    filler = _make_cyl(pid + "_fill", x * 0.98, y * 0.98, max(0.001, rise))
-                    bpy.ops.object.select_all(action="DESELECT")
-                    filler.location = Vector(((mlo.x + mhi.x) / 2, (mlo.y + mhi.y) / 2, mlo.z + rise / 2))
-                    sq = filler.scale
-                    filler.scale = (sq.x, sq.y, sq.z)
-                    finish_part(filler, {"shape": "cylinder", "size": [x, y, rise], "bevel": 0}, mats[mname])
-                    filler.parent = first[on]
-                    filler.matrix_parent_inverse = first[on].matrix_world.inverted()
-                    fillers.append(filler)
-                bpy.context.view_layer.update()
-        finish_part(mound, {**q, "bevel": 0}, mats[mname])
-        objs.append(mound)
-        objs.extend(fillers)
-        lo, hi = bounds(mound)
-        c = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))
-        a, b, h = x / 2, y / 2, z * 0.8
-        piece = float(p.get("piece", max(0.02, min(0.05, min(x, y) * 0.09))))
-        import random as _r
-        rnd = _r.Random(int(p.get("seed", 7)))
-        n = int(p.get("count", 140))
-        balls = p.get("pieces", "coin") != "coin"
-        for k in range(n):
-            # an even spread over the mound, each piece lying along the surface (tilted by its normal)
-            u, v = rnd.uniform(-1, 1), rnd.uniform(-1, 1)
-            q2 = 1 - u * u - v * v
-            if q2 <= 0.0:
-                continue
-            w = math.sqrt(q2)
-            pos = Vector((c.x + u * a, c.y + v * b, c.z + h * w))
-            normal = Vector((u / a, v / b, w / h)).normalized()
-            if balls:
-                bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=8, radius=piece / 2)
-                item = bpy.context.object
-                item.name = f"{pid}_piece{k}"
-            else:
-                item = _make_cyl(f"{pid}_piece{k}", piece, piece, piece * 0.15)
-                tilt = Euler((rnd.uniform(-0.35, 0.35), rnd.uniform(-0.35, 0.35), rnd.uniform(0, 6.28)))
-                item.matrix_world = normal.to_track_quat("Z", "Y").to_matrix().to_4x4() @ tilt.to_matrix().to_4x4()
-            item.location = pos + normal * piece * 0.05
-            finish_part(item, {"shape": "cylinder", "size": [piece, piece, piece * 0.15], "bevel": 0.0008}, mats[mname])
-            item.parent = mound
-            item.matrix_parent_inverse = mound.matrix_world.inverted()
-            objs.append(item)
-        if on:
-            mound.parent = first[on]
-            mound.matrix_parent_inverse = first[on].matrix_world.inverted()
-        return objs
+        return make_heap(p, first, mats[mname])
     # rod
     d = float(p.get("diameter", (p.get("size") or [0.02])[0]))
     height = float(p.get("height", 0.4))

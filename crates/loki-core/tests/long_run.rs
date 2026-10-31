@@ -178,15 +178,15 @@ async fn a_plain_question_finishes_without_a_plan() {
 }
 
 #[tokio::test]
-async fn a_model_that_never_progresses_pauses_and_asks() {
+async fn a_model_that_never_progresses_runs_to_its_budget_without_pausing() {
     let url = serve(Router::new().route("/v1/chat/completions", post(|| async { Json(call("note", json!({"text":"thinking"}))) }))).await;
     let driver = Driver::new(Arc::new(Mutex::new(ModelPool::new(vec![provider("good", &url, 1)]))));
     let root = std::env::temp_dir().join(format!("lokistuck-{}", std::process::id()));
-    let (j, _) = Journal::create(&root.join("runs"), "Do something", &root.join("ws"), 500, 1.0).unwrap();
+    let (j, _) = Journal::create(&root.join("runs"), "Do something", &root.join("ws"), 60, 1.0).unwrap();
     let info = driver.run(&j, Arc::new(AtomicBool::new(false))).await.unwrap();
-    assert_eq!(info.status, Status::Waiting);
-    assert!(info.steps <= 16, "stopped early, not after {} steps", info.steps);
-    assert!(info.waiting_for.unwrap().contains("stuck"));
+    // owner 2026-10-30: no stall question - a job works until it is done or out of budget
+    assert_eq!(info.status, Status::Stopped);
+    assert!(info.waiting_for.is_none());
     let _ = std::fs::remove_dir_all(root);
 }
 
