@@ -202,8 +202,16 @@ impl App {
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     info.workspace = req.workspace.unwrap_or_else(|| ws_root.join(&info.id));
     info.mode = match req.mode.as_deref() { Some("smart") | Some("hard") => "smart", _ => "auto" }.into();
-    info.interview = req.interview.clone().filter(|v| matches!(v.as_str(), "always" | "big" | "off"))
-        .unwrap_or_else(|| app.settings()["interview"].as_str().unwrap_or("always").to_string());
+    // the window says Every job / Big jobs / Never; scripts write never, no, false - all mean off
+    let norm = |v: &str| match v.trim().to_lowercase().as_str() {
+        "always" | "every" | "yes" | "true" => Some("always"),
+        "big" => Some("big"),
+        "off" | "never" | "no" | "none" | "false" => Some("off"),
+        _ => None,
+    };
+    info.interview = req.interview.as_deref().and_then(norm)
+        .or_else(|| app.settings()["interview"].as_str().and_then(norm))
+        .unwrap_or("always").to_string();
     info.prefer = req.prefer.filter(|p| !p.is_empty());
     let _ = std::fs::create_dir_all(&info.workspace);
     let files = app.attach(&info.workspace, &req.attach);
