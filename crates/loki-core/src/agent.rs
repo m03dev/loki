@@ -404,7 +404,7 @@ really is the open choice. Options: 2-4 per question, labels of 1-3 words, a des
                 "tool": call.name, "args": call.args, "result": short(&result, 2000),
                 "tin": reply.tokens_in, "tout": reply.tokens_out, "secs": (reply.secs * 10.0).round() / 10.0}));
             let productive = !result.starts_with("ERROR")
-                && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish" | "interview" | "inspect_scene" | "look" | "learn");
+                && matches!(call.name.as_str(), "plan" | "write_file" | "run" | "session" | "mark_done" | "add_task" | "block_task" | "tell_owner" | "image_prompt" | "ask_owner" | "finish" | "interview" | "inspect_scene" | "look" | "learn");
             if call.name == "run" {
                 if result.starts_with("ERROR") {
                     let line = result.lines().rev().find(|l| l.contains("Error") || l.contains("error")).unwrap_or("").trim().to_string();
